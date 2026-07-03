@@ -67,7 +67,7 @@
 | **Social & Matching** — 매칭 · 소셜 · 발자취 | 김규현 | [@k2hop1213](https://github.com/k2hop1213) |
 | **DevOps & Data** — 인프라 · 사진 · 알림 | 송건희 | [@songkh1201](https://github.com/songkh1201) |
 
-### 1️⃣ PM & Backend Lead — 서버 · API `박근호 @PGH0621`
+### 1️⃣ PM & Backend Lead — 서버 · API `박근호 [@PGH0621](https://github.com/PGH0621)`
 - 서버 아키텍처 설계 및 REST API 개발
 - **한국관광공사 OpenAPI 연동** (관광 스팟 수집·캐싱·정제)
 - DB 스키마 설계, 팀 일정·이슈 관리
