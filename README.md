@@ -67,30 +67,30 @@
 | **Social & Matching** — 매칭 · 소셜 · 발자취 | 김규현 | [@k2hop1213](https://github.com/k2hop1213) |
 | **DevOps & Data** — 인프라 · 사진 · 알림 | 송건희 | [@songkh1201](https://github.com/songkh1201) |
 
-### 1️⃣ PM & Backend Lead — 서버 · API `박근호 [@PGH0621](https://github.com/PGH0621)`
+### 1️⃣ PM & Backend Lead — 서버 · API · 박근호 [@PGH0621](https://github.com/PGH0621)
 - 서버 아키텍처 설계 및 REST API 개발
 - **한국관광공사 OpenAPI 연동** (관광 스팟 수집·캐싱·정제)
 - DB 스키마 설계, 팀 일정·이슈 관리
 - `Spring Boot` · `PostgreSQL` · `OpenAPI`
 
-### 2️⃣ Mobile Frontend — 앱 UI/UX `송진오 @oorony`
+### 2️⃣ Mobile Frontend — 앱 UI/UX · 송진오 [@oorony](https://github.com/oorony)
 - 앱 화면 설계·구현, 네비게이션, 상태 관리
 - 발자취 카드, 프로필, 매칭, 탐험 화면 UI/UX
 - `Flutter` · `Dart` · `상태관리(Riverpod/Bloc)`
 
-### 3️⃣ Map & Location — 지도 · 위치 · 안개 시스템 `김시진 @sijin2170`
+### 3️⃣ Map & Location — 지도 · 위치 · 안개 시스템 · 김시진 [@sijin2170](https://github.com/sijin2170)
 - 안개 오버레이 렌더링 및 **안개 해제 로직**
 - GPS 추적, geofencing(스팟 근접 인증 알림)
 - GPS 이동 궤적(Point) → 면적(Polygon) 변환
 - `Naver Maps SDK` · `PostGIS` · `Geolocation`
 
-### 4️⃣ Social & Matching — 매칭 · 소셜 · 발자취 `김규현 @k2hop1213`
+### 4️⃣ Social & Matching — 매칭 · 소셜 · 발자취 · 김규현 [@k2hop1213](https://github.com/k2hop1213)
 - 여행 성향 테스트 및 매칭 알고리즘
 - 발자취 기록·조회, 좋아요·공감 상호작용
 - 실시간 위치 공유(30분 갱신) 로직
 - `Firestore` · `매칭 알고리즘` · `실시간 동기화`
 
-### 5️⃣ DevOps & Data — 인프라 · 사진 · 알림 `송건희 @songkh1201`
+### 5️⃣ DevOps & Data — 인프라 · 사진 · 알림 · 송건희 [@songkh1201](https://github.com/songkh1201)
 - 방문 인증 사진 업로드·스토리지 파이프라인
 - 푸시 알림(FCM), 인증(Auth) 연동
 - CI/CD, 배포, 환경 구성
