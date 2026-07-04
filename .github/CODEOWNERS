@@ -1,30 +1,36 @@
-# FogApp CODEOWNERS — 영역별 자동 리뷰어 지정
-# 파일 경로가 매칭되면 해당 담당자가 PR 리뷰어로 자동 요청됩니다.
-# 규칙은 "마지막 매칭 우선"입니다. (아래 규칙이 위 규칙을 덮어씀)
-# 담당 영역은 CONTRIBUTING.md 7번 참고.
+# FogApp CODEOWNERS — 영역별 자동 리뷰어 지정 (짝 리뷰어 방식)
+#
+# 각 영역에 [담당자 + 짝 리뷰어] 2명을 지정한다.
+# GitHub은 PR 작성자 본인은 리뷰어로 요청하지 않으므로,
+# 담당자가 자기 영역을 작업해 PR을 올리면 "짝 리뷰어"가 자동 요청된다.
+# (외부 사람이 그 영역을 건드리면 두 명 모두 요청됨)
+#
+# 규칙은 "마지막 매칭 우선". 담당 영역은 CONTRIBUTING.md 7번 참고.
+# 페어링:  server=박근호+송건희 · app=송진오+김규현
+#          infra/.github=송건희+박근호 · docs=박근호+송진오
 
-# 기본 소유자 (매칭되는 세부 규칙이 없으면 PM)
-*                    @PGH0621
+# 기본 소유자 (세부 규칙 미매칭 시): PM + 짝
+*                    @PGH0621 @oorony
 
-# 백엔드 · 서버 · API — 박근호
-/server/             @PGH0621
+# 백엔드 · 서버 · API — 박근호 (짝: 송건희)
+/server/             @PGH0621 @songkh1201
 
-# 모바일 프론트 — 송진오
-/app/                @oorony
+# 모바일 프론트 — 송진오 (짝: 김규현)
+/app/                @oorony @k2hop1213
 
-# 인프라 · CI · 배포 · 환경 — 송건희
-/.github/            @songkh1201
-/docker-compose.yml  @songkh1201
-/.env.example        @songkh1201
+# 인프라 · CI · 배포 · 환경 — 송건희 (짝: 박근호)
+/.github/            @songkh1201 @PGH0621
+/docker-compose.yml  @songkh1201 @PGH0621
+/.env.example        @songkh1201 @PGH0621
 
-# 문서 — PM
-/docs/               @PGH0621
-/README.md           @PGH0621
-/planning.md         @PGH0621
+# 문서 — PM (짝: 송진오)
+/docs/               @PGH0621 @oorony
+/README.md           @PGH0621 @oorony
+/planning.md         @PGH0621 @oorony
 
 # ── 아래는 파트별 폴더가 생기면 활성화 ──
-# 지도 · 위치 · 안개 — 김시진 (@sijin2170)
-#   예) /app/lib/screens/map/      @sijin2170
-#       /app/lib/services/location @sijin2170
-# 매칭 · 소셜 · 발자취 — 김규현 (@k2hop1213)
-#   예) /app/lib/screens/social/   @k2hop1213
+# 지도 · 위치 · 안개 — 김시진 (짝: 송진오)
+#   /app/lib/screens/map/       @sijin2170 @oorony
+#   /app/lib/services/location/ @sijin2170 @oorony
+# 매칭 · 소셜 · 발자취 — 김규현 (짝: 송진오)
+#   /app/lib/screens/social/    @k2hop1213 @oorony
