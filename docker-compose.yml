@@ -1,0 +1,26 @@
+# FogApp 로컬 개발용 데이터베이스 (PostgreSQL + PostGIS)
+# 실행:  docker compose up -d
+# 종료:  docker compose down       (데이터 유지)
+# 초기화: docker compose down -v    (볼륨까지 삭제)
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: fogapp-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-fogapp}
+      POSTGRES_USER: ${DB_USERNAME:-fogapp}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-fogapp}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - fogapp_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-fogapp} -d ${DB_NAME:-fogapp}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  fogapp_pgdata:

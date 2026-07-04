@@ -1,0 +1,57 @@
+# ===== 시크릿 / 환경 변수 (절대 커밋 금지) =====
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets/
+
+# ===== Firebase 설정 파일 =====
+google-services.json
+GoogleService-Info.plist
+firebase_options.dart
+firebase-adminsdk-*.json
+serviceAccountKey.json
+
+# ===== Flutter / Dart =====
+app/.dart_tool/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/build/
+app/.pub-cache/
+app/.pub/
+app/pubspec.lock
+app/**/*.g.dart
+app/**/*.freezed.dart
+app/ios/Pods/
+app/ios/.symlinks/
+app/android/.gradle/
+app/android/local.properties
+app/android/key.properties
+app/**/*.keystore
+app/**/*.jks
+
+# ===== Java / Spring Boot / Gradle =====
+server/build/
+server/.gradle/
+server/out/
+server/bin/
+*.class
+server/**/application-local.yml
+
+# ===== IDE =====
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== 로그 / 임시 =====
+*.log
+tmp/
+temp/

@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 💬 논의 / 질문
+    url: https://github.com/FogMap2026/FogApp/discussions
+    about: 기능/버그가 아닌 논의나 질문은 여기 또는 팀 채팅에 남겨주세요.

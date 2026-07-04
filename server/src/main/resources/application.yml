@@ -1,0 +1,24 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: fogapp-server
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:fogapp}
+    username: ${DB_USERNAME:fogapp}
+    password: ${DB_PASSWORD:fogapp}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.spatial.dialect.postgis.PostgisPG95Dialect
+        format_sql: true
+    show-sql: true
+
+# 외부 API 키 (환경 변수로 주입, .env 참고)
+tour:
+  api:
+    service-key: ${TOUR_API_SERVICE_KEY:}
