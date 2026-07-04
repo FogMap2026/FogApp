@@ -1,0 +1,30 @@
+# FogApp CODEOWNERS — 영역별 자동 리뷰어 지정
+# 파일 경로가 매칭되면 해당 담당자가 PR 리뷰어로 자동 요청됩니다.
+# 규칙은 "마지막 매칭 우선"입니다. (아래 규칙이 위 규칙을 덮어씀)
+# 담당 영역은 CONTRIBUTING.md 7번 참고.
+
+# 기본 소유자 (매칭되는 세부 규칙이 없으면 PM)
+*                    @PGH0621
+
+# 백엔드 · 서버 · API — 박근호
+/server/             @PGH0621
+
+# 모바일 프론트 — 송진오
+/app/                @oorony
+
+# 인프라 · CI · 배포 · 환경 — 송건희
+/.github/            @songkh1201
+/docker-compose.yml  @songkh1201
+/.env.example        @songkh1201
+
+# 문서 — PM
+/docs/               @PGH0621
+/README.md           @PGH0621
+/planning.md         @PGH0621
+
+# ── 아래는 파트별 폴더가 생기면 활성화 ──
+# 지도 · 위치 · 안개 — 김시진 (@sijin2170)
+#   예) /app/lib/screens/map/      @sijin2170
+#       /app/lib/services/location @sijin2170
+# 매칭 · 소셜 · 발자취 — 김규현 (@k2hop1213)
+#   예) /app/lib/screens/social/   @k2hop1213
