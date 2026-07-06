@@ -50,7 +50,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       }
       // 로그인 상태 변화는 authStateChangesProvider가 감지해 AuthGate가 화면을 전환한다.
     } on FirebaseAuthException catch (e) {
-      setState(() => _errorMessage = e.message ?? '인증에 실패했습니다.');
+      if (mounted) setState(() => _errorMessage = e.message ?? '인증에 실패했습니다.');
+    } catch (e) {
+      if (mounted) setState(() => _errorMessage = '알 수 없는 오류가 발생했습니다. 다시 시도해주세요.');
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
