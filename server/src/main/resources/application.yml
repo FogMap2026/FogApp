@@ -26,3 +26,9 @@ spring:
 tour:
   api:
     service-key: ${TOUR_API_SERVICE_KEY:}
+
+# Firebase (ID 토큰 검증) — 기본 비활성. 실제 배포/연동 시 FIREBASE_ENABLED=true 로 켠다.
+# 자격증명은 서비스 계정 JSON 경로(FIREBASE_SERVICE_ACCOUNT_PATH) 또는 GOOGLE_APPLICATION_CREDENTIALS 사용.
+firebase:
+  enabled: ${FIREBASE_ENABLED:false}
+  service-account-path: ${FIREBASE_SERVICE_ACCOUNT_PATH:}
