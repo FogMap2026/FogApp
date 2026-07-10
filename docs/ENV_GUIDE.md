@@ -34,10 +34,10 @@ cp .env.example .env
 | `GoogleService-Info.plist` | Firebase iOS 설정 |
 | `firebase_options.dart` | FlutterFire 생성 설정 |
 | `serviceAccountKey.json` | Firebase Admin 서비스 계정 |
-
-> 🔐 위 Firebase 설정 파일을 **발급·공유하는 절차**는 [FIREBASE_AUTH_SETUP.md](FIREBASE_AUTH_SETUP.md) 체크리스트를 따르세요.
 | `*.key`, `*.pem`, `*.keystore`, `*.jks` | 각종 키·인증서 |
 | `secrets/` | 시크릿 모음 폴더 |
+
+> 🔐 위 Firebase 설정 파일을 **발급·공유하는 절차**는 [FIREBASE_AUTH_SETUP.md](FIREBASE_AUTH_SETUP.md) 체크리스트를 따르세요.
 
 ---
 
