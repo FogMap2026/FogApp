@@ -22,7 +22,16 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: true
 
-# 외부 API 키 (환경 변수로 주입, .env 참고)
+# 한국관광공사 TourAPI (스팟 수집 #5). 서비스 키는 환경 변수로 주입(.env 참고).
 tour:
   api:
     service-key: ${TOUR_API_SERVICE_KEY:}
+    base-url: ${TOUR_API_BASE_URL:https://apis.data.go.kr/B551011/KorService1}
+    mobile-app: FogApp
+    mobile-os: ETC
+  # 수집 배치 설정. on-startup=true 로 켜면 기동 시 지정 지역을 수집한다(기본 off).
+  collect:
+    on-startup: ${TOUR_COLLECT_ON_STARTUP:false}
+    area-codes: ${TOUR_COLLECT_AREA_CODES:1,6,39}
+    num-of-rows: 100
+    max-pages: 10

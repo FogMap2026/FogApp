@@ -86,4 +86,25 @@ public class Spot {
         this.lat = lat;
         this.lng = lng;
     }
+
+    /**
+     * 재수집(#5) 시 수집원(TourAPI)이 제공하는 필드를 갱신한다.
+     * overview 는 수집 API(areaBasedList)가 주지 않으므로 여기서 건드리지 않는다(상세조회로 별도 갱신).
+     * lat/lng 을 갱신하면 DB 트리거가 geom 을 다시 채운다(V2).
+     */
+    public void updateFromCollection(String contentTypeId, String title, String addr1, String addr2,
+                                     String areaCode, String sigunguCode, String tel,
+                                     String firstImage, String firstImage2, Double lat, Double lng) {
+        this.contentTypeId = contentTypeId;
+        this.title = title;
+        this.addr1 = addr1;
+        this.addr2 = addr2;
+        this.areaCode = areaCode;
+        this.sigunguCode = sigunguCode;
+        this.tel = tel;
+        this.firstImage = firstImage;
+        this.firstImage2 = firstImage2;
+        this.lat = lat;
+        this.lng = lng;
+    }
 }

@@ -1,12 +1,16 @@
 package com.fogapp.spot;
 
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface SpotRepository extends JpaRepository<Spot, Long> {
+
+    /** 수집 배치(#5)의 중복 적재 방지·업서트용 조회. content_id 는 유니크. */
+    Optional<Spot> findByContentId(String contentId);
 
     /**
      * 중심 좌표 반경(m) 내 스팟을 가까운 순으로 조회한다.
