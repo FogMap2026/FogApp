@@ -17,16 +17,18 @@ import org.springframework.web.bind.annotation.RestController;
 import jakarta.validation.Valid;
 
 /**
- * 발자취 CRUD 뼈대(#1-8). 인증 미들웨어(#4)가 붙기 전까지는 userId를 요청으로 직접 받는다.
+ * 발자취 CRUD 뼈대(#1-8) + 좋아요·공감(#23). 인증 미들웨어(#4)가 붙기 전까지는 userId를 요청으로 직접 받는다.
  */
 @RestController
 @RequestMapping("/api/footprints")
 public class FootprintController {
 
     private final FootprintService footprintService;
+    private final FootprintLikeService footprintLikeService;
 
-    public FootprintController(FootprintService footprintService) {
+    public FootprintController(FootprintService footprintService, FootprintLikeService footprintLikeService) {
         this.footprintService = footprintService;
+        this.footprintLikeService = footprintLikeService;
     }
 
     @PostMapping
@@ -64,6 +66,18 @@ public class FootprintController {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         footprintService.delete(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/likes")
+    public ResponseEntity<Void> like(@PathVariable Long id, @RequestParam Long userId) {
+        footprintLikeService.like(id, userId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/{id}/likes")
+    public ResponseEntity<Void> unlike(@PathVariable Long id, @RequestParam Long userId) {
+        footprintLikeService.unlike(id, userId);
         return ResponseEntity.noContent().build();
     }
 }
