@@ -6,7 +6,6 @@ import java.util.List;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import com.fogapp.user.User;
@@ -25,8 +24,12 @@ import jakarta.servlet.http.HttpServletResponse;
  *   <li>토큰 있음·유효 → 사용자 업서트 후 인증 설정</li>
  *   <li>토큰 있음·무효 → 즉시 401</li>
  * </ul>
+ *
+ * <p>일부러 {@code @Component}로 등록하지 않는다. 스프링 부트가 컨텍스트의 {@code Filter} 빈을
+ * 서블릿 컨테이너에 {@code /*} 로 자동 등록하면, Security 체인 안에서 한 번(SecurityConfig의
+ * {@code addFilterBefore}) + 서블릿 레벨에서 한 번, 총 두 번 실행된다. 이를 막기 위해
+ * {@link SecurityConfig}에서 직접 인스턴스를 생성해 체인에만 등록한다.</p>
  */
-@Component
 public class FirebaseAuthFilter extends OncePerRequestFilter {
 
     private static final String BEARER_PREFIX = "Bearer ";
