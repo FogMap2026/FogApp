@@ -37,6 +37,8 @@ cp .env.example .env
 | `*.key`, `*.pem`, `*.keystore`, `*.jks` | 각종 키·인증서 |
 | `secrets/` | 시크릿 모음 폴더 |
 
+> 🔐 위 Firebase 설정 파일을 **발급·공유하는 절차**는 [FIREBASE_AUTH_SETUP.md](FIREBASE_AUTH_SETUP.md) 체크리스트를 따르세요.
+
 ---
 
 ## 4. 각 키 발급처
@@ -45,7 +47,7 @@ cp .env.example .env
 |------|--------|
 | `TOUR_API_SERVICE_KEY` | [한국관광공사 TourAPI](https://api.visitkorea.or.kr/) |
 | `NAVER_MAP_CLIENT_ID` | [네이버 클라우드 플랫폼 — Maps](https://www.ncloud.com/product/applicationService/maps) |
-| `FIREBASE_*` | [Firebase 콘솔](https://console.firebase.google.com/) |
+| `FIREBASE_*` | [Firebase 콘솔](https://console.firebase.google.com/) — 발급 절차는 [FIREBASE_AUTH_SETUP.md](FIREBASE_AUTH_SETUP.md) 참고 |
 | `DB_*` | 로컬은 `docker-compose.yml` 기본값, 배포는 인프라 담당(송건희)이 발급 |
 | `JWT_SECRET` | 팀이 임의 생성(예: `openssl rand -base64 48`) |
 
