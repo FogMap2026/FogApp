@@ -9,7 +9,7 @@ class MapScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('🌫️ FogApp')),
+      appBar: const AppBar(title: Text('🌫️ FogApp')),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,

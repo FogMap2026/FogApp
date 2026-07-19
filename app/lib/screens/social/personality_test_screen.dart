@@ -26,10 +26,10 @@ class _PersonalityTestScreenState extends State<PersonalityTestScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final questions = PersonalityScorer.questions;
+    const questions = PersonalityScorer.questions;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('여행 성향 테스트')),
+      appBar: const AppBar(title: Text('여행 성향 테스트')),
       body: ListView.separated(
         padding: const EdgeInsets.all(16),
         itemCount: questions.length + 1,
@@ -59,6 +59,7 @@ class _PersonalityTestScreenState extends State<PersonalityTestScreen> {
 
 class _QuestionTile extends StatelessWidget {
   const _QuestionTile({
+    super.key,
     required this.question,
     required this.value,
     required this.onChanged,
