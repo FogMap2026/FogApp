@@ -28,9 +28,10 @@
 /README.md           @PGH0621 @oorony
 /planning.md         @PGH0621 @oorony
 
+# 매칭 · 소셜 · 발자취 — 김규현 (짝: 송진오)
+/app/lib/screens/social/ @k2hop1213 @oorony
+
 # ── 아래는 파트별 폴더가 생기면 활성화 ──
 # 지도 · 위치 · 안개 — 김시진 (짝: 송진오)
 #   /app/lib/screens/map/       @sijin2170 @oorony
 #   /app/lib/services/location/ @sijin2170 @oorony
-# 매칭 · 소셜 · 발자취 — 김규현 (짝: 송진오)
-#   /app/lib/screens/social/    @k2hop1213 @oorony
