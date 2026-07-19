@@ -42,7 +42,7 @@ class _PersonalityResultScreenState extends ConsumerState<PersonalityResultScree
     final result = widget.result;
 
     return Scaffold(
-      appBar: const AppBar(title: Text('내 여행 성향')),
+      appBar: AppBar(title: const Text('내 여행 성향')),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -83,7 +83,7 @@ class _PersonalityResultScreenState extends ConsumerState<PersonalityResultScree
 }
 
 class _AxisBar extends StatelessWidget {
-  const _AxisBar({super.key, required this.axis, required this.axisResult});
+  const _AxisBar({required this.axis, required this.axisResult});
 
   final PersonalityAxis axis;
   final AxisResult axisResult;
