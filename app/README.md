@@ -16,9 +16,12 @@ flutter create .
 # 의존성 설치
 flutter pub get
 
-# 실행
-flutter run
+# 실행 (Naver Maps 클라이언트 ID를 --dart-define으로 주입)
+flutter run --dart-define=NAVER_MAP_CLIENT_ID=발급받은_클라이언트_ID
 ```
+
+> Naver Maps 클라이언트 ID 발급 방법은 [../docs/ENV_GUIDE.md](../docs/ENV_GUIDE.md) 참고.
+> Flutter는 `.env` 파일을 기본으로 읽지 않으므로, 이 프로젝트에서는 `--dart-define`으로 주입합니다.
 
 ## 폴더 구조
 
