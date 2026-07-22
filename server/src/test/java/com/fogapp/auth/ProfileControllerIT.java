@@ -20,6 +20,8 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fogapp.user.User;
 import com.fogapp.user.UserRepository;
 
@@ -43,6 +45,9 @@ class ProfileControllerIT {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     @MockBean
     private TokenVerifier tokenVerifier;
@@ -116,7 +121,12 @@ class ProfileControllerIT {
 
         User saved = userRepository.findByFirebaseUid("uid-carol").orElseThrow();
         assertThat(saved.getPersonalityType()).isEqualTo("PRI");
-        assertThat(saved.getPersonalityScores()).contains("\"pole\":\"P\"");
+
+        // jsonb는 원본 텍스트 포맷(공백·키 순서)을 그대로 보존하지 않으므로,
+        // 문자열 그대로 비교하지 않고 JSON으로 파싱해 값만 검증한다.
+        JsonNode scores = objectMapper.readTree(saved.getPersonalityScores());
+        assertThat(scores.at("/axes/spontaneity/pole").asText()).isEqualTo("P");
+        assertThat(scores.at("/axes/spontaneity/score").asInt()).isEqualTo(72);
     }
 
     @Test
