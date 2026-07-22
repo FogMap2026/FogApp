@@ -20,6 +20,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
+import com.fogapp.user.User;
 import com.fogapp.user.UserRepository;
 
 /**
@@ -88,5 +89,45 @@ class ProfileControllerIT {
 
         assertThat(userRepository.findByFirebaseUid("uid-bob").orElseThrow().getNickname())
                 .isEqualTo("밥");
+    }
+
+    @Test
+    void 성향_테스트_결과를_저장할_수_있다() throws Exception {
+        given(tokenVerifier.verify("carol-token"))
+                .willReturn(new VerifiedToken("uid-carol", "carol@example.com", null, null));
+
+        mockMvc.perform(patch("/api/profile/personality")
+                        .header("Authorization", "Bearer carol-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "personalityType": "PRI",
+                                  "personalityScores": {
+                                    "version": 1,
+                                    "axes": {
+                                      "spontaneity": {"score": 72, "pole": "P"},
+                                      "restVsRoam": {"score": 35, "pole": "R"},
+                                      "extraversion": {"score": 58, "pole": "I"}
+                                    }
+                                  }
+                                }
+                                """))
+                .andExpect(status().isNoContent());
+
+        User saved = userRepository.findByFirebaseUid("uid-carol").orElseThrow();
+        assertThat(saved.getPersonalityType()).isEqualTo("PRI");
+        assertThat(saved.getPersonalityScores()).contains("\"pole\":\"P\"");
+    }
+
+    @Test
+    void 성향_유형이_비어있으면_400() throws Exception {
+        given(tokenVerifier.verify("dave-token"))
+                .willReturn(new VerifiedToken("uid-dave", "dave@example.com", null, null));
+
+        mockMvc.perform(patch("/api/profile/personality")
+                        .header("Authorization", "Bearer dave-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"personalityType\":\"\",\"personalityScores\":{}}"))
+                .andExpect(status().isBadRequest());
     }
 }

@@ -1,5 +1,6 @@
 package com.fogapp.user;
 
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -34,5 +35,12 @@ public class ProfileController {
                                   @Valid @RequestBody ProfileUpdateRequest request) {
         return ProfileResponse.from(
                 userService.updateProfile(me.userId(), request.nickname(), request.profileImageUrl()));
+    }
+
+    @PatchMapping("/personality")
+    public ResponseEntity<Void> updatePersonality(@AuthenticationPrincipal AuthUser me,
+                                                   @Valid @RequestBody PersonalityUpdateRequest request) {
+        userService.updatePersonality(me.userId(), request.personalityType(), request.personalityScores());
+        return ResponseEntity.noContent().build();
     }
 }
