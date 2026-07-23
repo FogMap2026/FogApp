@@ -3,7 +3,9 @@ package com.fogapp.user;
 import java.time.OffsetDateTime;
 
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -18,8 +20,8 @@ import lombok.NoArgsConstructor;
 /**
  * 사용자(#1 users 테이블). Firebase UID로 식별하며 최초 로그인 시 업서트된다(#4).
  *
- * <p>성향 컬럼(personality_type / personality_scores)은 소셜 트랙(2-6)에서 매핑·사용하므로
- * 이 엔티티에는 매핑하지 않는다. 두 컬럼 모두 nullable 이라 미매핑이어도 INSERT 에 문제없다.
+ * <p>성향 컬럼(personality_type / personality_scores)은 2-6(#31)에서 채점된 결과를
+ * #32에서 저장한다. personality_scores는 JSONB — 직렬화된 JSON 문자열을 그대로 저장/반환한다.
  */
 @Entity
 @Table(name = "users")
@@ -40,6 +42,13 @@ public class User {
 
     @Column(name = "profile_image_url")
     private String profileImageUrl;
+
+    @Column(name = "personality_type")
+    private String personalityType;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "personality_scores")
+    private String personalityScores;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
@@ -64,5 +73,11 @@ public class User {
         if (profileImageUrl != null) {
             this.profileImageUrl = profileImageUrl;
         }
+    }
+
+    /** 성향 테스트 결과 저장(#31 채점 결과). 재응시 시 이전 결과를 덮어쓴다. */
+    public void updatePersonality(String personalityType, String personalityScoresJson) {
+        this.personalityType = personalityType;
+        this.personalityScores = personalityScoresJson;
     }
 }

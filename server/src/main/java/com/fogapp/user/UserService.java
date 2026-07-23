@@ -1,10 +1,14 @@
 package com.fogapp.user;
 
+import java.util.Map;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fogapp.auth.VerifiedToken;
 
 @Service
@@ -12,9 +16,11 @@ import com.fogapp.auth.VerifiedToken;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final ObjectMapper objectMapper;
 
-    public UserService(UserRepository userRepository) {
+    public UserService(UserRepository userRepository, ObjectMapper objectMapper) {
         this.userRepository = userRepository;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -36,6 +42,17 @@ public class UserService {
     public User updateProfile(Long id, String nickname, String profileImageUrl) {
         User user = get(id);
         user.updateProfile(nickname, profileImageUrl);
+        return user;
+    }
+
+    @Transactional
+    public User updatePersonality(Long id, String personalityType, Map<String, Object> personalityScores) {
+        User user = get(id);
+        try {
+            user.updatePersonality(personalityType, objectMapper.writeValueAsString(personalityScores));
+        } catch (JsonProcessingException e) {
+            throw new IllegalArgumentException("personalityScores를 직렬화할 수 없습니다.", e);
+        }
         return user;
     }
 }
