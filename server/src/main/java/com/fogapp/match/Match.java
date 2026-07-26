@@ -62,4 +62,9 @@ public class Match {
     public void updateStatus(String status) {
         this.status = status;
     }
+
+    /** 요청 시점의 성향 유사도(0~1). 둘 중 하나라도 성향 데이터가 없으면 null로 둔다. */
+    public void updateScore(Double score) {
+        this.score = score;
+    }
 }
