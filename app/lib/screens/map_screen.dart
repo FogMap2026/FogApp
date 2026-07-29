@@ -23,7 +23,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _requestLocationPermission());
+    // 위치 권한 요청은 onMapReady에서 한 번만 수행한다(중복 요청 시 Android가
+    // "Can request only one set of permissions at a time"로 두 번째 요청을 무시함).
   }
 
   @override
