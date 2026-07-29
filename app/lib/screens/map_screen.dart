@@ -2,11 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../services/fog_overlay_controller.dart';
 import '../services/region_lookup_service.dart';
+import '../services/spot_marker_controller.dart';
+import '../services/spot_service.dart';
 import 'social/personality_test_screen.dart';
 
 /// 대한민국 전역을 보여주는 기본 카메라 위치(안개 지도의 시작 화면).
@@ -20,18 +23,19 @@ const _mapExtent = NLatLngBounds(
 );
 
 /// 탐험의 메인 화면. Naver Map 기반 지도를 표시한다.
-/// 안개 오버레이(#27), 스팟 마커(#28), 실시간 GPS 추적(#29)은 이후 이슈에서 이 화면에 추가된다.
-class MapScreen extends StatefulWidget {
+/// 실시간 GPS 추적(#29)은 이후 이슈에서 이 화면에 추가된다.
+class MapScreen extends ConsumerStatefulWidget {
   const MapScreen({super.key});
 
   @override
-  State<MapScreen> createState() => _MapScreenState();
+  ConsumerState<MapScreen> createState() => _MapScreenState();
 }
 
-class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
+class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserver {
   NaverMapController? _controller;
   StreamSubscription<OnCameraChangedParams>? _cameraSubscription;
   FogOverlayController? _fogOverlay;
+  SpotMarkerController? _spotMarkers;
 
   bool _mapReady = false;
   bool? _locationServiceEnabled;
@@ -51,6 +55,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _cameraSubscription?.cancel();
     _fogOverlay?.dispose();
+    _spotMarkers?.dispose();
     super.dispose();
   }
 
@@ -91,15 +96,19 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   void _onMapReady(NaverMapController controller) async {
     _controller = controller;
     _fogOverlay = await FogOverlayController.attach(controller);
+    _spotMarkers = SpotMarkerController(controller, ref.read(spotServiceProvider));
     _cameraSubscription = controller.nowCameraPositionStream.listen(_onCameraChanged);
     if (mounted) setState(() => _mapReady = true);
-    unawaited(_lookupRegion(controller.nowCameraPosition.target));
+    final initialTarget = controller.nowCameraPosition.target;
+    unawaited(_lookupRegion(initialTarget));
+    unawaited(_spotMarkers?.loadAround(initialTarget));
     await _requestLocationPermission();
   }
 
   void _onCameraChanged(OnCameraChangedParams params) {
     if (!params.isIdle) return;
     unawaited(_lookupRegion(params.position.target));
+    unawaited(_spotMarkers?.loadAround(params.position.target));
   }
 
   Future<void> _lookupRegion(NLatLng target) async {

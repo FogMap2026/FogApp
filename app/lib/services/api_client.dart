@@ -3,10 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'auth_service.dart';
 
+/// 서버 API 베이스 URL. `--dart-define=API_BASE_URL=http://<서버-IP>:8080`로 주입한다.
+/// 기본값(`10.0.2.2`)은 Android 에뮬레이터에서 호스트 PC를 가리키는 특수 주소로,
+/// 실기기로 테스트할 때는 PC의 LAN IP로 직접 지정해야 한다.
+const apiBaseUrl = String.fromEnvironment('API_BASE_URL', defaultValue: 'http://10.0.2.2:8080');
+
 /// 서버 API 통신용 Dio 클라이언트.
 /// 요청마다 현재 로그인된 사용자의 Firebase ID 토큰을 Authorization 헤더에 실어 보낸다.
 class ApiClient {
-  ApiClient(this._authService) : dio = Dio() {
+  ApiClient(this._authService) : dio = Dio(BaseOptions(baseUrl: apiBaseUrl)) {
     dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
