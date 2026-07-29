@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../services/fog_location_tracker.dart';
 import '../services/fog_overlay_controller.dart';
 import '../services/region_lookup_service.dart';
 import '../services/spot_marker_controller.dart';
@@ -23,7 +24,6 @@ const _mapExtent = NLatLngBounds(
 );
 
 /// 탐험의 메인 화면. Naver Map 기반 지도를 표시한다.
-/// 실시간 GPS 추적(#29)은 이후 이슈에서 이 화면에 추가된다.
 class MapScreen extends ConsumerStatefulWidget {
   const MapScreen({super.key});
 
@@ -47,7 +47,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _requestLocationPermission());
+    // 위치 권한 요청은 onMapReady에서 한 번만 수행한다(중복 요청 시 Android가
+    // "Can request only one set of permissions at a time"로 두 번째 요청을 무시함).
   }
 
   @override
@@ -95,6 +96,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
 
   void _onMapReady(NaverMapController controller) async {
     _controller = controller;
+    controller.setMyLocationTracker(FogLocationTracker());
     _fogOverlay = await FogOverlayController.attach(controller);
     _spotMarkers = SpotMarkerController(controller, ref.read(spotServiceProvider));
     _cameraSubscription = controller.nowCameraPositionStream.listen(_onCameraChanged);
