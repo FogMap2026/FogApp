@@ -2,6 +2,8 @@ import 'package:flutter_compass/flutter_compass.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:geolocator/geolocator.dart';
 
+import 'location_permission_gate.dart';
+
 /// 배터리를 고려한 실시간 위치 추적기(#29).
 ///
 /// flutter_naver_map의 기본 트래커([NDefaultMyLocationTracker])는 위치 갱신
@@ -29,10 +31,7 @@ class FogLocationTracker extends NMyLocationTracker {
     final serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) return null;
 
-    var permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
+    final permission = await LocationPermissionGate.request();
     if (permission == LocationPermission.denied ||
         permission == LocationPermission.deniedForever) {
       return null;

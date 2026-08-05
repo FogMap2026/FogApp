@@ -8,6 +8,7 @@ import 'package:geolocator/geolocator.dart';
 
 import '../services/fog_location_tracker.dart';
 import '../services/fog_overlay_controller.dart';
+import '../services/location_permission_gate.dart';
 import '../services/region_lookup_service.dart';
 import '../services/spot_marker_controller.dart';
 import '../services/spot_service.dart';
@@ -80,10 +81,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     if (mounted) setState(() => _locationServiceEnabled = serviceEnabled);
     if (!serviceEnabled) return;
 
-    var permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
+    final permission = await LocationPermissionGate.request();
     if (mounted) setState(() => _permission = permission);
 
     if (permission == LocationPermission.denied ||
