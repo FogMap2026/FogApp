@@ -232,7 +232,69 @@ Closes #12
 | `dev → main` | **dev에서 통합 테스트 통과** + 리뷰어 승인 후 병합 |
 
 - 병합 방식은 **Squash and merge** 권장 (커밋 히스토리가 깔끔해집니다).
+  단 **아래 "스택 PR" 예외**를 반드시 확인하세요.
 - 병합 후 작업 브랜치는 **삭제**합니다 (GitHub에서 "Delete branch" 버튼).
+
+### ⚠️ 스택(Stacked) PR 병합 — squash 금지
+
+PR의 base가 `dev`·`main`이 아니라 **다른 feature 브랜치**인 경우를 스택 PR이라고 합니다.
+앞 작업이 끝나기 전에 이어서 작업할 때 자연스럽게 생깁니다.
+
+```
+dev ← feat/map-base ← feat/ui-map-screen ← feat/map-spot-load
+      (PR #34)         (PR #35)             (PR #40)
+```
+
+**이때 squash로 병합하면 위쪽 PR이 전부 충돌합니다.**
+
+```
+feat/map-base :  A ─ B ─ C        ← feat/ui-map-screen 이 이 커밋들 위에 쌓여 있음
+                       │
+      squash 병합 ─────┴──► dev :  [ABC]   ← 하나의 새 커밋으로 압축
+
+→ dev 의 [ABC] 와 feat/ui-map-screen 의 A·B·C 는 내용은 같지만 커밋 ID가 다르다
+→ git 이 공통 조상을 못 찾고 "양쪽이 각각 수정했다"고 판단 → 충돌
+```
+
+**내용이 충돌한 게 아니라 이력이 끊긴 것**이라, 코드를 아무리 읽어봐도 원인이 안 보입니다.
+
+#### 규칙
+
+| 상황 | 병합 방식 |
+|------|-----------|
+| 일반 PR (base가 `dev` / `main`) | **Squash and merge** |
+| **스택 PR** (base가 다른 feature 브랜치) | 🚨 **Create a merge commit** |
+| **이력 편입 목적 병합** (`main → dev` 등) | 🚨 **Create a merge commit** |
+
+> 판단 기준: **base가 `dev`·`main`이 아니면 merge commit.**
+> 위에 매달린 PR이 하나라도 있으면 squash가 그 전부를 깨뜨립니다.
+
+#### 이미 충돌이 났다면
+
+위쪽 브랜치가 아래쪽 내용을 이미 포함하고 있으므로, **자기 브랜치 버전을 채택**하면 됩니다.
+
+```bash
+git checkout feat/내-브랜치
+git fetch origin
+git merge origin/dev              # 또는 base 브랜치
+
+git checkout --ours <충돌파일>    # 대개 내 브랜치가 상위집합
+git add <충돌파일>
+
+# ✅ 커밋 전 필수 확인 — base 쪽 내용이 사라지지 않았는가?
+git diff --cached origin/dev --diff-filter=D --name-only   # 출력이 없어야 정상
+
+git commit
+git push
+```
+
+`--ours`를 쓰기 전에 **충돌 구간을 눈으로 확인**하고, 위 `--diff-filter=D` 검사를 꼭 돌리세요.
+내 브랜치가 상위집합이 아닌 경우(양쪽이 서로 다른 기능을 같은 파일에 넣은 경우)에는 손으로 합쳐야 합니다.
+
+#### 애초에 스택을 안 만들려면
+
+가능하면 **각 PR의 base를 `dev`로** 두세요. 앞 작업 결과가 필요하면 그때그때 `git merge origin/dev`로 따라가면 됩니다.
+스택은 리뷰 단위를 작게 쪼개주는 장점이 있지만, 병합 방식을 한 번만 틀려도 위쪽 전부가 막힙니다.
 
 ---
 
@@ -297,6 +359,9 @@ git add .
 git commit
 git push
 ```
+
+> 💡 **코드를 봐도 왜 충돌인지 모르겠다면** — 같은 코드가 양쪽에 다른 커밋으로 존재하는,
+> squash 병합으로 이력이 끊긴 경우일 수 있습니다. 5번 [스택 PR 병합](#️-스택stacked-pr-병합--squash-금지) 참고.
 
 ### 🔒 브랜치 보호 설정 (PM이 설정)
 
