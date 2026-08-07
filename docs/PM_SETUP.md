@@ -9,8 +9,12 @@ PM(박근호 [@PGH0621](https://github.com/PGH0621))이 한 번만 설정하면 
 > |------|------|
 > | 1. 브랜치 보호 규칙 | ✅ `main`·`dev` 모두 PR 필수 + 승인 1명 + stale 리뷰 자동 해제 |
 > | 1-(선택) 상태 검사 필수화 | ⬜ 미설정 — CI가 깨져도 병합 가능한 상태 |
-> | 2. 라벨 생성 | ✅ 10종 생성 완료 |
+> | 2. 라벨 생성 | 🔄 영역 라벨 6종(`feature`·`api`·`ui`·`map`·`social`·`infra`) ✅ / **`docs` 라벨 미생성** |
 > | 3. Discussions | ⬜ 미설정 (선택) |
+>
+> 아래 표의 `docs` 라벨은 아직 없습니다. GitHub 기본 라벨 `documentation`이 대신 존재하므로,
+> **`docs`를 새로 만들지 / `documentation`을 쓸지** 정한 뒤 이 표를 맞춰주세요.
+> (`enhancement`·`help wanted`도 기본 라벨이 있으나 색상·설명이 아래 표와 다릅니다.)
 
 ---
 
