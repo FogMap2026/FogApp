@@ -1,7 +1,8 @@
 # 🔐 환경 변수 & 시크릿 관리 가이드
 
 FogApp은 여러 외부 서비스(관광공사 OpenAPI, Naver Maps, Firebase, DB) 키를 사용합니다.
-**모든 키·비밀번호·설정 파일은 절대 저장소에 커밋하지 않습니다.**
+**서버 시크릿(관리자 키·DB 비밀번호·API 서비스 키)은 절대 저장소에 커밋하지 않습니다.**
+단, **Firebase 클라이언트 설정 파일은 시크릿이 아니므로 커밋합니다**(아래 3-2 참고).
 
 ---
 
@@ -25,19 +26,32 @@ cp .env.example .env
 
 ---
 
-## 3. 커밋하면 안 되는 파일 (`.gitignore` 에 등록됨)
+## 3. Firebase 파일 — 커밋 여부 구분
+
+Firebase 관련 파일은 **성격이 다릅니다.** 클라이언트 설정은 앱에 배포되는 공개값이라 커밋하고, 서버 관리자 키만 커밋을 금지합니다.
+
+### 3-1. 커밋하면 안 되는 파일 (`.gitignore` 에 등록됨)
 
 | 파일 | 설명 |
 |------|------|
 | `.env`, `.env.*` | 환경 변수 실제 값 |
-| `google-services.json` | Firebase Android 설정 |
-| `GoogleService-Info.plist` | Firebase iOS 설정 |
-| `firebase_options.dart` | FlutterFire 생성 설정 |
-| `serviceAccountKey.json` | Firebase Admin 서비스 계정 |
+| `serviceAccountKey.json`, `firebase-adminsdk-*.json` | **Firebase Admin 서비스 계정 키** — 서버가 토큰 검증에 쓰는 관리자 권한 키. 유출 시 프로젝트 전체 위험 |
 | `*.key`, `*.pem`, `*.keystore`, `*.jks` | 각종 키·인증서 |
 | `secrets/` | 시크릿 모음 폴더 |
 
-> 🔐 위 Firebase 설정 파일을 **발급·공유하는 절차**는 [FIREBASE_AUTH_SETUP.md](FIREBASE_AUTH_SETUP.md) 체크리스트를 따르세요.
+### 3-2. 커밋하는 Firebase 클라이언트 설정 (시크릿 아님)
+
+| 파일 | 설명 |
+|------|------|
+| `google-services.json` | Firebase Android 설정 |
+| `GoogleService-Info.plist` | Firebase iOS 설정 |
+| `firebase_options.dart` | FlutterFire 생성 설정 |
+
+> ℹ️ 이 파일들에 담긴 API 키는 앱 바이너리에 어차피 포함되어 배포되는 **공개 식별자**입니다. 실제 보안은 Firebase **Security Rules**와 API 키 제한으로 처리하므로, 소스에 커밋해도 안전합니다([Firebase 공식 문서](https://firebase.google.com/docs/projects/api-keys) 기준). 커밋해야 CI(`flutter analyze`)와 팀원 로컬 빌드가 파일 부재로 깨지지 않습니다.
+>
+> ⚠️ 단 `serviceAccountKey.json`(서버 관리자 키)과 혼동하지 마세요 — 그건 3-1의 금지 대상입니다.
+
+> 🔐 Firebase 설정 발급 절차는 [FIREBASE_AUTH_SETUP.md](FIREBASE_AUTH_SETUP.md) 체크리스트를 따르세요.
 
 ---
 
