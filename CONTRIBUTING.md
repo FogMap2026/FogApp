@@ -278,7 +278,10 @@ Closes #12
 ### ❌ 하지 말아야 할 것
 
 - **main·dev에 직접 push 금지** → 반드시 PR로만
-- **API 키, `.env`, Firebase 설정 파일 커밋 금지** → `.gitignore`로 관리
+- **API 키, `.env`, 서버 관리자 키 커밋 금지** → `.gitignore`로 관리
+  - ⚠️ **Firebase는 파일마다 다릅니다.** `serviceAccountKey.json`·`firebase-adminsdk-*.json`(서버 관리자 키)은 **금지**,
+    `google-services.json`·`GoogleService-Info.plist`·`firebase_options.dart`(클라이언트 설정)는 **커밋합니다**.
+    근거와 전체 목록은 [docs/ENV_GUIDE.md](docs/ENV_GUIDE.md) 3장 참고. ([#42](https://github.com/FogMap2026/FogApp/pull/42)에서 확정)
 - **거대한 PR 금지** → 리뷰 불가능. 기능 단위로 잘게 나누기
 - **오래된 브랜치로 작업 금지** → 작업 전 항상 `git pull origin dev`
 

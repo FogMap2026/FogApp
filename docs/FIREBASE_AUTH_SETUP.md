@@ -40,8 +40,12 @@ Firebase 프로젝트 소유자/편집자 권한이 있는 사람이 직접 수�
    스캐폴딩 확정 후 UI 담당(@oorony)과 함께 결정)
 2. `flutterfire configure` 실행 → `firebase_options.dart`, `google-services.json`,
    `GoogleService-Info.plist` 생성
-   - 이 파일들은 **커밋 금지** (`.gitignore`에 이미 등록됨)
-   - 팀 공유는 비공개 채널(팀 채팅 또는 비밀번호 관리자)로만 진행
+   - ✅ 이 파일들은 **커밋합니다** ([#42](https://github.com/FogMap2026/FogApp/pull/42)에서 정책 확정).
+     담긴 API 키는 앱 바이너리에 실려 배포되는 공개 식별자라 시크릿이 아니며,
+     커밋해야 CI(`flutter analyze`)와 팀원 로컬 빌드가 파일 부재로 깨지지 않습니다.
+     자세한 근거는 [ENV_GUIDE.md](ENV_GUIDE.md) 3-2 참고.
+   - ⛔ 3장의 `serviceAccountKey.json`(서버 관리자 키)과 혼동하지 마세요 — 그건 커밋 금지입니다.
+   - 🔒 커밋으로 공유하는 대신 **콘솔에서 API 키 사용처를 제한**해야 합니다 (아래 4장 체크리스트).
 3. `app/lib/main.dart`의 `Firebase.initializeApp()` 호출에 생성된 `options`를 연결
    (연결 작업은 @oorony에게 핸드오프)
 
@@ -55,18 +59,33 @@ Firebase Admin SDK로 검증해야 하므로 서비스 계정 키가 필요합�
 2. 다운로드된 JSON은 `serviceAccountKey.json`으로 로컬에 저장 (커밋 금지, `.gitignore` 등록됨)
 3. `.env`의 `FIREBASE_SERVICE_ACCOUNT_PATH`가 이 파일 경로를 가리키도록 설정
    (`.env.example` 참고)
-4. 검증 방식 권장: 서버에 Firebase Admin SDK를 추가해 `verifyIdToken()`으로 검증 후
-   커스텀 JWT 발급 또는 ID 토큰을 그대로 세션 식별자로 사용 — 최종 방식은
-   JWT 미들웨어 담당(@PGH0621, #4)과 협의해서 결정
+4. `.env`에 `FIREBASE_ENABLED=true` 설정 — 기본값 `false` 상태에서는 검증기가 모든 토큰을 거부합니다.
 
-## 4. 공유 체크리스트
+> ✅ **검증 방식은 확정됐습니다** ([#4](https://github.com/FogMap2026/FogApp/issues/4), [PR #20](https://github.com/FogMap2026/FogApp/pull/20)).
+> 커스텀 JWT를 발급하지 않고 **Firebase ID 토큰을 서버가 `verifyIdToken()`으로 직접 검증**합니다.
+> (`FirebaseTokenVerifier` · `FirebaseAuthFilter`) 그래서 `JWT_SECRET` 류 환경 변수는 쓰지 않습니다.
+
+## 4. 콘솔 보안 설정 (커밋 정책 전제 조건)
+
+클라이언트 설정 파일을 커밋하기로 한 이상([#42](https://github.com/FogMap2026/FogApp/pull/42)), **실제 보안은 아래 두 가지가 담당합니다.**
+이게 안 걸려 있으면 공개된 API 키가 그대로 남용될 수 있으므로, 커밋 전에 함께 설정해 주세요.
+
+- [ ] **API 키 사용처 제한** — Google Cloud 콘솔 → 사용자 인증 정보 → 해당 API 키
+      → Android 패키지명 + SHA-1 / iOS 번들 ID 로 제한
+- [ ] **Firestore · Storage Security Rules 설정** — 기본 테스트 모드(전체 공개)로 두지 않기
+
+## 5. 공유 체크리스트
 
 - [ ] Google 로그인 Provider 활성화 (+ 이메일/비밀번호)
-- [ ] `flutterfire configure`로 앱 설정 파일 발급 → @oorony에게 비공개 채널로 전달
-- [ ] 서비스 계정 키 발급 → @PGH0621에게 비공개 채널로 전달, 로컬 `.env` 갱신
-- [ ] 위 두 핸드오프 완료 후 이슈 #2 종료, #3/#4 블로킹 해제
+- [ ] `flutterfire configure`로 앱 설정 파일 발급 → **커밋해서 공유** (비공개 전달 불필요)
+- [ ] 위 4장의 API 키 제한 · Security Rules 설정
+- [ ] 서비스 계정 키 발급 → @PGH0621에게 **비공개 채널로 전달**, 로컬 `.env` 갱신 (⛔ 커밋 금지)
+- [ ] `app/lib/main.dart`의 `Firebase.initializeApp()`에 `options` 연결 (@oorony)
+- [ ] 위 항목 완료 후 이슈 [#2](https://github.com/FogMap2026/FogApp/issues/2) 종료, [#3](https://github.com/FogMap2026/FogApp/issues/3)/[#4](https://github.com/FogMap2026/FogApp/issues/4) 블로킹 해제
 
-## 5. 주의사항
+## 6. 주의사항
 
-- 이 문서의 어떤 값도 실제 키·ID를 담지 않습니다. 실제 값은 절대 저장소에 커밋하지 마세요.
+- 이 문서의 어떤 값도 실제 키·ID를 담지 않습니다.
+- **서버 관리자 키**(`serviceAccountKey.json`)와 DB 비밀번호는 절대 저장소에 커밋하지 마세요.
+  클라이언트 설정 파일과의 구분은 [ENV_GUIDE.md](ENV_GUIDE.md) 3장을 따릅니다.
 - 콘솔 작업 완료 후 [ENV_GUIDE.md](ENV_GUIDE.md)에 새로 생긴 환경 변수가 있다면 반영합니다.
