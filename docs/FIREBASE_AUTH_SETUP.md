@@ -2,7 +2,19 @@
 
 > 담당: 송건희 [@songkh1201](https://github.com/songkh1201) (인프라)
 > 관련 이슈: [#2 Firebase Auth 설정 & 소셜 로그인 Provider 구성](https://github.com/FogMap2026/FogApp/issues/2)
-> 블로킹 대상: [#3 로그인/온보딩 화면](https://github.com/FogMap2026/FogApp/issues/3) (완료, 이 설정 대기 중), [#4 JWT 검증 미들웨어](https://github.com/FogMap2026/FogApp/issues/4)
+
+> **🚧 이 체크리스트가 현재 프로젝트의 유일한 미해결 Phase 0/1 블로커입니다 (2026-08-07 기준).**
+>
+> 아래 두 작업의 **코드는 이미 `dev`에 병합**되어 있고, 실제 동작 확인만 이 문서의 콘솔 작업을 기다리고 있습니다.
+>
+> | 대기 중인 작업 | 코드 상태 | 필요한 것 |
+> |----------------|-----------|-----------|
+> | [#3 로그인/온보딩 화면](https://github.com/FogMap2026/FogApp/issues/3) | ✅ 병합 ([PR #12](https://github.com/FogMap2026/FogApp/pull/12)) | 2장 — 앱 설정 파일(`firebase_options.dart` 등) |
+> | [#4 JWT 검증 미들웨어](https://github.com/FogMap2026/FogApp/issues/4) | ✅ 병합 ([PR #20](https://github.com/FogMap2026/FogApp/pull/20)) | 3장 — 서버 서비스 계정 키 |
+>
+> 서버 기본값은 `firebase.enabled=false`(CI 포함)이며, 이때 `DisabledTokenVerifier`가 주입되어
+> **모든 토큰을 거부**합니다. 즉 지금 서버를 띄우면 `/api/health`를 뺀 모든 API가 401을 돌려줍니다(fail-closed).
+> 3장의 키를 받아 `firebase.enabled=true`로 켜야 인증이 실제로 동작합니다.
 
 이 문서는 Firebase 콘솔에서 로그인 Provider를 활성화하고, 앱/서버가 필요로 하는
 설정 파일·키를 발급해 안전하게 전달하기 위한 체크리스트입니다. **콘솔 조작은
