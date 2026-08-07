@@ -19,7 +19,7 @@ dependencies:
 
   # 위치 / GPS
   geolocator: ^12.0.0
-  geocoding: ^3.0.0
+  geocoding: ^4.0.0
 
   # 카메라 / 사진 인증
   camera: ^0.11.0
