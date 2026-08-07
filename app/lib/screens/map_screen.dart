@@ -5,11 +5,19 @@ import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../services/fog_overlay_controller.dart';
 import '../services/region_lookup_service.dart';
 import 'social/personality_test_screen.dart';
 
 /// 대한민국 전역을 보여주는 기본 카메라 위치(안개 지도의 시작 화면).
 const _southKoreaCenter = NLatLng(36.5, 127.8);
+
+/// 지도 이동(pan) 가능 범위. FogApp은 국내 탐험이 목적이므로 대한민국 전역
+/// (마라도~독도) 정도만 여유 있게 덮는 범위로 제한한다.
+const _mapExtent = NLatLngBounds(
+  southWest: NLatLng(32.5, 124.0),
+  northEast: NLatLng(39.0, 132.5),
+);
 
 /// 탐험의 메인 화면. Naver Map 기반 지도를 표시한다.
 /// 안개 오버레이(#27), 스팟 마커(#28), 실시간 GPS 추적(#29)은 이후 이슈에서 이 화면에 추가된다.
@@ -23,6 +31,7 @@ class MapScreen extends StatefulWidget {
 class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   NaverMapController? _controller;
   StreamSubscription<OnCameraChangedParams>? _cameraSubscription;
+  FogOverlayController? _fogOverlay;
 
   bool _mapReady = false;
   bool? _locationServiceEnabled;
@@ -42,6 +51,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _cameraSubscription?.cancel();
+    _fogOverlay?.dispose();
     super.dispose();
   }
 
@@ -81,6 +91,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
 
   void _onMapReady(NaverMapController controller) async {
     _controller = controller;
+    _fogOverlay = await FogOverlayController.attach(controller);
     _cameraSubscription = controller.nowCameraPositionStream.listen(_onCameraChanged);
     if (mounted) setState(() => _mapReady = true);
     unawaited(_lookupRegion(controller.nowCameraPosition.target));
@@ -154,6 +165,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                 target: _southKoreaCenter,
                 zoom: 6.7,
               ),
+              // FogApp은 국내 탐험이 목적이므로 대한민국 밖으로 축소/이동할 이유가 없어 제한한다.
+              minZoom: 6,
+              extent: _mapExtent,
               locationButtonEnable: true,
             ),
             onMapReady: _onMapReady,
