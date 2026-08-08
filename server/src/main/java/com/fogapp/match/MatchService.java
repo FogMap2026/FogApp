@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fogapp.common.ForbiddenException;
 import com.fogapp.common.NotFoundException;
 import com.fogapp.user.PersonalityScoreParser;
 import com.fogapp.user.User;
@@ -94,17 +95,23 @@ public class MatchService {
         return matchRepository.findAllInvolvingUser(userId);
     }
 
+    /** 수락/거절은 요청을 받은 쪽(addressee)만 할 수 있다(#52). */
     @Transactional
-    public Match updateStatus(Long id, String status) {
+    public Match updateStatus(Long callerId, Long id, String status) {
         Match match = get(id);
+        if (!match.getAddresseeId().equals(callerId)) {
+            throw new ForbiddenException("매칭 상태 변경은 요청 대상자만 할 수 있습니다.");
+        }
         match.updateStatus(status);
         return match;
     }
 
+    /** 요청자·대상자 둘 중 한쪽이면 매칭을 취소(삭제)할 수 있다(#52). */
     @Transactional
-    public void delete(Long id) {
-        if (!matchRepository.existsById(id)) {
-            throw new NotFoundException("매칭", id);
+    public void delete(Long callerId, Long id) {
+        Match match = get(id);
+        if (!match.getRequesterId().equals(callerId) && !match.getAddresseeId().equals(callerId)) {
+            throw new ForbiddenException("본인이 관련된 매칭만 취소할 수 있습니다.");
         }
         matchRepository.deleteById(id);
     }
