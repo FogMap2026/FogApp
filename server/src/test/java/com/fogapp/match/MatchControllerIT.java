@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -51,6 +52,13 @@ class MatchControllerIT {
 
     @MockBean
     private TokenVerifier tokenVerifier;
+
+    @BeforeEach
+    void cleanUpUsers() {
+        // 각 테스트가 고정된 firebase_uid("uid-alice" 등)를 재사용하므로, 테스트 간 잔여 데이터로
+        // UNIQUE 제약 위반이 나지 않도록 매번 비운다. matches는 ON DELETE CASCADE로 함께 정리된다.
+        jdbcTemplate.update("DELETE FROM users");
+    }
 
     private void loginAs(String token, String uid) {
         given(tokenVerifier.verify(token)).willReturn(new VerifiedToken(uid, uid + "@example.com", null, null));
