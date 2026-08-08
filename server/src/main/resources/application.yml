@@ -35,3 +35,15 @@ tour:
     area-codes: ${TOUR_COLLECT_AREA_CODES:1,6,39}
     num-of-rows: 100
     max-pages: 10
+
+# 방문 인증 (#48).
+# ⚠️ radius-meters 는 앱의 근접 감지(#45)가 쓰는 값과 반드시 같아야 한다.
+#    어긋나면 "화면엔 인증 가능인데 서버가 거부"하는 버그가 된다. 변경 시 앱 상수도 함께 변경할 것.
+visit:
+  radius-meters: ${VISIT_RADIUS_METERS:100}
+
+# Firebase (ID 토큰 검증) — 기본 비활성. 실제 배포/연동 시 FIREBASE_ENABLED=true 로 켠다.
+# 자격증명은 서비스 계정 JSON 경로(FIREBASE_SERVICE_ACCOUNT_PATH) 또는 GOOGLE_APPLICATION_CREDENTIALS 사용.
+firebase:
+  enabled: ${FIREBASE_ENABLED:false}
+  service-account-path: ${FIREBASE_SERVICE_ACCOUNT_PATH:}

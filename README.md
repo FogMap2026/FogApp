@@ -35,18 +35,21 @@
 
 ## 🛠️ 기술 스택
 
-> 아래는 서비스 요구사항(GPS·지도 오버레이·지리공간 연산·실시간 공유)에 맞춘 권장 스택입니다. 팀 상황에 따라 조정 가능합니다.
+> 아래는 **실제로 채택·적용된 스택**입니다. 버전은 [app/pubspec.yaml](app/pubspec.yaml)·[server/build.gradle](server/build.gradle)이 정본입니다.
 
-| 영역 | 기술 | 선택 이유 |
-|------|------|-----------|
-| **모바일 앱** | Flutter (Dart) | iOS/Android 단일 코드베이스, 지도·카메라·위치 플러그인 성숙 |
-| **지도 SDK** | Naver Maps SDK | 국내 지도 정확도, 커스텀 안개 오버레이 구현 용이 |
-| **백엔드** | Spring Boot (또는 FastAPI) | REST API, 관광공사 OpenAPI 연동, 안정적 서버 |
-| **데이터베이스** | PostgreSQL + **PostGIS** | 지리공간 쿼리·geofencing·GPS 궤적→Polygon 변환의 핵심 |
-| **실시간/알림** | Firebase (Firestore + FCM) | 실시간 위치 공유, 푸시 알림 손쉽게 구현 |
-| **스토리지** | Firebase Storage / AWS S3 | 방문 인증 사진 업로드·저장 |
-| **인증** | Firebase Auth / JWT | 소셜 로그인 및 세션 관리 |
-| **CI/CD** | GitHub Actions | 자동 빌드·배포 |
+| 영역 | 기술 | 버전 | 선택 이유 |
+|------|------|------|-----------|
+| **모바일 앱** | Flutter (Dart) + Riverpod | Flutter 3.24 / Dart ≥3.4 | iOS/Android 단일 코드베이스, 지도·카메라·위치 플러그인 성숙 |
+| **지도 SDK** | Naver Maps SDK (`flutter_naver_map`) | 1.3.x | 국내 지도 정확도, 커스텀 안개 오버레이 구현 용이 |
+| **백엔드** | Spring Boot (Java) | 3.3.2 / Java 17 | REST API, 관광공사 OpenAPI 연동, 안정적 서버 |
+| **데이터베이스** | PostgreSQL + **PostGIS** | PostGIS 3.4 (`postgis/postgis:16-3.4`) | 지리공간 쿼리·geofencing·GPS 궤적→Polygon 변환의 핵심 |
+| **DB 마이그레이션** | Flyway (+ Hibernate `ddl-auto: validate`) | — | 스키마 버전 관리. 스키마 정본은 `V*.sql` |
+| **인증** | Firebase Auth + Firebase Admin SDK | admin 9.3.0 | 앱이 발급한 ID 토큰을 서버가 `verifyIdToken`으로 검증 |
+| **실시간/알림** | Firebase (Firestore + FCM) | — | 실시간 위치 공유, 푸시 알림 (Phase 6) |
+| **스토리지** | Firebase Storage | — | 방문 인증 사진 업로드·저장 (Phase 3) |
+| **테스트** | JUnit 5 + **Testcontainers**(PostGIS) / `flutter test` | — | 실제 PostGIS 컨테이너로 공간 쿼리까지 검증 |
+| **빌드 도구** | Gradle 8.8 | — | Spring Boot 3.3.x 호환 버전으로 고정 |
+| **CI/CD** | GitHub Actions | — | 변경 영역(`app`/`server`) 감지 후 해당 잡만 실행 |
 
 ### 📡 데이터 활용 — 한국관광공사 OpenAPI (필수)
 - **지역기반관광정보조회**: 지역별 관광 스팟 목록 → 안개 지도 탐험 포인트 배치
@@ -98,44 +101,155 @@
 
 ---
 
-## 📁 프로젝트 구조 (예시)
+## 📁 프로젝트 구조
 
 ```
 FogApp/
-├── app/            # Flutter 모바일 앱
+├── app/                              # Flutter 모바일 앱
 │   ├── lib/
-│   │   ├── screens/    # 지도, 발자취, 매칭, 프로필
-│   │   ├── widgets/    # 안개 오버레이, 발자취 카드
-│   │   ├── services/   # API 통신, 위치, 인증
-│   │   └── models/
+│   │   ├── main.dart
+│   │   ├── models/                   # personality.dart …
+│   │   ├── screens/                  # auth_gate · login · map
+│   │   │   └── social/               # 성향 테스트·결과 화면
+│   │   ├── services/                 # api_client · auth · personality
+│   │   └── widgets/                  # 안개 오버레이·발자취 카드 (예정)
+│   ├── test/
 │   └── pubspec.yaml
-├── server/         # 백엔드 (Spring Boot / FastAPI)
-│   ├── src/
-│   └── ...
-├── docs/           # 기획서, 아키텍처 문서
-└── README.md
+├── server/                           # Spring Boot 백엔드
+│   └── src/main/java/com/fogapp/
+│       ├── auth/                     # Firebase 토큰 검증 · Security 설정
+│       ├── common/                   # 공통 예외·에러 응답
+│       ├── user/                     # 프로필 · 성향 저장
+│       ├── spot/                     # 스팟 조회(지역별·반경별)
+│       ├── tour/                     # 관광공사 OpenAPI 수집 배치
+│       ├── footprint/                # 발자취 CRUD · 좋아요
+│       └── match/                    # 매칭 요청 · 성향 유사도 추천
+│   └── src/main/resources/db/migration/   # Flyway V1~V3 (스키마 정본)
+├── docs/                             # 설계·운영 문서 (아래 표)
+├── .github/                          # CI · CODEOWNERS · 이슈/PR 템플릿
+├── docker-compose.yml                # PostgreSQL + PostGIS 로컬 실행
+├── planning.md                       # 단계별 로드맵 + 현재 진행 상황
+└── CONTRIBUTING.md                   # 협업 규칙 (브랜치·PR·리뷰)
 ```
+
+### 📚 문서 안내
+
+| 문서 | 내용 |
+|------|------|
+| [planning.md](planning.md) | 8단계 로드맵과 **현재 진행 상황 스냅샷** |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | 브랜치 전략·커밋·PR·리뷰 규칙 |
+| [docs/ERD.md](docs/ERD.md) | DB 스키마와 설계 근거 |
+| [docs/ENV_GUIDE.md](docs/ENV_GUIDE.md) | 환경 변수·시크릿 관리 |
+| [docs/FIREBASE_AUTH_SETUP.md](docs/FIREBASE_AUTH_SETUP.md) | Firebase 콘솔 설정 체크리스트 |
+| [docs/personality-test-design.md](docs/personality-test-design.md) | 여행 성향 축·설문·점수 모델 |
+| [docs/PM_SETUP.md](docs/PM_SETUP.md) | 저장소 관리자 설정(PM 전용) |
 
 ---
 
 ## 🚀 시작하기
 
+### 0) 저장소 클론 & 환경 변수
+
 ```bash
-# 저장소 클론
 git clone https://github.com/FogMap2026/FogApp.git
 cd FogApp
 
-# (앱) Flutter 의존성 설치 및 실행
+cp .env.example .env
+# .env 를 열어 TOUR_API_SERVICE_KEY · NAVER_MAP_CLIENT_ID · DB_* 등 실제 값 입력
+```
+
+키 발급처와 관리 규칙은 [docs/ENV_GUIDE.md](docs/ENV_GUIDE.md)를 따르세요.
+
+### 1) DB 실행 (PostgreSQL + PostGIS)
+
+```bash
+docker compose up -d
+# 서버 기동 시 Flyway 가 V1~V3 마이그레이션을 자동 적용합니다.
+```
+
+### 2) 서버 실행
+
+```bash
+cd server
+
+# ⚠️ Gradle wrapper(gradlew)는 저장소에 커밋돼 있지 않습니다.
+#    최초 1회, 로컬에 설치된 Gradle로 wrapper를 생성해야 합니다.
+gradle wrapper --gradle-version 8.8
+
+./gradlew bootRun          # Windows: gradlew.bat bootRun
+
+# 확인
+curl http://localhost:8080/api/health
+```
+
+> 🔑 기본값은 `firebase.enabled=false` 입니다. 이 상태에서는 토큰 검증기가 **모든 토큰을 거부**하므로
+> `/api/health` 외의 API는 401을 반환합니다. Firebase 서비스 계정 키를 받아 `firebase.enabled=true`로 켜야
+> 인증이 동작합니다 — 발급 절차는 [docs/FIREBASE_AUTH_SETUP.md](docs/FIREBASE_AUTH_SETUP.md) 참고. (대기 중: [#2](../../issues/2))
+
+### 3) 앱 실행
+
+```bash
 cd app
 flutter pub get
 flutter run
-
-# (서버) 환경 변수 설정 후 실행
-cd ../server
-# .env 파일에 관광공사 OpenAPI 키, DB 정보 등 설정
 ```
 
-> ⚠️ 한국관광공사 OpenAPI 서비스 키, Naver Maps 클라이언트 ID, Firebase 설정 파일은 `.env` 및 `.gitignore`로 관리하고 **절대 커밋하지 마세요.**
+> ⚠️ **현재 깨끗한 클론에서는 앱이 실행되지 않습니다** ([#2](../../issues/2) 대기).
+>
+> | 필요한 것 | 상태 |
+> |---|---|
+> | `google-services.json` · `firebase_options.dart` | 미커밋 — 없으면 `Firebase.initializeApp()` 에서 크래시 |
+> | Naver Maps 클라이언트 ID | 미설정 — 없으면 지도가 렌더링되지 않음 |
+>
+> [#2](../../issues/2)가 닫히면 클라이언트 설정 파일이 저장소에 들어와(정책은 [#42](../../pull/42)에서 확정) 이 제약이 사라집니다.
+
+### 4) 테스트
+
+```bash
+cd server && ./gradlew test    # Testcontainers 로 PostGIS 컨테이너를 띄웁니다 (Docker 필요)
+cd app    && flutter test
+```
+
+> 처음 클론했다면 위 2)의 `gradle wrapper` 단계를 먼저 거쳐야 `./gradlew` 가 생깁니다.
+> 자세한 서버 설정은 [server/README.md](server/README.md) 참고.
+
+> ⚠️ 관광공사 OpenAPI 서비스 키, Naver Maps 클라이언트 ID, **Firebase 서버 관리자 키(`serviceAccountKey.json`)** 는
+> `.env`·`.gitignore`로 관리하고 **절대 커밋하지 마세요.** 자세한 구분은 [docs/ENV_GUIDE.md](docs/ENV_GUIDE.md) 참고.
+
+---
+
+## 🔌 구현된 API
+
+> 인증: `/api/health`를 제외한 모든 `/api/**` 는 `Authorization: Bearer <Firebase ID Token>` 헤더가 필요합니다.
+
+| 메서드 | 경로 | 설명 | Phase |
+|--------|------|------|-------|
+| `GET` | `/api/health` | 헬스체크 (공개) | 0 |
+| `GET` | `/api/profile` | 내 프로필 조회 | 1 |
+| `PATCH` | `/api/profile` | 닉네임·프로필 이미지 수정 | 1 |
+| `PATCH` | `/api/profile/personality` | 성향 테스트 결과 저장 | 2 |
+| `GET` | `/api/spots?region={code}&page&size` | 지역 코드별 스팟 목록(페이지네이션) | 1 |
+| `GET` | `/api/spots/nearby?lat&lng&radius` | 반경 내 스팟 조회 (PostGIS `ST_DWithin`, 최대 20km) | 1 |
+| `POST` `GET` `PATCH` `DELETE` | `/api/footprints`, `/api/footprints/{id}` | 발자취 CRUD (`spotId` 또는 `userId`로 목록 조회) | 1·2 |
+| `POST` `DELETE` | `/api/footprints/{id}/likes` | 좋아요 등록·취소 (1인 1회) | 2 |
+| `POST` `GET` `PATCH` `DELETE` | `/api/matches`, `/api/matches/{id}` | 동행 요청 생성·조회·상태 변경·취소 | 1·5 |
+| `GET` | `/api/matches/candidates?userId&limit` | 성향 유사도 기반 동행 후보 추천 | 3 |
+
+스팟 데이터는 `SpotCollectionRunner`(관광공사 OpenAPI 수집 배치)가 `spots.content_id` 업서트로 적재합니다.
+
+---
+
+## 📈 개발 현황 (2026-08-07)
+
+| Phase | 상태 |
+|-------|------|
+| **0** 기반 다지기 | ✅ 완료 (Firebase 콘솔 설정 [#2](../../issues/2)만 대기) |
+| **1** 인증 & 데이터 토대 | ✅ 코드 완료 — `dev` 병합, [PR #25](../../pull/25)로 `main` 승격 대기 |
+| **2** 지도 & 안개 코어 | 🔄 소셜 트랙 완료 / 지도 PR 5건([#34](../../pull/34)~[#41](../../pull/41)) 리뷰 대기 |
+| **3** 탐험 루프 ★MVP★ | 🔄 매칭 알고리즘만 선행 완료, 탐험 루프 미착수 |
+| **4~7** | ⬜ 미착수 |
+
+단계별 상세 항목·담당자·병합 순서는 [planning.md](planning.md)에 정리돼 있습니다.
 
 ---
 

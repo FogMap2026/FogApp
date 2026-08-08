@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'firebase_options.dart';
 import 'screens/auth_gate.dart';
 
 /// 빌드/실행 시 `--dart-define=NAVER_MAP_CLIENT_ID=발급받은_ID` 로 주입합니다.
@@ -11,9 +12,7 @@ const String naverMapClientId = String.fromEnvironment('NAVER_MAP_CLIENT_ID');
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // TODO(infra): #2(Firebase 프로젝트 설정) 완료 후 `flutterfire configure`로
-  // 생성되는 firebase_options.dart를 options 인자로 연결합니다.
-  await Firebase.initializeApp();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   await FlutterNaverMap().init(
     clientId: naverMapClientId,

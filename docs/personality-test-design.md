@@ -130,10 +130,27 @@ similarity = 1 - (distance / max_distance)   // 0~1로 정규화, max_distance =
 
 ## 6. 다음 단계
 
-- [ ] (2-6) 이 문항·척도로 앱 성향 테스트 화면 구현, 응답 → 위 계산식으로 저장
-- [ ] (3-8) `personality_scores` 기반 유사도 매칭 알고리즘 구현
+- [x] (2-6) 이 문항·척도로 앱 성향 테스트 화면 구현, 응답 → 위 계산식으로 저장
+      → [PR #33](https://github.com/FogMap2026/FogApp/pull/33) (`personality_test_screen.dart` · `personality_scorer.dart`),
+        저장 API는 [PR #36](https://github.com/FogMap2026/FogApp/pull/36) (`PATCH /api/profile/personality`)
+- [x] (3-8) `personality_scores` 기반 유사도 매칭 알고리즘 구현
+      → [PR #38](https://github.com/FogMap2026/FogApp/pull/38) (`PersonalitySimilarity` · `GET /api/matches/candidates`)
+- [ ] (5-3) 성향 결과 프로필 노출 + 성향 맞춤 발자취 필터
 - [ ] 문항 표현은 실제 사용자 테스트 후 다듬을 수 있음(설계 변경 시 이 문서를 갱신)
+
+> ⚠️ 문항·척도·계산식을 바꾸면 `personality_scores.version`(현재 `1`)을 올리고,
+> 기존 응답의 재계산 여부를 이 문서에 함께 남기세요.
 
 ---
 
-관련 이슈: #15
+**구현 위치**
+
+| 계층 | 파일 |
+|------|------|
+| 앱 — 문항·모델 | `app/lib/models/personality.dart` |
+| 앱 — 채점 로직 | `app/lib/services/personality_scorer.dart` (테스트: `app/test/personality_scorer_test.dart`) |
+| 앱 — 화면 | `app/lib/screens/social/personality_test_screen.dart` · `personality_result_screen.dart` |
+| 서버 — 저장 | `server/.../user/PersonalityScoreParser.java` · `ProfileController.java` |
+| 서버 — 유사도 | `server/.../match/PersonalitySimilarity.java` |
+
+관련 이슈: [#15](https://github.com/FogMap2026/FogApp/issues/15) · [#31](https://github.com/FogMap2026/FogApp/issues/31) · [#32](https://github.com/FogMap2026/FogApp/issues/32) · [#37](https://github.com/FogMap2026/FogApp/issues/37)
