@@ -171,6 +171,11 @@ docker compose up -d
 
 ```bash
 cd server
+
+# ⚠️ Gradle wrapper(gradlew)는 저장소에 커밋돼 있지 않습니다.
+#    최초 1회, 로컬에 설치된 Gradle로 wrapper를 생성해야 합니다.
+gradle wrapper --gradle-version 8.8
+
 ./gradlew bootRun          # Windows: gradlew.bat bootRun
 
 # 확인
@@ -189,12 +194,24 @@ flutter pub get
 flutter run
 ```
 
+> ⚠️ **현재 깨끗한 클론에서는 앱이 실행되지 않습니다** ([#2](../../issues/2) 대기).
+>
+> | 필요한 것 | 상태 |
+> |---|---|
+> | `google-services.json` · `firebase_options.dart` | 미커밋 — 없으면 `Firebase.initializeApp()` 에서 크래시 |
+> | Naver Maps 클라이언트 ID | 미설정 — 없으면 지도가 렌더링되지 않음 |
+>
+> [#2](../../issues/2)가 닫히면 클라이언트 설정 파일이 저장소에 들어와(정책은 [#42](../../pull/42)에서 확정) 이 제약이 사라집니다.
+
 ### 4) 테스트
 
 ```bash
 cd server && ./gradlew test    # Testcontainers 로 PostGIS 컨테이너를 띄웁니다 (Docker 필요)
 cd app    && flutter test
 ```
+
+> 처음 클론했다면 위 2)의 `gradle wrapper` 단계를 먼저 거쳐야 `./gradlew` 가 생깁니다.
+> 자세한 서버 설정은 [server/README.md](server/README.md) 참고.
 
 > ⚠️ 관광공사 OpenAPI 서비스 키, Naver Maps 클라이언트 ID, **Firebase 서버 관리자 키(`serviceAccountKey.json`)** 는
 > `.env`·`.gitignore`로 관리하고 **절대 커밋하지 마세요.** 자세한 구분은 [docs/ENV_GUIDE.md](docs/ENV_GUIDE.md) 참고.
