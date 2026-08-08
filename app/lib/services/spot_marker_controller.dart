@@ -13,10 +13,14 @@ import 'spot_service.dart';
 /// 스팟이 매우 밀집한 지역에서 마커 수가 많아지면 클러스터링이 필요할 수 있다 —
 /// 지금은 반경([_radiusMeters])으로 요청량을 제한하는 선에서 대응한다.
 class SpotMarkerController {
-  SpotMarkerController(this._mapController, this._spotService);
+  SpotMarkerController(this._mapController, this._spotService, {this.onSpotsLoaded});
 
   final NaverMapController _mapController;
   final SpotService _spotService;
+
+  /// 스팟 목록을 새로 불러올 때마다 호출된다. geofencing(#45)이 별도 API 호출 없이
+  /// 이 목록을 후보로 재사용할 수 있도록 노출하는 용도.
+  final void Function(List<Spot> spots)? onSpotsLoaded;
 
   static const _radiusMeters = 5000.0;
 
@@ -35,6 +39,7 @@ class SpotMarkerController {
         lng: center.longitude,
         radiusMeters: _radiusMeters,
       );
+      onSpotsLoaded?.call(spots);
       final markers = spots.map(_toMarker).toSet();
       await _mapController.clearOverlays(type: NOverlayType.marker);
       if (markers.isNotEmpty) {
