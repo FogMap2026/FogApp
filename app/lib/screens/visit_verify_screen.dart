@@ -60,7 +60,9 @@ class _VisitVerifyScreenState extends ConsumerState<VisitVerifyScreen> {
         (c) => c.lensDirection == CameraLensDirection.back,
         orElse: () => cameras.first,
       );
-      final controller = CameraController(back, ResolutionPreset.high, enableAudio: false);
+      // Storage 규칙(#48, PR #56)이 5MB 미만만 허용하므로, high 대신 medium으로
+      // 원본 용량 자체를 줄인다(별도 압축 라이브러리 없이 5MB 제한을 안정적으로 지킴).
+      final controller = CameraController(back, ResolutionPreset.medium, enableAudio: false);
       await controller.initialize();
       if (!mounted) {
         await controller.dispose();

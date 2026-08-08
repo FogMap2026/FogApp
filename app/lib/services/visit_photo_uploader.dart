@@ -25,6 +25,9 @@ class VisitPhotoUpload {
 }
 
 /// 방문 인증 사진을 Firebase Storage에 업로드한다(#47).
+///
+/// 경로는 `app/storage.rules`(#48, PR #56)의 `visits/{userId}/{spotId}/{fileName}`
+/// 규칙과 반드시 일치해야 한다 — 다른 경로는 fail-closed로 거부된다.
 class VisitPhotoUploader {
   VisitPhotoUploader(this._storage, this._auth);
 
@@ -39,11 +42,13 @@ class VisitPhotoUploader {
 
     final ref = _storage
         .ref()
-        .child('visit_photos')
+        .child('visits')
         .child(uid)
-        .child('$spotId-${DateTime.now().millisecondsSinceEpoch}.jpg');
+        .child('$spotId')
+        .child('${DateTime.now().millisecondsSinceEpoch}.jpg');
 
-    final task = ref.putFile(file);
+    // 규칙이 image/(jpeg|png|webp) contentType을 요구하므로 명시적으로 지정한다.
+    final task = ref.putFile(file, SettableMetadata(contentType: 'image/jpeg'));
 
     final progressController = StreamController<double>.broadcast();
     final subscription = task.snapshotEvents.listen((snapshot) {
