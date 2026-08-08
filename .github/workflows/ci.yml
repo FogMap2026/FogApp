@@ -6,10 +6,29 @@ on:
   pull_request:
     branches: [main, dev]
 
-# 변경된 영역만 검사 (app / server)
 jobs:
+  # 변경된 영역 감지 — 관련 없는 잡은 건너뛴다.
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      app: ${{ steps.filter.outputs.app }}
+      server: ${{ steps.filter.outputs.server }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            app:
+              - 'app/**'
+            server:
+              - 'server/**'
+
   app:
     name: Flutter App
+    needs: changes
+    if: ${{ needs.changes.outputs.app == 'true' }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -19,11 +38,17 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
+          flutter-version: "3.24.0"
           channel: stable
 
-      # 플랫폼 폴더가 아직 없으므로 생성 (lib/ 는 유지)
+      # 플랫폼 폴더 생성 (lib/ 는 유지)
       - name: Generate platform folders
         run: flutter create .
+
+      # flutter create 가 만든 템플릿 기본 테스트는 우리 구조와 달라 제거.
+      # (앱 테스트는 #3에서 추가)
+      - name: Remove template test
+        run: rm -f test/widget_test.dart
 
       - name: Install dependencies
         run: flutter pub get
@@ -31,11 +56,10 @@ jobs:
       - name: Analyze
         run: flutter analyze
 
-      - name: Test
-        run: flutter test
-
   server:
     name: Spring Boot Server
+    needs: changes
+    if: ${{ needs.changes.outputs.server == 'true' }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -48,8 +72,11 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # Spring Boot 3.3.x 는 Gradle 8.x 필요 (9.x 는 호환 불가)
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.8"
 
       - name: Build
         run: gradle build --no-daemon

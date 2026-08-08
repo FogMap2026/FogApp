@@ -231,8 +231,89 @@ Closes #12
 | `feat/* → dev` | **리뷰어 1명 이상 Approve** 후 병합 |
 | `dev → main` | **dev에서 통합 테스트 통과** + 리뷰어 승인 후 병합 |
 
-- 병합 방식은 **Squash and merge** 권장 (커밋 히스토리가 깔끔해집니다).
+- `feat/* → dev` 는 **Squash and merge** 권장 (커밋 히스토리가 깔끔해집니다).
+- ⚠️ 단 `dev → main` 과 **아래 "스택 PR" 은 예외**로 반드시 merge commit 을 씁니다.
 - 병합 후 작업 브랜치는 **삭제**합니다 (GitHub에서 "Delete branch" 버튼).
+
+### ⚠️ 스택(Stacked) PR 병합 — squash 금지
+
+PR의 base가 `dev`·`main`이 아니라 **다른 feature 브랜치**인 경우를 스택 PR이라고 합니다.
+앞 작업이 끝나기 전에 이어서 작업할 때 자연스럽게 생깁니다.
+
+```
+dev ← feat/map-base ← feat/ui-map-screen ← feat/map-spot-load
+      (PR #34)         (PR #35)             (PR #40)
+```
+
+**이때 squash로 병합하면 위쪽 PR이 전부 충돌합니다.**
+
+```
+feat/map-base :  A ─ B ─ C        ← feat/ui-map-screen 이 이 커밋들 위에 쌓여 있음
+                       │
+      squash 병합 ─────┴──► dev :  [ABC]   ← 하나의 새 커밋으로 압축
+
+→ dev 의 [ABC] 와 feat/ui-map-screen 의 A·B·C 는 내용은 같지만 커밋 ID가 다르다
+→ git 이 공통 조상을 못 찾고 "양쪽이 각각 수정했다"고 판단 → 충돌
+```
+
+**내용이 충돌한 게 아니라 이력이 끊긴 것**이라, 코드를 아무리 읽어봐도 원인이 안 보입니다.
+
+#### 규칙
+
+| 상황 | 소스 브랜치가 병합 후에도 살아 있는가 | 병합 방식 |
+|------|--------------------------------------|-----------|
+| `feat/* → dev` | ❌ 병합 후 삭제 | **Squash and merge** |
+| **`dev → main`** (릴리스 승격) | ✅ `dev` 는 계속 쓴다 | 🚨 **Create a merge commit** |
+| **스택 PR** (base가 다른 feature 브랜치) | ✅ 위에 PR이 매달려 있다 | 🚨 **Create a merge commit** |
+| **이력 편입 목적 병합** (`main → dev` 등) | ✅ | 🚨 **Create a merge commit** |
+
+> ### 판단 기준: **squash 는 소스 브랜치를 버릴 때만.**
+>
+> 병합 후에도 그 브랜치를 계속 쓴다면 squash 가 조상 관계를 끊고, **다음 병합에서 반드시 충돌**합니다.
+> base 가 무엇이냐가 아니라 **소스 브랜치의 수명**으로 판단하세요.
+
+#### 왜 `dev → main` 이 특히 위험한가
+
+`dev` 는 릴리스 후에도 계속 살아 있는 장수 브랜치라, 여기서 squash 하면 **매 릴리스마다** 같은 충돌이 반복됩니다.
+
+```
+squash 병합 시:
+  main :  ... ← [dev 24커밋을 압축한 새 커밋]
+  dev  :  ... 원본 24커밋 그대로 살아 있음
+
+  → main 의 그 커밋은 dev 에 없고, dev 의 24커밋은 main 에 없다
+  → 다음 릴리스에서 이미 올린 커밋이 "새 변경"으로 다시 나타난다
+  → 양쪽이 건드린 파일마다 충돌
+```
+
+`feat/*` 는 병합 후 삭제하니 이 문제가 없습니다. 차이는 **브랜치를 계속 쓰느냐** 하나뿐입니다.
+
+#### 이미 충돌이 났다면
+
+위쪽 브랜치가 아래쪽 내용을 이미 포함하고 있으므로, **자기 브랜치 버전을 채택**하면 됩니다.
+
+```bash
+git checkout feat/내-브랜치
+git fetch origin
+git merge origin/dev              # 또는 base 브랜치
+
+git checkout --ours <충돌파일>    # 대개 내 브랜치가 상위집합
+git add <충돌파일>
+
+# ✅ 커밋 전 필수 확인 — base 쪽 내용이 사라지지 않았는가?
+git diff --cached origin/dev --diff-filter=D --name-only   # 출력이 없어야 정상
+
+git commit
+git push
+```
+
+`--ours`를 쓰기 전에 **충돌 구간을 눈으로 확인**하고, 위 `--diff-filter=D` 검사를 꼭 돌리세요.
+내 브랜치가 상위집합이 아닌 경우(양쪽이 서로 다른 기능을 같은 파일에 넣은 경우)에는 손으로 합쳐야 합니다.
+
+#### 애초에 스택을 안 만들려면
+
+가능하면 **각 PR의 base를 `dev`로** 두세요. 앞 작업 결과가 필요하면 그때그때 `git merge origin/dev`로 따라가면 됩니다.
+스택은 리뷰 단위를 작게 쪼개주는 장점이 있지만, 병합 방식을 한 번만 틀려도 위쪽 전부가 막힙니다.
 
 ---
 
@@ -278,7 +359,10 @@ Closes #12
 ### ❌ 하지 말아야 할 것
 
 - **main·dev에 직접 push 금지** → 반드시 PR로만
-- **API 키, `.env`, Firebase 설정 파일 커밋 금지** → `.gitignore`로 관리
+- **API 키, `.env`, 서버 관리자 키 커밋 금지** → `.gitignore`로 관리
+  - ⚠️ **Firebase는 파일마다 다릅니다.** `serviceAccountKey.json`·`firebase-adminsdk-*.json`(서버 관리자 키)은 **금지**,
+    `google-services.json`·`GoogleService-Info.plist`·`firebase_options.dart`(클라이언트 설정)는 **커밋합니다**.
+    근거와 전체 목록은 [docs/ENV_GUIDE.md](docs/ENV_GUIDE.md) 3장 참고. ([#42](https://github.com/FogMap2026/FogApp/pull/42)에서 확정)
 - **거대한 PR 금지** → 리뷰 불가능. 기능 단위로 잘게 나누기
 - **오래된 브랜치로 작업 금지** → 작업 전 항상 `git pull origin dev`
 
@@ -294,6 +378,9 @@ git add .
 git commit
 git push
 ```
+
+> 💡 **코드를 봐도 왜 충돌인지 모르겠다면** — 같은 코드가 양쪽에 다른 커밋으로 존재하는,
+> squash 병합으로 이력이 끊긴 경우일 수 있습니다. 5번 [스택 PR 병합](#️-스택stacked-pr-병합--squash-금지) 참고.
 
 ### 🔒 브랜치 보호 설정 (PM이 설정)
 

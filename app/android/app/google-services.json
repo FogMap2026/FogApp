@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "234315915688",
+    "project_id": "fogmap-9355b",
+    "storage_bucket": "fogmap-9355b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:234315915688:android:bf23bf7c77ef8879867d9d",
+        "android_client_info": {
+          "package_name": "com.fogapp.fogapp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "234315915688-54me7p6n37hrf8h22q2hgc7dcctql71f.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDwq_VI6I7eYsz9GwMuajRAG0HFWYyhuPY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "234315915688-54me7p6n37hrf8h22q2hgc7dcctql71f.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

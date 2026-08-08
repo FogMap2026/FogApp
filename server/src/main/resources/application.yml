@@ -11,14 +11,39 @@ spring:
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
-      ddl-auto: update
+      # 스키마는 Flyway가 소유한다. Hibernate는 엔티티-스키마 일치만 검증.
+      ddl-auto: validate
     properties:
       hibernate:
-        dialect: org.hibernate.spatial.dialect.postgis.PostgisPG95Dialect
         format_sql: true
     show-sql: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
 
-# 외부 API 키 (환경 변수로 주입, .env 참고)
+# 한국관광공사 TourAPI (스팟 수집 #5). 서비스 키는 환경 변수로 주입(.env 참고).
 tour:
   api:
     service-key: ${TOUR_API_SERVICE_KEY:}
+    base-url: ${TOUR_API_BASE_URL:https://apis.data.go.kr/B551011/KorService1}
+    mobile-app: FogApp
+    mobile-os: ETC
+  # 수집 배치 설정. on-startup=true 로 켜면 기동 시 지정 지역을 수집한다(기본 off).
+  collect:
+    on-startup: ${TOUR_COLLECT_ON_STARTUP:false}
+    area-codes: ${TOUR_COLLECT_AREA_CODES:1,6,39}
+    num-of-rows: 100
+    max-pages: 10
+
+# 방문 인증 (#48).
+# ⚠️ radius-meters 는 앱의 근접 감지(#45)가 쓰는 값과 반드시 같아야 한다.
+#    어긋나면 "화면엔 인증 가능인데 서버가 거부"하는 버그가 된다. 변경 시 앱 상수도 함께 변경할 것.
+visit:
+  radius-meters: ${VISIT_RADIUS_METERS:100}
+
+# Firebase (ID 토큰 검증) — 기본 비활성. 실제 배포/연동 시 FIREBASE_ENABLED=true 로 켠다.
+# 자격증명은 서비스 계정 JSON 경로(FIREBASE_SERVICE_ACCOUNT_PATH) 또는 GOOGLE_APPLICATION_CREDENTIALS 사용.
+firebase:
+  enabled: ${FIREBASE_ENABLED:false}
+  service-account-path: ${FIREBASE_SERVICE_ACCOUNT_PATH:}

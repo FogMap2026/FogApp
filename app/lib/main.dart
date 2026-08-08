@@ -1,10 +1,24 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'screens/map_screen.dart';
+import 'firebase_options.dart';
+import 'screens/auth_gate.dart';
 
-void main() {
-  // TODO(infra): Firebase.initializeApp() 연동 (Phase 1)
+/// 빌드/실행 시 `--dart-define=NAVER_MAP_CLIENT_ID=발급받은_ID` 로 주입합니다.
+/// 값 발급처는 docs/ENV_GUIDE.md 참고, 절대 커밋하지 마세요.
+const String naverMapClientId = String.fromEnvironment('NAVER_MAP_CLIENT_ID');
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  await FlutterNaverMap().init(
+    clientId: naverMapClientId,
+    onAuthFailed: (ex) => debugPrint('[NaverMap] 인증 실패: $ex'),
+  );
+
   runApp(const ProviderScope(child: FogApp()));
 }
 
@@ -20,7 +34,7 @@ class FogApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF5B7A99)),
         useMaterial3: true,
       ),
-      home: const MapScreen(),
+      home: const AuthGate(),
     );
   }
 }
