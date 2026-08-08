@@ -60,10 +60,15 @@ Firebase 관련 파일은 **성격이 다릅니다.** 클라이언트 설정은 
 | 변수 | 발급처 |
 |------|--------|
 | `TOUR_API_SERVICE_KEY` | [한국관광공사 TourAPI](https://api.visitkorea.or.kr/) |
+| `TOUR_COLLECT_*` | 발급 불필요 — 수집 배치 동작 설정([#5](https://github.com/FogMap2026/FogApp/issues/5)). 기본 `false`로 꺼져 있음 |
 | `NAVER_MAP_CLIENT_ID` | [네이버 클라우드 플랫폼 — Maps](https://www.ncloud.com/product/applicationService/maps) |
-| `FIREBASE_*` | [Firebase 콘솔](https://console.firebase.google.com/) — 발급 절차는 [FIREBASE_AUTH_SETUP.md](FIREBASE_AUTH_SETUP.md) 참고 |
+| `FIREBASE_ENABLED` | 발급 불필요 — 서비스 계정 키를 받은 뒤 `true`로 켜는 스위치 |
+| `FIREBASE_SERVICE_ACCOUNT_PATH` | [Firebase 콘솔](https://console.firebase.google.com/) — 발급 절차는 [FIREBASE_AUTH_SETUP.md](FIREBASE_AUTH_SETUP.md) 참고 |
 | `DB_*` | 로컬은 `docker-compose.yml` 기본값, 배포는 인프라 담당(송건희)이 발급 |
-| `JWT_SECRET` | 팀이 임의 생성(예: `openssl rand -base64 48`) |
+
+> 💡 `JWT_SECRET` / `JWT_EXPIRATION_MS` 는 더 이상 쓰지 않습니다.
+> 서버는 커스텀 JWT를 발급하지 않고 **Firebase ID 토큰을 그대로 검증**하는 방식([#4](https://github.com/FogMap2026/FogApp/issues/4))으로 확정되어,
+> `.env.example`에서도 제거했습니다.
 
 ---
 
