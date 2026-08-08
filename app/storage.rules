@@ -2,9 +2,10 @@ rules_version = '2';
 
 // FogApp 인증 사진 Storage 규칙 (#48)
 //
-// 경로 규칙: visits/{userId}/{spotId}/{fileName}
-//   - userId 는 Firebase UID 가 아니라 서버 users.id 를 쓰지 않는다.
-//     Storage 는 서버 DB를 모르므로 여기서는 Firebase UID 로 소유권을 판정한다.
+// 경로 규칙: visits/{firebaseUid}/{spotId}/{fileName}
+//   - 첫 세그먼트는 서버 users.id 가 아니라 **Firebase UID** 다.
+//     Storage 는 서버 DB를 모르므로 request.auth.uid 로만 소유권을 판정할 수 있다.
+//   - 아래 match 문의 변수명이 {userId} 지만 실제로 대조하는 값은 request.auth.uid 다.
 //   - 서버(#54 POST /api/visits)는 사진 바이너리를 받지 않고 photoUrl 만 저장한다.
 //     즉 "누가 올렸는가"의 1차 방어선이 이 규칙이다.
 //

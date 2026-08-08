@@ -18,8 +18,14 @@
 ```
 
 - **서버는 바이너리를 받지 않는다.** 앱이 Storage에 먼저 올리고 URL만 서버에 넘긴다(`visits.photo_url`).
-- 그래서 "누가 어디에 올릴 수 있는가"의 방어선은 **서버 코드가 아니라 Storage Security Rules**다.
+- "누가 어디에 올릴 수 있는가"의 1차 방어선은 **Storage Security Rules**다.
 - 위치 위조 방어는 서버가 담당한다(`POST /api/visits`의 PostGIS 반경 검증, #54).
+
+> ⚠️ **Rules 단독으로는 부족하다.** 서버가 `photoUrl`을 아무 문자열이나 받으면,
+> Rules로 업로드를 잠가도 `"https://evil.com/a.jpg"` 같은 URL로 인증이 성립해
+> "사진으로 방문을 인증한다"는 성질이 깨진다.
+> 그래서 서버도 `photoUrl`이 **본인 경로**를 가리키는지 검증한다(`VisitPhotoUrlValidator`).
+> **경로 규칙이 세 곳에서 같아야 동작한다** — 아래 3장 표 참고.
 
 ---
 
@@ -32,6 +38,20 @@ visits/{firebaseUid}/{spotId}/{timestamp}.jpg
 - `{firebaseUid}` — **Firebase UID**(서버 `users.id`가 아님). Storage는 서버 DB를 모르므로 소유권 판정을 UID로 한다.
 - `{spotId}` — 서버 `spots.id`
 - `{timestamp}` — 밀리초 epoch. 같은 스팟 재업로드 시 충돌 방지용이지만, 정복은 1인 1회(`visits` 유니크)라 실제로는 1장이 정상이다.
+
+### ⚠️ 이 경로는 세 곳에서 동일해야 한다
+
+한 곳만 어긋나도 업로드가 되거나 인증이 되거나 둘 중 하나가 조용히 실패한다.
+
+| 위치 | 무엇 | 판정 근거 |
+|------|------|-----------|
+| 앱 | `VisitPhotoUploader` — 업로드 경로 생성 | `FirebaseAuth.currentUser.uid` |
+| Storage | [`app/storage.rules`](../app/storage.rules) — 쓰기 허용 | `request.auth.uid` |
+| 서버 | `VisitPhotoUrlValidator` — `photoUrl` 출처 검증 | `AuthUser.firebaseUid` |
+
+> 셋 다 **Firebase UID** 를 쓴다. `storage.rules` 의 match 변수명이 `{userId}` 라
+> 서버 `users.id` 로 오해하기 쉬운데, 실제로 대조하는 값은 `request.auth.uid` 다.
+> (이 혼동으로 [#57](https://github.com/FogMap2026/FogApp/pull/57) 에 잘못된 수정 요청이 올라간 적이 있다)
 
 ---
 
