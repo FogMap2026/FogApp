@@ -77,13 +77,29 @@ jobs:
           flutter-version: "3.24.0"
           channel: stable
 
+      # CocoaPods 의존성 캐시 — 캐시 없으면 pod install 에만 3분 넘게 걸린다.
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: |
+            app/ios/Pods
+            ~/Library/Caches/CocoaPods
+          key: ${{ runner.os }}-pods-${{ hashFiles('app/pubspec.lock', 'app/ios/Podfile.lock') }}
+          restore-keys: ${{ runner.os }}-pods-
+
       - name: Install dependencies
         run: flutter pub get
 
-      # 서명 없이 빌드만 확인한다 — Apple Developer 계정·인증서가 필요 없다.
+      # 시뮬레이터 대상으로 빌드한다 — 서명이 아예 필요 없다.
+      #
+      # `flutter build ios --no-codesign` 은 쓰지 않는다. 그건 실기기용 패키징이라
+      # 컴파일이 끝난 뒤 마지막 단계에서 Development Team 을 요구하고, Apple Developer
+      # 계정이 없으면 실패한다(실제로 그렇게 실패했다). 시뮬레이터 빌드는 그 단계가 없어
+      # "iOS 에서 컴파일되는가" 만 확인하려는 우리 목적에 정확히 맞는다.
+      #
       # ios/ 스캐폴딩은 저장소에 커밋돼 있으므로 flutter create 로 덮지 않는다.
-      - name: Build (no codesign)
-        run: flutter build ios --no-codesign
+      - name: Build for simulator
+        run: flutter build ios --simulator
 
   server:
     name: Spring Boot Server
