@@ -234,6 +234,9 @@ cd app    && flutter test
 | `POST` `DELETE` | `/api/footprints/{id}/likes` | 좋아요 등록·취소 (1인 1회) | 2 |
 | `POST` `GET` `PATCH` `DELETE` | `/api/matches`, `/api/matches/{id}` | 동행 요청 생성·조회·상태 변경·취소 | 1·5 |
 | `GET` | `/api/matches/candidates?userId&limit` | 성향 유사도 기반 동행 후보 추천 | 3 |
+| `POST` | `/api/visits` | 방문 인증 (서버가 PostGIS로 반경 재검증, 1인 1스팟 1회) | 3 |
+| `GET` | `/api/visits` | 내 인증 목록 — 앱이 걷힌 안개 영역을 복원할 때 사용 | 3 |
+| `GET` | `/api/conquest` | 지역별 정복률 (**시/군/구 단위**) | 3 |
 
 스팟 데이터는 `SpotCollectionRunner`(관광공사 OpenAPI 수집 배치)가 `spots.content_id` 업서트로 적재합니다.
 
