@@ -56,6 +56,35 @@ jobs:
       - name: Analyze
         run: flutter analyze
 
+  # iOS 빌드 검증. 팀에 Mac 이 없어 실행 확인은 못 하지만, 최소한 "iOS 에서 컴파일조차
+  # 안 되는" 상태로 방치되는 것은 막는다. macOS 러너는 공개 저장소라 무료다.
+  #
+  # ⚠️ 빌드 성공 != 동작. Info.plist 권한 문구 누락처럼 런타임에만 터지는 문제는
+  #    여기서 못 잡는다. 실기기 확인은 Mac 을 구했을 때 별도로 해야 한다.
+  ios:
+    name: iOS Build
+    needs: changes
+    if: ${{ needs.changes.outputs.app == 'true' }}
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.24.0"
+          channel: stable
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # 서명 없이 빌드만 확인한다 — Apple Developer 계정·인증서가 필요 없다.
+      # ios/ 스캐폴딩은 저장소에 커밋돼 있으므로 flutter create 로 덮지 않는다.
+      - name: Build (no codesign)
+        run: flutter build ios --no-codesign
+
   server:
     name: Spring Boot Server
     needs: changes
