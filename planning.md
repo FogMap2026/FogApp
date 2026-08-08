@@ -56,6 +56,8 @@ Phase 4·5에서 이 API에 화면을 붙이기 전에 정리해야 합니다.
    내용 충돌이 아니라 **이력 문제**이므로 아래 [스택 PR 병합 규칙](#-스택-stacked-pr-병합-규칙--squash-금지)대로 처리해야 합니다.
 2. **Firebase 콘솔 설정 [#2](../../issues/2)** — 앱 설정 파일과 서버 서비스 계정 키가 없어 로그인(1-1)·토큰 검증(1-2)의 **실제 동작 확인**이 막혀 있습니다. 코드는 양쪽 다 병합 완료.
 3. **`dev → main` 승격 [#25](../../pull/25)** — `.github/CODEOWNERS` 충돌. 해소 PR [#44](../../pull/44)가 승인 대기 중입니다.
+   [#44](../../pull/44)를 **merge commit**으로 병합하면 `main`의 팁이 `dev`의 조상이 되어 [#25](../../pull/25)는 fast-forward가 됩니다.
+   ⚠️ 그 뒤 [#25](../../pull/25) 자체도 **반드시 merge commit**입니다 — squash하면 `main`과 `dev`가 즉시 다시 갈라져 다음 릴리스에서 같은 충돌이 납니다.
 
 ---
 
@@ -81,14 +83,17 @@ feat/map-base :  A ─ B ─ C          ← feat/ui-map-screen 이 이 커밋들
 
 ### 규칙
 
-| 상황 | 병합 방식 |
-|------|-----------|
-| 일반 PR (`feat/* → dev`) | **Squash and merge** (기존 권장 그대로) |
-| **스택 PR** (base가 다른 feature 브랜치) | ⚠️ **Create a merge commit** — squash·rebase 금지 |
-| **되돌리기 병합** (`main → dev` 등 이력 편입 목적) | ⚠️ **Create a merge commit** |
+| 상황 | 소스 브랜치가 병합 후에도 살아 있는가 | 병합 방식 |
+|------|--------------------------------------|-----------|
+| `feat/* → dev` | ❌ 병합 후 삭제 | **Squash and merge** |
+| **`dev → main`** (릴리스 승격) | ✅ `dev`는 계속 쓴다 | ⚠️ **Create a merge commit** |
+| **스택 PR** (base가 다른 feature 브랜치) | ✅ 위에 PR이 매달려 있다 | ⚠️ **Create a merge commit** |
+| **되돌리기 병합** (`main → dev` 등 이력 편입 목적) | ✅ | ⚠️ **Create a merge commit** |
 
-> 판단 기준은 간단합니다. **PR의 base가 `dev`·`main`이 아니면 merge commit을 쓰세요.**
-> 위쪽에 매달린 PR이 하나라도 있으면 squash가 그 전부를 깨뜨립니다.
+> 판단 기준은 하나입니다. **squash는 소스 브랜치를 버릴 때만.**
+> 병합 후에도 그 브랜치를 계속 쓴다면 squash가 조상 관계를 끊고 다음 병합에서 반드시 충돌합니다.
+> base가 무엇이냐가 아니라 **소스 브랜치의 수명**으로 판단하세요.
+> 특히 `dev → main`은 `dev`가 장수 브랜치라, squash하면 **매 릴리스마다** 같은 충돌이 반복됩니다.
 
 ### 이미 깨졌다면
 
