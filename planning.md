@@ -260,7 +260,7 @@ dev ← #35 feat/ui-map-screen ← #40 feat/map-spot-load
 | # | 작업 | 영역 | 담당 | 이슈 | 브랜치 예시 |
 |---|------|------|------|------|-------------|
 | 3-1 | 스팟 반경 **geofencing**(근접 감지) | 🟨 MAP | 김시진 | [#45](../../issues/45) | `feat/map-geofence` |
-| 3-2 | 근접 시 근접 알림(로컬/푸시) | 🟨 MAP / 🟧 INF | 김시진·송건희 | [#46](../../issues/46) | `feat/map-proximity-alert` |
+| 3-2 | 근접 시 **인앱 알림**(포그라운드) | 🟨 MAP | 김시진 | [#46](../../issues/46) | `feat/map-proximity-alert` |
 | 3-3 | 현장 사진 촬영 → **방문 인증** UI | 🟩 UI | 송진오 | [#47](../../issues/47) | `feat/ui-visit-verify` |
 | 3-4 | 인증 사진 업로드 파이프라인(Storage) + 인증 API | 🟧 INF / 🟦 API | 송건희·박근호 | [#48](../../issues/48) | `feat/api-visit`, `feat/infra-photo-upload` |
 | 3-5 | 인증 성공 시 해당 반경 **안개 걷힘** 애니메이션 | 🟨 MAP | 김시진 | [#49](../../issues/49) | `feat/map-fog-clear` |
@@ -289,11 +289,17 @@ dev ← #35 feat/ui-map-screen ← #40 feat/map-spot-load
 2. **[#45](../../issues/45) 근접 감지** — 3-2·3-3의 입력. Phase 2 PR([#40](../../pull/40)) 병합 후 착수.
 3. 나머지는 위 두 개가 열리는 대로.
 
-**착수 전 팀이 정해야 할 것 3가지** (각 이슈 본문에 상세히 적어뒀습니다)
+**팀 결정 사항**
 
-- **인증 반경** — 3-1과 3-4의 서버 검증이 **같은 값**을 써야 합니다 (제안: 100m)
-- **정복률 지역 단위** — `area_code`(시/도) vs `sigungu_code`(시/군/구). 게임 밸런스 결정입니다
-- **3-2 알림 범위** — 백그라운드 위치 추적은 배터리·스토어 심사 부담이 큽니다. 1차는 포그라운드+로컬 알림으로 좁히는 것을 제안합니다
+- ✅ **인증 반경 = 100m** — 앱 `SpotGeofenceController.enterRadiusMeters` 와 서버 `visit.radius-meters` 가 같은 값입니다.
+  ⚠️ 한쪽만 바꾸면 "화면엔 인증 가능인데 서버가 거부"하는 버그가 됩니다. **반드시 양쪽을 함께** 바꾸세요.
+  (서버는 `VISIT_RADIUS_METERS` 환경 변수로도 덮이므로 배포 환경 변경 시 특히 주의)
+- ✅ **정복률 지역 단위 = 시/군/구** — 시/도는 분모가 너무 커서 정복률이 거의 오르지 않습니다.
+  시/군/구여야 "경주 15%" 같은 즉각적인 성취감이 나옵니다. `GET /api/conquest` 가 이 단위로 집계합니다.
+- ✅ **3-2 알림 범위 = 포그라운드 인앱 알림만** — 백그라운드 로컬 알림·FCM 푸시는 **Phase 6(6-4)으로 이관**했습니다.
+  백그라운드 위치는 iOS `location always` 심사·Android 백그라운드 위치 선언(시연 영상 + 수 주 심사)·상시 포그라운드 서비스 알림·배터리 소모가 한꺼번에 붙는데,
+  그 비용이 **Phase 6의 6-1(캐릭터 실시간 위치)·6-4(FCM)와 그대로 중복**됩니다. 위치 소스는 그때 한 번만 만드는 게 맞습니다.
+  `SpotGeofenceController`는 위치 소스와 분리돼 있어 판정 로직은 그대로 재사용되므로, 나중에 백그라운드로 확장하는 길이 막히지 않습니다.
 
 > ⚠️ **선행 블로커**: 3-1·3-3·3-5·3-6은 Phase 2 지도 코드가 `dev`에 있어야 합니다 → [#35](../../pull/35)·[#40](../../pull/40) 병합 필요.
 > [#48](../../issues/48)의 Storage 부분은 [#2](../../issues/2) Firebase 콘솔 설정이 선행입니다.
@@ -351,6 +357,17 @@ dev ← #35 feat/ui-map-screen ← #40 feat/map-spot-load
 | 6-2 | 30분 단위 주변 스팟 데이터 갱신(위치기반 OpenAPI) | 🟦 API / 🟪 SOC | ⬜ | `feat/social-live-refresh` |
 | 6-3 | 실시간 위치 동기화(Firestore) | 🟪 SOC | ⬜ | `feat/social-live-sync` |
 | 6-4 | 푸시 알림 통합(FCM) — 근접·조우 이벤트 | 🟧 INF | ⬜ | `feat/infra-fcm` |
+| 6-5 | **백그라운드 위치 소스 + 로컬 알림** (3-2에서 이관) | 🟨 MAP / 🟧 INF | ⬜ | `feat/map-background-location` |
+
+> 📌 **6-5는 Phase 3의 3-2에서 넘어온 항목입니다.** 앱이 꺼져 있어도 근접 알림을 받으려면
+> 위치 소스를 `MapScreen` 생명주기에서 떼어내야 하는데, 그 작업이 6-1(캐릭터 실시간 위치)과 동일합니다.
+> **6-1·6-4·6-5는 한 묶음으로 설계하세요** — 따로 하면 위치 소스를 두 번 만들게 됩니다.
+>
+> 착수 전 확인할 것:
+> - iOS `location always` 권한 + App Store 심사 사유 소명
+> - Android `ACCESS_BACKGROUND_LOCATION` + Play Console 선언(시연 영상, 심사 수 주)
+> - 포그라운드 서비스 상시 알림이 UX에 주는 영향
+> - `flutter_local_notifications` 의존성 추가
 
 **완료 기준(DoD)**: 지도에서 캐릭터로 표현된 사용자의 위치가 주기적으로 갱신·공유된다.
 

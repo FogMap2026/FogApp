@@ -14,7 +14,7 @@
 - 지역별 정복률(예: `경주 15%`)을 실시간 수치로 피드백하여 즉각적인 성취감 제공
 
 ### 2. 위치 기반 인증 & 알림
-- 스팟 반경 접근 시 실시간 위치 정보 기반 근접 알림(푸시) 전송
+- 스팟 반경 접근 시 실시간 위치 기반 근접 알림 — 앱 사용 중 인앱 알림(Phase 3), 백그라운드 푸시(Phase 6)
 - 현장에서 사진 촬영으로 방문 인증 → 상세 정보 및 리스트 해금
 
 ### 3. 여행 성향 매칭 (Partner Matching)
@@ -237,6 +237,9 @@ cd app    && flutter test
 | `POST` `DELETE` | `/api/footprints/{id}/likes` | 좋아요 등록·취소 (1인 1회) | 2 |
 | `POST` `GET` `PATCH` `DELETE` | `/api/matches`, `/api/matches/{id}` | 동행 요청 생성·조회·상태 변경·취소 | 1·5 |
 | `GET` | `/api/matches/candidates?userId&limit` | 성향 유사도 기반 동행 후보 추천 | 3 |
+| `POST` | `/api/visits` | 방문 인증 (서버가 PostGIS로 반경 재검증, 1인 1스팟 1회) | 3 |
+| `GET` | `/api/visits` | 내 인증 목록 — 앱이 걷힌 안개 영역을 복원할 때 사용 | 3 |
+| `GET` | `/api/conquest` | 지역별 정복률 (**시/군/구 단위**) | 3 |
 
 스팟 데이터는 `SpotCollectionRunner`(관광공사 OpenAPI 수집 배치)가 `spots.content_id` 업서트로 적재합니다.
 
