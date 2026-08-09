@@ -38,6 +38,7 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
+          flutter-version: "3.44.9"
           channel: stable
 
       # 플랫폼 폴더 생성 (lib/ 는 유지)
@@ -83,6 +84,7 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
+          flutter-version: "3.44.9"
           channel: stable
 
       - name: Install dependencies
@@ -122,6 +124,7 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
+          flutter-version: "3.44.9"
           channel: stable
 
       # CocoaPods 의존성 캐시 — 캐시 없으면 pod install 에만 3분 넘게 걸린다.

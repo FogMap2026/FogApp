@@ -36,10 +36,13 @@
 ## 🛠️ 기술 스택
 
 > 아래는 **실제로 채택·적용된 스택**입니다. 버전은 [app/pubspec.yaml](app/pubspec.yaml)·[server/build.gradle](server/build.gradle)이 정본입니다.
+>
+> ⚠️ **Flutter는 3.44.9로 맞춰주세요.** `app/android`(Gradle 9.1 · AGP 9.0)와 `app/ios`(implicit engine API) 스캐폴딩이
+> 이 버전 기준이라, 더 낮은 버전에서는 **네이티브 빌드가 아예 되지 않습니다.** CI도 같은 버전으로 고정돼 있습니다.
 
 | 영역 | 기술 | 버전 | 선택 이유 |
 |------|------|------|-----------|
-| **모바일 앱** | Flutter (Dart) + Riverpod | Flutter 3.24 / Dart ≥3.4 | iOS/Android 단일 코드베이스, 지도·카메라·위치 플러그인 성숙 |
+| **모바일 앱** | Flutter (Dart) + Riverpod | **Flutter 3.44.9** / Dart ≥3.4 | iOS/Android 단일 코드베이스, 지도·카메라·위치 플러그인 성숙 |
 | **지도 SDK** | Naver Maps SDK (`flutter_naver_map`) | 1.3.x | 국내 지도 정확도, 커스텀 안개 오버레이 구현 용이 |
 | **백엔드** | Spring Boot (Java) | 3.3.2 / Java 17 | REST API, 관광공사 OpenAPI 연동, 안정적 서버 |
 | **데이터베이스** | PostgreSQL + **PostGIS** | PostGIS 3.4 (`postgis/postgis:16-3.4`) | 지리공간 쿼리·geofencing·GPS 궤적→Polygon 변환의 핵심 |
