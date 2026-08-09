@@ -15,6 +15,7 @@ import '../services/spot_geofence_controller.dart';
 import '../services/spot_marker_controller.dart';
 import '../services/spot_service.dart';
 import 'social/personality_test_screen.dart';
+import 'visit_verify_screen.dart';
 
 /// 대한민국 전역을 보여주는 기본 카메라 위치(안개 지도의 시작 화면).
 const _southKoreaCenter = NLatLng(36.5, 127.8);
@@ -49,6 +50,11 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   LocationPermission? _permission;
   String? _regionName;
   bool _regionLookupFailed = false;
+
+  /// 반경 안에 들어와 인증 가능한 스팟(#45 진입 이벤트로 채워짐, #47 진입점).
+  Spot? _nearbySpot;
+  double? _myLat;
+  double? _myLng;
 
   @override
   void initState() {
@@ -114,20 +120,44 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     _geofencePositionSubscription = Geolocator.getPositionStream(
       locationSettings: FogLocationTracker.locationSettings,
     ).listen((position) {
+      _myLat = position.latitude;
+      _myLng = position.longitude;
       _geofence?.updatePosition(lat: position.latitude, lng: position.longitude);
     });
   }
 
   void _onGeofenceEnter(GeofenceEnterEvent event) {
-    // TODO(#46): 인앱 배너/로컬 알림으로 교체. 지금은 판정이 올바르게 동작하는지
-    // 확인할 수 있도록 로그로만 노출한다 — 알림 UI는 #46의 범위다.
+    // TODO(#46): 근접 알림(로컬/푸시)으로 보강. 지금은 이 화면에 인증 버튼을 띄우는
+    // 것으로 진입점(#47)을 연결하고, 로그도 함께 남긴다.
     debugPrint(
       '[Geofence] 진입: ${event.spot.title} (${event.distanceMeters.toStringAsFixed(0)}m)',
     );
+    if (mounted) setState(() => _nearbySpot = event.spot);
   }
 
   void _onGeofenceExit(Spot spot) {
     debugPrint('[Geofence] 이탈: ${spot.title}');
+    if (mounted && _nearbySpot?.id == spot.id) {
+      setState(() => _nearbySpot = null);
+    }
+  }
+
+  Future<void> _openVisitVerify() async {
+    final spot = _nearbySpot;
+    final lat = _myLat;
+    final lng = _myLng;
+    if (spot == null || lat == null || lng == null) return;
+
+    final verified = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => VisitVerifyScreen(spot: spot, currentLat: lat, currentLng: lng),
+      ),
+    );
+    // 인증 성공(또는 이미 반경을 벗어난 경우)이면 배너를 내린다. 실패/취소 시에는
+    // 반경 안에 계속 있는 한 다시 시도할 수 있도록 배너를 유지한다.
+    if (verified == true && mounted && _nearbySpot?.id == spot.id) {
+      setState(() => _nearbySpot = null);
+    }
   }
 
   void _onMapReady(NaverMapController controller) async {
@@ -249,6 +279,16 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
               ),
             ),
           ),
+          if (_nearbySpot != null)
+            SafeArea(
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: _NearbySpotBanner(spot: _nearbySpot!, onVerify: _openVisitVerify),
+                ),
+              ),
+            ),
           SafeArea(
             child: Align(
               alignment: Alignment.bottomLeft,
@@ -363,6 +403,44 @@ class _LocationBanner extends StatelessWidget {
               onPressed: issue.onAction,
               child: Text(issue.actionLabel),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 인증 가능 반경 안에 들어왔을 때 뜨는 배너(#45 진입 이벤트 → #47 인증 화면 진입점).
+class _NearbySpotBanner extends StatelessWidget {
+  const _NearbySpotBanner({required this.spot, required this.onVerify});
+
+  final Spot spot;
+  final VoidCallback onVerify;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: theme.colorScheme.primaryContainer,
+      elevation: 3,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.camera_alt_outlined, color: theme.colorScheme.onPrimaryContainer),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                '${spot.title} 반경 안이에요',
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodyMedium
+                    ?.copyWith(color: theme.colorScheme.onPrimaryContainer),
+              ),
+            ),
+            const SizedBox(width: 12),
+            FilledButton(onPressed: onVerify, child: const Text('인증하기')),
           ],
         ),
       ),
