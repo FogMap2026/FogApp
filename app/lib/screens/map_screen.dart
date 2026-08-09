@@ -295,7 +295,7 @@ class _TopInfoBar extends StatelessWidget {
     final label = regionName ?? (regionLookupFailed ? '지역 정보를 가져올 수 없어요' : '지역 확인 중…');
 
     return Material(
-      color: theme.colorScheme.surface.withOpacity(0.92),
+      color: theme.colorScheme.surface.withValues(alpha: 0.92),
       elevation: 2,
       borderRadius: BorderRadius.circular(12),
       child: Padding(
@@ -374,22 +374,31 @@ class _LocationBanner extends StatelessWidget {
 class _ZoomControls extends StatelessWidget {
   const _ZoomControls({required this.onZoomIn, required this.onZoomOut});
 
+  /// IconButton 기본 크기와 맞춘 컨트롤 폭.
+  static const double _buttonSize = 48;
+
   final VoidCallback onZoomIn;
   final VoidCallback onZoomOut;
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Theme.of(context).colorScheme.surface.withOpacity(0.92),
+      color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.92),
       elevation: 2,
       borderRadius: BorderRadius.circular(12),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(onPressed: onZoomIn, icon: const Icon(Icons.add)),
-          const Divider(height: 1),
-          IconButton(onPressed: onZoomOut, icon: const Icon(Icons.remove)),
-        ],
+      // 폭을 명시적으로 고정한다. Column 의 mainAxisSize.min 은 세로만 최소화하고,
+      // 가로 폭은 가장 넓은 자식이 정하는데 Divider 는 주어진 폭을 꽉 채우려 한다.
+      // 그대로 두면 컨트롤이 화면 전체 폭으로 늘어나 좌하단 버튼을 덮어버린다.
+      child: SizedBox(
+        width: _buttonSize,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(onPressed: onZoomIn, icon: const Icon(Icons.add)),
+            const Divider(height: 1),
+            IconButton(onPressed: onZoomOut, icon: const Icon(Icons.remove)),
+          ],
+        ),
       ),
     );
   }
