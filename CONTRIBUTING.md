@@ -231,8 +231,8 @@ Closes #12
 | `feat/* → dev` | **리뷰어 1명 이상 Approve** 후 병합 |
 | `dev → main` | **dev에서 통합 테스트 통과** + 리뷰어 승인 후 병합 |
 
-- 병합 방식은 **Squash and merge** 권장 (커밋 히스토리가 깔끔해집니다).
-  단 **아래 "스택 PR" 예외**를 반드시 확인하세요.
+- `feat/* → dev` 는 **Squash and merge** 권장 (커밋 히스토리가 깔끔해집니다).
+- ⚠️ 단 `dev → main` 과 **아래 "스택 PR" 은 예외**로 반드시 merge commit 을 씁니다.
 - 병합 후 작업 브랜치는 **삭제**합니다 (GitHub에서 "Delete branch" 버튼).
 
 ### ⚠️ 스택(Stacked) PR 병합 — squash 금지
@@ -260,14 +260,33 @@ feat/map-base :  A ─ B ─ C        ← feat/ui-map-screen 이 이 커밋들 �
 
 #### 규칙
 
-| 상황 | 병합 방식 |
-|------|-----------|
-| 일반 PR (base가 `dev` / `main`) | **Squash and merge** |
-| **스택 PR** (base가 다른 feature 브랜치) | 🚨 **Create a merge commit** |
-| **이력 편입 목적 병합** (`main → dev` 등) | 🚨 **Create a merge commit** |
+| 상황 | 소스 브랜치가 병합 후에도 살아 있는가 | 병합 방식 |
+|------|--------------------------------------|-----------|
+| `feat/* → dev` | ❌ 병합 후 삭제 | **Squash and merge** |
+| **`dev → main`** (릴리스 승격) | ✅ `dev` 는 계속 쓴다 | 🚨 **Create a merge commit** |
+| **스택 PR** (base가 다른 feature 브랜치) | ✅ 위에 PR이 매달려 있다 | 🚨 **Create a merge commit** |
+| **이력 편입 목적 병합** (`main → dev` 등) | ✅ | 🚨 **Create a merge commit** |
 
-> 판단 기준: **base가 `dev`·`main`이 아니면 merge commit.**
-> 위에 매달린 PR이 하나라도 있으면 squash가 그 전부를 깨뜨립니다.
+> ### 판단 기준: **squash 는 소스 브랜치를 버릴 때만.**
+>
+> 병합 후에도 그 브랜치를 계속 쓴다면 squash 가 조상 관계를 끊고, **다음 병합에서 반드시 충돌**합니다.
+> base 가 무엇이냐가 아니라 **소스 브랜치의 수명**으로 판단하세요.
+
+#### 왜 `dev → main` 이 특히 위험한가
+
+`dev` 는 릴리스 후에도 계속 살아 있는 장수 브랜치라, 여기서 squash 하면 **매 릴리스마다** 같은 충돌이 반복됩니다.
+
+```
+squash 병합 시:
+  main :  ... ← [dev 24커밋을 압축한 새 커밋]
+  dev  :  ... 원본 24커밋 그대로 살아 있음
+
+  → main 의 그 커밋은 dev 에 없고, dev 의 24커밋은 main 에 없다
+  → 다음 릴리스에서 이미 올린 커밋이 "새 변경"으로 다시 나타난다
+  → 양쪽이 건드린 파일마다 충돌
+```
+
+`feat/*` 는 병합 후 삭제하니 이 문제가 없습니다. 차이는 **브랜치를 계속 쓰느냐** 하나뿐입니다.
 
 #### 이미 충돌이 났다면
 

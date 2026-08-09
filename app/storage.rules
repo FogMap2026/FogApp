@@ -1,0 +1,37 @@
+rules_version = '2';
+
+// FogApp 인증 사진 Storage 규칙 (#48)
+//
+// 경로 규칙: visits/{firebaseUid}/{spotId}/{fileName}
+//   - 첫 세그먼트는 서버 users.id 가 아니라 **Firebase UID** 다.
+//     Storage 는 서버 DB를 모르므로 request.auth.uid 로만 소유권을 판정할 수 있다.
+//   - 아래 match 문의 변수명이 {userId} 지만 실제로 대조하는 값은 request.auth.uid 다.
+//   - 서버(#54 POST /api/visits)는 사진 바이너리를 받지 않고 photoUrl 만 저장한다.
+//     즉 "누가 올렸는가"의 1차 방어선이 이 규칙이다.
+//
+// 서버 반경 검증(#54)이 위치 위조를 막고, 이 규칙이 남의 경로에 쓰는 것을 막는다.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // 인증 사진: 본인 경로에만 쓰기, 로그인한 사용자는 읽기 가능
+    match /visits/{userId}/{spotId}/{fileName} {
+
+      // 발자취·정복 기록은 다른 탐험가도 보는 컨텐츠라 로그인 사용자면 읽기 허용.
+      allow read: if request.auth != null;
+
+      // 쓰기는 본인 경로 + 이미지 + 5MB 이하만.
+      // 덮어쓰기/삭제는 막는다 — 인증 사진은 기록이라 사후 변조되면 안 된다.
+      allow create: if request.auth != null
+                    && request.auth.uid == userId
+                    && request.resource.size < 5 * 1024 * 1024
+                    && request.resource.contentType.matches('image/(jpeg|png|webp)');
+
+      allow update, delete: if false;
+    }
+
+    // 위에서 명시적으로 허용한 경로 외에는 모두 차단(fail-closed).
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

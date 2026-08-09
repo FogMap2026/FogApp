@@ -21,4 +21,13 @@ public class VisitProperties {
 
     /** 인증 가능 반경(m). 팀 합의 전 잠정값 — 확정 시 앱(#45)과 함께 변경할 것. */
     private double radiusMeters = 100;
+
+    /**
+     * 인증 사진이 저장되는 Firebase Storage 버킷 (예: {@code fogmap-9355b.firebasestorage.app}).
+     *
+     * <p>비어 있으면 photoUrl 출처 검증을 건너뛴다(로컬·CI). 단
+     * {@code firebase.enabled=true} 인 환경에서는 반드시 설정해야 하며,
+     * 없으면 {@link VisitPhotoUrlValidator} 가 기동을 중단시킨다.</p>
+     */
+    private String storageBucket = "";
 }

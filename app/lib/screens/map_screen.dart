@@ -6,10 +6,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../models/spot.dart';
 import '../services/fog_location_tracker.dart';
 import '../services/fog_overlay_controller.dart';
 import '../services/location_permission_gate.dart';
 import '../services/region_lookup_service.dart';
+import '../services/spot_geofence_controller.dart';
 import '../services/spot_marker_controller.dart';
 import '../services/spot_service.dart';
 import 'social/personality_test_screen.dart';
@@ -37,6 +39,10 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   StreamSubscription<OnCameraChangedParams>? _cameraSubscription;
   FogOverlayController? _fogOverlay;
   SpotMarkerController? _spotMarkers;
+  SpotGeofenceController? _geofence;
+  StreamSubscription<Position>? _geofencePositionSubscription;
+  StreamSubscription<GeofenceEnterEvent>? _geofenceEnterSubscription;
+  StreamSubscription<Spot>? _geofenceExitSubscription;
 
   bool _mapReady = false;
   bool? _locationServiceEnabled;
@@ -56,23 +62,31 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _cameraSubscription?.cancel();
+    _geofencePositionSubscription?.cancel();
+    _geofenceEnterSubscription?.cancel();
+    _geofenceExitSubscription?.cancel();
     _fogOverlay?.dispose();
     _spotMarkers?.dispose();
+    _geofence?.dispose();
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // 백그라운드 진입 시 위치 추적을 끄고, 포그라운드 복귀 시 다시 켠다.
+    // geofencing(#45)도 같은 정책을 따른다 — 백그라운드 감지는 #46에서 별도로 다룬다.
     final controller = _controller;
     if (controller == null) return;
     if (state == AppLifecycleState.resumed) {
       if (_permission == LocationPermission.always ||
           _permission == LocationPermission.whileInUse) {
         controller.setLocationTrackingMode(NLocationTrackingMode.follow);
+        _startGeofenceTracking();
       }
     } else if (state == AppLifecycleState.paused) {
       controller.setLocationTrackingMode(NLocationTrackingMode.none);
+      _geofencePositionSubscription?.cancel();
+      _geofencePositionSubscription = null;
     }
   }
 
@@ -90,13 +104,44 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     }
 
     _controller?.setLocationTrackingMode(NLocationTrackingMode.follow);
+    _startGeofenceTracking();
+  }
+
+  /// 실시간 위치 스트림을 구독해 [_geofence]에 반영한다(#45). [FogLocationTracker]와
+  /// 같은 [LocationSettings]를 재사용해 서로 다른 배터리 절충안이 섞이지 않게 한다.
+  void _startGeofenceTracking() {
+    if (_geofencePositionSubscription != null) return;
+    _geofencePositionSubscription = Geolocator.getPositionStream(
+      locationSettings: FogLocationTracker.locationSettings,
+    ).listen((position) {
+      _geofence?.updatePosition(lat: position.latitude, lng: position.longitude);
+    });
+  }
+
+  void _onGeofenceEnter(GeofenceEnterEvent event) {
+    // TODO(#46): 인앱 배너/로컬 알림으로 교체. 지금은 판정이 올바르게 동작하는지
+    // 확인할 수 있도록 로그로만 노출한다 — 알림 UI는 #46의 범위다.
+    debugPrint(
+      '[Geofence] 진입: ${event.spot.title} (${event.distanceMeters.toStringAsFixed(0)}m)',
+    );
+  }
+
+  void _onGeofenceExit(Spot spot) {
+    debugPrint('[Geofence] 이탈: ${spot.title}');
   }
 
   void _onMapReady(NaverMapController controller) async {
     _controller = controller;
     controller.setMyLocationTracker(FogLocationTracker());
     _fogOverlay = await FogOverlayController.attach(controller);
-    _spotMarkers = SpotMarkerController(controller, ref.read(spotServiceProvider));
+    _geofence = SpotGeofenceController();
+    _geofenceEnterSubscription = _geofence!.onEnter.listen(_onGeofenceEnter);
+    _geofenceExitSubscription = _geofence!.onExit.listen(_onGeofenceExit);
+    _spotMarkers = SpotMarkerController(
+      controller,
+      ref.read(spotServiceProvider),
+      onSpotsLoaded: (spots) => _geofence?.updateCandidates(spots),
+    );
     _cameraSubscription = controller.nowCameraPositionStream.listen(_onCameraChanged);
     if (mounted) setState(() => _mapReady = true);
     final initialTarget = controller.nowCameraPosition.target;

@@ -35,7 +35,8 @@ public class VisitController {
     public ResponseEntity<VisitResponse> verify(@AuthenticationPrincipal AuthUser me,
                                                 @Valid @RequestBody VisitCreateRequest request) {
         Visit visit = visitService.verify(
-                me.userId(), request.spotId(), request.photoUrl(), request.lat(), request.lng());
+                me.userId(), me.firebaseUid(), request.spotId(),
+                request.photoUrl(), request.lat(), request.lng());
         return ResponseEntity.status(HttpStatus.CREATED).body(VisitResponse.from(visit));
     }
 
