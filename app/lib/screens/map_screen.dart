@@ -6,7 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../models/conquest.dart';
 import '../models/spot.dart';
+import '../services/conquest_service.dart';
 import '../services/fog_location_tracker.dart';
 import '../services/fog_overlay_controller.dart';
 import '../services/location_permission_gate.dart';
@@ -55,6 +57,11 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   Spot? _nearbySpot;
   double? _myLat;
   double? _myLng;
+
+  /// 정복률(#51) 조회 결과 전체. 표시할 지역만 골라 쓴다.
+  List<ConquestRegion> _conquest = const [];
+  /// 카메라 중심에서 가장 가까운(=현재 보고 있는) 스팟. 정복률 표시 지역을 고르는 데 쓴다.
+  Spot? _nearestLoadedSpot;
 
   @override
   void initState() {
@@ -155,8 +162,12 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     );
     // 인증 성공(또는 이미 반경을 벗어난 경우)이면 배너를 내린다. 실패/취소 시에는
     // 반경 안에 계속 있는 한 다시 시도할 수 있도록 배너를 유지한다.
-    if (verified == true && mounted && _nearbySpot?.id == spot.id) {
-      setState(() => _nearbySpot = null);
+    if (verified == true) {
+      if (mounted && _nearbySpot?.id == spot.id) {
+        setState(() => _nearbySpot = null);
+      }
+      // 방금 인증한 스팟만큼 정복률이 올랐을 것이므로 다시 불러온다.
+      unawaited(_refreshConquest());
     }
   }
 
@@ -170,14 +181,41 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     _spotMarkers = SpotMarkerController(
       controller,
       ref.read(spotServiceProvider),
-      onSpotsLoaded: (spots) => _geofence?.updateCandidates(spots),
+      onSpotsLoaded: (spots) {
+        _geofence?.updateCandidates(spots);
+        // fetchNearby는 가까운 순으로 내려주므로 첫 번째가 현재 보고 있는 지역의 대표 스팟이다.
+        if (mounted) setState(() => _nearestLoadedSpot = spots.isEmpty ? null : spots.first);
+      },
     );
     _cameraSubscription = controller.nowCameraPositionStream.listen(_onCameraChanged);
     if (mounted) setState(() => _mapReady = true);
     final initialTarget = controller.nowCameraPosition.target;
     unawaited(_lookupRegion(initialTarget));
     unawaited(_spotMarkers?.loadAround(initialTarget));
+    unawaited(_refreshConquest());
     await _requestLocationPermission();
+  }
+
+  /// 정복률(#51) 목록을 새로 불러온다. 지도 진입 시, 그리고 방문 인증(#47) 성공 직후 호출한다.
+  Future<void> _refreshConquest() async {
+    try {
+      final regions = await ref.read(conquestServiceProvider).myConquest();
+      if (mounted) setState(() => _conquest = regions);
+    } catch (_) {
+      // 정복률은 보조 정보라 실패해도 지도 사용을 막지 않는다 — 플레이스홀더로 남겨둔다.
+    }
+  }
+
+  /// 현재 보고 있는 지역의 정복률. 대표 스팟의 areaCode/sigunguCode로 [_conquest]에서 찾는다.
+  ConquestRegion? get _currentConquest {
+    final spot = _nearestLoadedSpot;
+    final areaCode = spot?.areaCode;
+    if (areaCode == null) return null;
+    final code = regionCodeFor(areaCode: areaCode, sigunguCode: spot?.sigunguCode);
+    for (final region in _conquest) {
+      if (region.regionCode == code) return region;
+    }
+    return null;
   }
 
   void _onCameraChanged(OnCameraChangedParams params) {
@@ -269,6 +307,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                   _TopInfoBar(
                     regionName: _regionName,
                     regionLookupFailed: _regionLookupFailed,
+                    conquestRate: _currentConquest?.rate,
                   ),
                   if (locationIssue != null)
                     Padding(
@@ -322,17 +361,26 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   }
 }
 
-/// 지도 상단 정보 바. 현재 지역(시/도)과, 향후(3-7) 정복률이 채워질 자리를 미리 확보한다.
+/// 지도 상단 정보 바. 현재 지역(시/도)과 정복률(#51)을 보여준다.
 class _TopInfoBar extends StatelessWidget {
-  const _TopInfoBar({required this.regionName, required this.regionLookupFailed});
+  const _TopInfoBar({
+    required this.regionName,
+    required this.regionLookupFailed,
+    required this.conquestRate,
+  });
 
   final String? regionName;
   final bool regionLookupFailed;
+
+  /// 0.0~1.0. 아직 못 구했으면(스팟 미로드·API 실패 등) null — 플레이스홀더로 표시한다.
+  final double? conquestRate;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final label = regionName ?? (regionLookupFailed ? '지역 정보를 가져올 수 없어요' : '지역 확인 중…');
+    final rate = conquestRate;
+    final rateLabel = rate == null ? '정복률 --%' : '정복률 ${(rate * 100).round()}%';
 
     return Material(
       color: theme.colorScheme.surface.withOpacity(0.92),
@@ -351,9 +399,8 @@ class _TopInfoBar extends StatelessWidget {
                 style: theme.textTheme.bodyMedium,
               ),
             ),
-            // 정복률(Phase 3-7)이 구현되기 전까지의 자리 확보용 플레이스홀더.
             Chip(
-              label: const Text('정복률 --%'),
+              label: Text(rateLabel),
               visualDensity: VisualDensity.compact,
               backgroundColor: theme.colorScheme.secondaryContainer,
             ),
