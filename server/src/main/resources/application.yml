@@ -21,6 +21,12 @@ spring:
     enabled: true
     locations: classpath:db/migration
     baseline-on-migrate: true
+  servlet:
+    multipart:
+      # 인증 사진 업로드(#48). visit.max-photo-bytes 와 함께 움직여야 한다 —
+      # 여기가 더 작으면 서비스 검증에 닿기 전에 컨테이너가 먼저 잘라낸다.
+      max-file-size: ${VISIT_MAX_PHOTO_BYTES:5242880}
+      max-request-size: ${VISIT_MAX_REQUEST_SIZE:6291456}
 
 # 한국관광공사 TourAPI (스팟 수집 #5). 서비스 키는 환경 변수로 주입(.env 참고).
 tour:
@@ -41,10 +47,12 @@ tour:
 #    어긋나면 "화면엔 인증 가능인데 서버가 거부"하는 버그가 된다. 변경 시 앱 상수도 함께 변경할 것.
 visit:
   radius-meters: ${VISIT_RADIUS_METERS:100}
-  # 인증 사진이 저장되는 Storage 버킷. photoUrl 이 본인 업로드 경로인지 검증하는 데 쓴다(#56 짝).
-  # 비어 있으면 검증을 건너뛴다(로컬·CI). firebase.enabled=true 면 반드시 설정해야 하며,
-  # 없으면 기동이 중단된다 — 검증이 꺼진 채로 뜨는 것을 막기 위함.
-  storage-bucket: ${VISIT_STORAGE_BUCKET:}
+  # 인증 사진 저장 위치. Firebase Storage 는 무료(Spark) 요금제에서 버킷 생성이 막혀
+  # 사진만 서버가 직접 보관한다(팀 결정 B안 — 로그인·푸시는 Firebase 그대로).
+  # ⚠️ 배포 시 이 경로를 영속 볼륨에 마운트할 것. 재시작으로 사라지면 인증 사진이 유실된다.
+  photo-storage-path: ${VISIT_PHOTO_STORAGE_PATH:./data/visit-photos}
+  # 사진 1장당 허용 최대 바이트(기본 5MB). 아래 multipart 제한과 함께 움직여야 한다.
+  max-photo-bytes: ${VISIT_MAX_PHOTO_BYTES:5242880}
 
 # Firebase (ID 토큰 검증) — 기본 비활성. 실제 배포/연동 시 FIREBASE_ENABLED=true 로 켠다.
 # 자격증명은 서비스 계정 JSON 경로(FIREBASE_SERVICE_ACCOUNT_PATH) 또는 GOOGLE_APPLICATION_CREDENTIALS 사용.
