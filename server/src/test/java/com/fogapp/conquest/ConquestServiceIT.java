@@ -58,6 +58,15 @@ class ConquestServiceIT {
         return userRepository.save(new User("conquest-uid-" + n, "c" + n + "@test.io", "탐험가" + n, null));
     }
 
+    /**
+     * 업로드 응답이 돌려주는 형태의 photoUrl(#48). 사진을 서버가 보관하므로,
+     * 인증 단계는 본인 경로를 가리키는 URL만 받는다.
+     */
+    private static String photoUrl(User user, Long spotId) {
+        return "/api/visits/photos/" + user.getFirebaseUid() + "/" + spotId
+                + "/1712345678901-0a1b2c3d4e5f6071.jpg";
+    }
+
     private Spot newSpot(String areaCode, String sigunguCode, String addr1) {
         int n = SEQ.incrementAndGet();
         return spotRepository.save(new Spot(
@@ -80,7 +89,7 @@ class ConquestServiceIT {
         newSpot(area, "2", "경상북도 안동시 축제장길 240");
 
         visitService.verify(user.getId(), user.getFirebaseUid(), gyeongju1.getId(),
-                "https://storage/a.jpg", LAT, LNG);
+                photoUrl(user, gyeongju1.getId()), LAT, LNG);
 
         List<ConquestResponse> all = conquestService.myConquest(user.getId());
 
@@ -117,7 +126,7 @@ class ConquestServiceIT {
         Spot spot = newSpot(area, "3", "강원도 강릉시 경강로 2024");
 
         visitService.verify(other.getId(), other.getFirebaseUid(), spot.getId(),
-                "https://storage/b.jpg", LAT, LNG);
+                photoUrl(other, spot.getId()), LAT, LNG);
 
         assertThat(regionOf(conquestService.myConquest(me.getId()), area + "-3").visitedSpots()).isZero();
         assertThat(regionOf(conquestService.myConquest(other.getId()), area + "-3").visitedSpots()).isEqualTo(1);
