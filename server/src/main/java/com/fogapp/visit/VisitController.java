@@ -54,13 +54,23 @@ public class VisitController {
     }
 
     /**
-     * 인증 사진 조회. 발자취·정복 기록은 다른 탐험가도 보므로 로그인 사용자면 열람할 수 있다
-     * (쓰기는 본인만 — {@link VisitPhotoStorage} 참고).
+     * 인증 사진 조회 — <b>본인 것만</b> 볼 수 있다.
+     *
+     * <p>인증 사진은 사용자가 공개용으로 고른 사진이 아니라 현장에서 즉석으로 찍는 것이라
+     * 얼굴·사적인 장소가 담길 가능성이 높다. 이슈 #48도 "내 인증 목록"만 요구하고,
+     * 발자취({@code footprints})와 이 사진은 코드상 연결돼 있지도 않다. 그래서
+     * <b>안전한 기본값(본인만)</b>에서 시작한다 — 공개 범위를 넓힐 일이 생기면
+     * 그때 팀이 명시적으로 결정한다. (#68 리뷰)</p>
      */
     @GetMapping("/photos/{firebaseUid}/{spotId}/{fileName}")
-    public ResponseEntity<Resource> photo(@PathVariable String firebaseUid,
+    public ResponseEntity<Resource> photo(@AuthenticationPrincipal AuthUser me,
+                                          @PathVariable String firebaseUid,
                                           @PathVariable String spotId,
                                           @PathVariable String fileName) {
+        if (!me.firebaseUid().equals(firebaseUid)) {
+            // 존재 여부까지 숨길 필요는 없다 — 경로에 UID 가 이미 드러나 있다.
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         Resource resource = photoStorage.load(firebaseUid, spotId, fileName);
         if (!resource.exists()) {
             return ResponseEntity.notFound().build();

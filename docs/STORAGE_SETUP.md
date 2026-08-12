@@ -31,7 +31,7 @@
    앱 ──POST /api/visits { spotId, photoUrl, lat, lng }──▶ 서버
                                                            └─▶ visits 행 생성
 
-③ 사진 조회
+③ 사진 조회 (본인 것만)
    앱 ──GET /api/visits/photos/{uid}/{spotId}/{파일명}──▶ 서버가 파일 반환
 ```
 
@@ -54,7 +54,10 @@ Firebase Storage였다면 Security Rules가 해 줬을 방어를 서버 코드�
 | **형식 제한** | JPEG·PNG·WebP만. **매직 바이트로 판정** — 확장자·Content-Type 위장을 막는다 | `VisitPhotoStorage.sniff()` |
 | **경로 이탈 차단** | 파일명은 서버가 생성. 경로 조각 검증 + 최종 경로가 루트 밖이면 거부 | `VisitPhotoStorage` |
 | **남의 사진으로 인증 금지** | `photoUrl`이 본인 `{uid}/{spotId}` 경로인지 대조 | `VisitPhotoUrlValidator` |
+| **남의 사진 열람 금지** | 조회 시 토큰의 UID와 경로의 UID가 다르면 **403** | `VisitController.photo()` |
 | **위치 위조 차단** | 좌표가 실제 스팟 반경 안인지 PostGIS로 재확인 | `VisitService.verify()` |
+
+> **공개 범위 — 본인만 (안전한 기본값).** 인증 사진은 사용자가 공개용으로 고른 게 아니라 현장에서 즉석으로 찍는 것이라 얼굴·사적인 장소가 담길 수 있다. 이슈 #48도 "내 인증 목록"만 요구하고, 발자취(`footprints`)와 이 사진은 코드상 연결돼 있지도 않다. 파일명이 예측 불가능한 난수라 해도 그것만으로는 방어가 되지 않으므로(URL이 새면 끝), 조회 시 소유자를 확인한다. 다른 탐험가에게 공개할 일이 생기면 그때 팀이 명시적으로 넓힌다.
 
 > **왜 검증이 두 겹인가**: 업로드가 본인 경로를 강제해도, 인증 단계가 그 경로를 요구하지 않으면 아무 문자열이나 `photoUrl`로 넣어 인증이 성립한다. 두 검증이 짝을 이뤄야 "사진으로 방문을 인증한다"는 성질이 지켜진다.
 
