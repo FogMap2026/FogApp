@@ -76,13 +76,16 @@ public class VisitPhotoStorage {
 
         try {
             Files.createDirectories(dir);
-            // 스팟당 1장만 남긴다(#76). 정복은 visits (user_id, spot_id) 유니크로 1인 1회라
-            // 한 사람이 한 스팟에 여러 장을 가질 이유가 없다. 이걸로 한 사용자의 최대 사용량이
-            // "스팟 수 × 장당 상한"으로 묶이고, 재업로드가 누적되지 않는다.
-            deleteExistingPhotos(dir);
             try (InputStream in = file.getInputStream()) {
                 Files.copy(in, dir.resolve(fileName), StandardCopyOption.REPLACE_EXISTING);
             }
+            // 스팟당 1장만 남긴다(#76). 정복은 visits (user_id, spot_id) 유니크로 1인 1회라
+            // 한 사람이 한 스팟에 여러 장을 가질 이유가 없다. 이걸로 한 사용자의 최대 사용량이
+            // "스팟 수 × 장당 상한"으로 묶이고, 재업로드가 누적되지 않는다.
+            //
+            // 순서가 중요하다 — 새 파일을 쓴 "뒤에" 지운다. 반대로 하면 복사가 실패했을 때
+            // 새 사진도 옛 사진도 없는 상태가 된다(#79 리뷰).
+            deleteOtherPhotos(dir, fileName);
         } catch (IOException e) {
             throw new IllegalStateException("사진을 저장하지 못했습니다.", e);
         }
@@ -121,23 +124,28 @@ public class VisitPhotoStorage {
     }
 
     /**
-     * 같은 스팟 디렉터리의 기존 사진을 지운다(#76).
+     * 같은 스팟 디렉터리에서 방금 쓴 파일을 뺀 나머지를 지운다(#76).
+     *
+     * <p>반드시 새 파일을 <b>쓴 뒤에</b> 부른다. 먼저 지우면 복사가 실패했을 때
+     * 새 사진도 옛 사진도 없는 상태가 된다.</p>
      *
      * <p>지우지 못한 파일이 있어도 업로드는 계속한다 — 정리 실패로 인증 자체를 막을 이유는 없다.
      * 남은 파일은 {@link VisitPhotoCleaner}가 나중에 걷어간다.</p>
      */
-    private void deleteExistingPhotos(Path dir) throws IOException {
+    private void deleteOtherPhotos(Path dir, String keepFileName) throws IOException {
         if (!Files.isDirectory(dir)) {
             return;
         }
         try (var entries = Files.list(dir)) {
-            entries.filter(Files::isRegularFile).forEach(p -> {
-                try {
-                    Files.deleteIfExists(p);
-                } catch (IOException e) {
-                    log.warn("이전 인증 사진을 지우지 못했습니다: {}", p, e);
-                }
-            });
+            entries.filter(Files::isRegularFile)
+                    .filter(p -> !p.getFileName().toString().equals(keepFileName))
+                    .forEach(p -> {
+                        try {
+                            Files.deleteIfExists(p);
+                        } catch (IOException e) {
+                            log.warn("이전 인증 사진을 지우지 못했습니다: {}", p, e);
+                        }
+                    });
         }
     }
 
