@@ -17,8 +17,8 @@ import '../services/spot_geofence_controller.dart';
 import '../services/spot_marker_controller.dart';
 import '../services/spot_service.dart';
 import '../services/visit_service.dart';
-import 'footprint_create_screen.dart';
 import 'social/personality_test_screen.dart';
+import 'spot_detail_screen.dart';
 import 'visit_verify_screen.dart';
 
 /// 대한민국 전역을 보여주는 기본 카메라 위치(안개 지도의 시작 화면).
@@ -178,34 +178,11 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     if (mounted) setState(() => _proximityBanner = null);
   }
 
-  /// 스팟 마커를 탭하면 뜨는 진입 시트(#70). 스팟 상세 화면(#50)이 아직 없어
-  /// 지금은 "발자취 남기기" 진입점만 최소로 제공한다 — #50이 붙으면 그 상세
-  /// 시트 안의 액션 중 하나로 흡수될 예정이다.
+  /// 스팟 마커를 탭하면 상세 화면(#50)을 연다. 해금 전이면 잠긴 상태로,
+  /// 해금 후면 명칭·주소·소개로 보여준다 — 발자취 작성(#70) 진입점도 그 화면에 있다.
   Future<void> _onSpotTapped(Spot spot) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.edit_note_outlined),
-              title: const Text('발자취 남기기'),
-              onTap: () async {
-                Navigator.of(sheetContext).pop();
-                final written = await Navigator.of(context).push<bool>(
-                  MaterialPageRoute(builder: (_) => FootprintCreateScreen(spot: spot)),
-                );
-                if (written == true && mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('발자취를 남겼어요.')),
-                  );
-                }
-              },
-            ),
-          ],
-        ),
-      ),
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (_) => SpotDetailScreen(spot: spot)),
     );
   }
 
@@ -227,6 +204,34 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       unawaited(_refreshConquest());
       // 안개 걷힘 연출(#49) — 스팟 좌표 기준 반경을 퍼지듯 넓혀가며 걷어낸다.
       unawaited(_fogOverlay?.clearCircleAnimated(spot.id.toString(), NLatLng(spot.lat, spot.lng)));
+      unawaited(_openUnlockedSpotDetail(spot));
+    }
+  }
+
+  /// 인증 직후 상세 화면으로 자연스럽게 전환한다(#50) — "해금되는 느낌"을 준다.
+  /// [spot]은 인증 전에 받은 스냅샷이라 아직 unlocked=false/overview=null이므로,
+  /// 방금 해금된 최신 정보를 반경 조회로 다시 가져온다.
+  Future<void> _openUnlockedSpotDetail(Spot spot) async {
+    try {
+      final nearby = await ref.read(spotServiceProvider).fetchNearby(
+            lat: spot.lat,
+            lng: spot.lng,
+            radiusMeters: 100,
+          );
+      Spot? refreshed;
+      for (final s in nearby) {
+        if (s.id == spot.id) {
+          refreshed = s;
+          break;
+        }
+      }
+      if (refreshed == null || !mounted) return;
+      final unlockedSpot = refreshed;
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(builder: (_) => SpotDetailScreen(spot: unlockedSpot)),
+      );
+    } catch (_) {
+      // 인증 자체(안개 걷힘·정복률)는 이미 반영됐으니 상세 전환 실패는 조용히 넘어간다.
     }
   }
 
