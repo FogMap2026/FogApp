@@ -17,6 +17,7 @@ import '../services/spot_geofence_controller.dart';
 import '../services/spot_marker_controller.dart';
 import '../services/spot_service.dart';
 import '../services/visit_service.dart';
+import 'footprint_write_screen.dart';
 import 'social/personality_test_screen.dart';
 import 'visit_verify_screen.dart';
 
@@ -212,6 +213,28 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     }
   }
 
+  /// 스팟 마커를 탭했을 때 상세 시트를 띄운다(#70). #50(스팟 정보 해금 표시)이
+  /// 아직 없어(서버 `overview` 필드 협의 중) 지금은 발자취 작성 진입점만 담는다 —
+  /// #50이 붙으면 같은 시트에 이름/주소/소개를 추가한다(화면 중복 방지, 이슈 #70 합의).
+  void _openSpotDetail(Spot spot) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (_) => _SpotDetailSheet(spot: spot, onWriteFootprint: () => _openFootprintWrite(spot)),
+    );
+  }
+
+  /// 발자취 작성 화면(#70)으로 진입한다. 방문 인증(#47) 여부와 무관하게 열 수 있다 —
+  /// 서버가 막지 않고, 이슈에서도 제품 결정으로 남겨둔 부분이라 우선 허용 쪽으로 정했다.
+  Future<void> _openFootprintWrite(Spot spot) async {
+    Navigator.of(context).pop(); // 상세 시트 닫기
+    final written = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => FootprintWriteScreen(spot: spot)),
+    );
+    if (written == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('발자취를 남겼어요.')));
+    }
+  }
+
   void _onMapReady(NaverMapController controller) async {
     _controller = controller;
     controller.setMyLocationTracker(FogLocationTracker());
@@ -227,6 +250,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
         // fetchNearby는 가까운 순으로 내려주므로 첫 번째가 현재 보고 있는 지역의 대표 스팟이다.
         if (mounted) setState(() => _nearestLoadedSpot = spots.isEmpty ? null : spots.first);
       },
+      onSpotTap: _openSpotDetail,
     );
     _cameraSubscription = controller.nowCameraPositionStream.listen(_onCameraChanged);
     if (mounted) setState(() => _mapReady = true);
@@ -593,6 +617,47 @@ class _ProximityBanner extends StatelessWidget {
               onPressed: onDismiss,
               icon: Icon(Icons.close, size: 18, color: theme.colorScheme.onPrimaryContainer),
               visualDensity: VisualDensity.compact,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 스팟 마커 탭 시 뜨는 상세 시트(#70)의 최소 버전. 해금 전 스팟은 이름을 노출하지
+/// 않는다(마커와 같은 원칙). #50이 머지되면 이 자리에 주소·소개가 추가된다 —
+/// 지금은 발자취 작성 진입점만 담는다.
+class _SpotDetailSheet extends StatelessWidget {
+  const _SpotDetailSheet({required this.spot, required this.onWriteFootprint});
+
+  final Spot spot;
+  final VoidCallback onWriteFootprint;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              spot.unlocked ? spot.title : '아직 밝혀지지 않은 곳',
+              style: theme.textTheme.titleLarge,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              spot.unlocked ? '이곳에 발자취를 남겨보세요.' : '방문 인증을 하면 이름과 정보를 확인할 수 있어요.',
+              style: theme.textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 20),
+            FilledButton.icon(
+              onPressed: onWriteFootprint,
+              icon: const Icon(Icons.edit_outlined),
+              label: const Text('발자취 남기기'),
             ),
           ],
         ),
