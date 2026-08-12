@@ -16,7 +16,10 @@ import '../services/region_lookup_service.dart';
 import '../services/spot_geofence_controller.dart';
 import '../services/spot_marker_controller.dart';
 import '../services/spot_service.dart';
+import '../services/visit_service.dart';
+import 'footprint_create_screen.dart';
 import 'social/personality_test_screen.dart';
+import 'visit_verify_screen.dart';
 
 /// 대한민국 전역을 보여주는 기본 카메라 위치(안개 지도의 시작 화면).
 const _southKoreaCenter = NLatLng(36.5, 127.8);
@@ -57,9 +60,20 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   /// 카메라 중심에서 가장 가까운(=현재 보고 있는) 스팟. 정복률 표시 지역을 고르는 데 쓴다.
   Spot? _nearestLoadedSpot;
 
-  /// 마지막으로 받은 내 위치. "내 위치로 이동" 버튼(#64)에 쓴다.
+  /// 마지막으로 받은 내 위치. "내 위치로 이동" 버튼(#64)과 인증 화면 진입(#47)에 쓴다.
   double? _myLat;
   double? _myLng;
+
+  /// 이미 인증한 스팟 id 목록(#46) — 이 스팟들은 반경에 들어와도 알리지 않는다.
+  Set<int> _visitedSpotIds = const {};
+  /// 이번 앱 실행 세션에서 이미 알림을 띄운 스팟(#46) — 같은 스팟에 재진입해도
+  /// 세션당 1회만 알린다. geofencing의 히스테리시스는 경계 떨림만 막을 뿐,
+  /// 반경을 벗어났다가 다시 들어오는 재진입까지는 막지 않기 때문에 별도로 둔다.
+  final Set<int> _notifiedSpotIds = {};
+  /// 지금 화면에 떠 있는 근접 알림 배너(#46). 새 스팟에 진입하면 큐잉하지 않고
+  /// 가장 최근 것으로 교체한다 — 오래된 배너를 계속 쌓아두는 것보다 "지금 여기"가
+  /// 사용자에게 더 유용한 정보라고 판단했다.
+  GeofenceEnterEvent? _proximityBanner;
 
   @override
   void initState() {
@@ -146,15 +160,93 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   }
 
   void _onGeofenceEnter(GeofenceEnterEvent event) {
-    // TODO(#46): 인앱 배너/로컬 알림으로 교체. 지금은 판정이 올바르게 동작하는지
-    // 확인할 수 있도록 로그로만 노출한다 — 알림 UI는 #46의 범위다.
-    debugPrint(
-      '[Geofence] 진입: ${event.spot.title} (${event.distanceMeters.toStringAsFixed(0)}m)',
-    );
+    final spotId = event.spot.id;
+    if (_visitedSpotIds.contains(spotId)) return; // 이미 인증한 스팟은 알리지 않는다.
+    if (_notifiedSpotIds.contains(spotId)) return; // 세션당 1회.
+    _notifiedSpotIds.add(spotId);
+    if (mounted) setState(() => _proximityBanner = event);
   }
 
   void _onGeofenceExit(Spot spot) {
-    debugPrint('[Geofence] 이탈: ${spot.title}');
+    // 배너를 보기 전에 반경을 벗어나면(예: 그냥 지나침) 더 이상 유효하지 않으니 닫는다.
+    if (_proximityBanner?.spot.id == spot.id && mounted) {
+      setState(() => _proximityBanner = null);
+    }
+  }
+
+  void _dismissProximityBanner() {
+    if (mounted) setState(() => _proximityBanner = null);
+  }
+
+  /// 스팟 마커를 탭하면 뜨는 진입 시트(#70). 스팟 상세 화면(#50)이 아직 없어
+  /// 지금은 "발자취 남기기" 진입점만 최소로 제공한다 — #50이 붙으면 그 상세
+  /// 시트 안의 액션 중 하나로 흡수될 예정이다.
+  Future<void> _onSpotTapped(Spot spot) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.edit_note_outlined),
+              title: const Text('발자취 남기기'),
+              onTap: () async {
+                Navigator.of(sheetContext).pop();
+                final written = await Navigator.of(context).push<bool>(
+                  MaterialPageRoute(builder: (_) => FootprintCreateScreen(spot: spot)),
+                );
+                if (written == true && mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('발자취를 남겼어요.')),
+                  );
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 근접 알림(#46)의 "인증하러 가기"에서 실제 인증 화면(#47)으로 진입한다.
+  Future<void> _openVisitVerify(Spot spot) async {
+    setState(() => _proximityBanner = null);
+    final lat = _myLat;
+    final lng = _myLng;
+    if (lat == null || lng == null) return; // 이론상 거의 없음 — geofencing 자체가 위치 스트림에서 나온다.
+
+    final verified = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => VisitVerifyScreen(spot: spot, currentLat: lat, currentLng: lng),
+      ),
+    );
+    if (verified == true) {
+      // 방금 인증한 스팟은 바로 반영해, 재조회 전이라도 다시 알리지 않는다.
+      setState(() => _visitedSpotIds = {..._visitedSpotIds, spot.id});
+      unawaited(_refreshConquest());
+      // 안개 걷힘 연출(#49) — 스팟 좌표 기준 반경을 퍼지듯 넓혀가며 걷어낸다.
+      unawaited(_fogOverlay?.clearCircleAnimated(spot.id.toString(), NLatLng(spot.lat, spot.lng)));
+    }
+  }
+
+  /// 이미 인증한 스팟 목록(#46)을 새로 불러오고, 그 좌표로 안개 상태를 복원한다(#49).
+  /// 실패해도 지도 자체는 동작해야 하므로(조용히 필터·복원이 안 걸릴 뿐) 예외를 삼킨다
+  /// — 정복률(#51)과 같은 원칙.
+  ///
+  /// #46이 만든 `VisitedSpotsService`는 `VisitService.myVisits()`와 조회 범위가
+  /// 겹쳐서 흡수했다 — 방문 목록을 두 곳에서 따로 관리할 이유가 없다.
+  Future<void> _refreshVisitedSpots() async {
+    try {
+      final visits = await ref.read(visitServiceProvider).myVisits();
+      if (!mounted) return;
+      setState(() => _visitedSpotIds = visits.map((v) => v.spotId).toSet());
+      // 애니메이션 없이 즉시 걷어낸다 — 이미 걷힌 영역을 매번 앱을 켤 때마다 다시
+      // "퍼지는" 연출로 보여줄 이유는 없다(#49 to-do: 재진입 시 유지).
+      _fogOverlay?.clearCircles({for (final v in visits) v.spotId.toString(): NLatLng(v.lat, v.lng)});
+    } catch (_) {
+      // no-op
+    }
   }
 
   void _onMapReady(NaverMapController controller) async {
@@ -172,6 +264,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
         // fetchNearby는 가까운 순으로 내려주므로 첫 번째가 현재 보고 있는 지역의 대표 스팟이다.
         if (mounted) setState(() => _nearestLoadedSpot = spots.isEmpty ? null : spots.first);
       },
+      onSpotTapped: _onSpotTapped,
     );
     _cameraSubscription = controller.nowCameraPositionStream.listen(_onCameraChanged);
     if (mounted) setState(() => _mapReady = true);
@@ -182,11 +275,11 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     unawaited(_lookupRegion(initialTarget));
     unawaited(_spotMarkers?.loadAround(initialTarget));
     unawaited(_refreshConquest());
+    unawaited(_refreshVisitedSpots());
     await _requestLocationPermission();
   }
 
-  /// 정복률(#51) 목록을 새로 불러온다. 스팟 인증(#47)이 이 화면에 연결되면
-  /// 인증 성공 직후에도 호출해 최신 수치를 반영해야 한다.
+  /// 정복률(#51) 목록을 새로 불러온다. 지도 진입 시, 그리고 방문 인증(#47) 성공 직후 호출한다.
   Future<void> _refreshConquest() async {
     try {
       final regions = await ref.read(conquestServiceProvider).myConquest();
@@ -316,6 +409,15 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
                       child: _LocationBanner(issue: locationIssue),
+                    ),
+                  if (_proximityBanner != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: _ProximityBanner(
+                        event: _proximityBanner!,
+                        onDismiss: _dismissProximityBanner,
+                        onVerify: () => _openVisitVerify(_proximityBanner!.spot),
+                      ),
                     ),
                 ],
               ),
@@ -488,6 +590,53 @@ class _MapControls extends StatelessWidget {
           const Divider(height: 1),
           IconButton(onPressed: onRecenter, icon: const Icon(Icons.my_location)),
         ],
+      ),
+    );
+  }
+}
+
+/// 스팟 반경 진입 알림 배너(#46). "여기서 인증할 수 있다"는 것을 알리고 방문 인증
+/// 화면으로 가는 버튼을 제공한다.
+class _ProximityBanner extends StatelessWidget {
+  const _ProximityBanner({
+    required this.event,
+    required this.onDismiss,
+    required this.onVerify,
+  });
+
+  final GeofenceEnterEvent event;
+  final VoidCallback onDismiss;
+  final VoidCallback onVerify;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final distanceLabel = '${event.distanceMeters.toStringAsFixed(0)}m';
+
+    return Material(
+      color: theme.colorScheme.primaryContainer,
+      elevation: 2,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+        child: Row(
+          children: [
+            Icon(Icons.explore_outlined, size: 20, color: theme.colorScheme.onPrimaryContainer),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '${event.spot.title} 근처예요 ($distanceLabel) — 지금 인증할 수 있어요',
+                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onPrimaryContainer),
+              ),
+            ),
+            TextButton(onPressed: onVerify, child: const Text('인증하러 가기')),
+            IconButton(
+              onPressed: onDismiss,
+              icon: Icon(Icons.close, size: 18, color: theme.colorScheme.onPrimaryContainer),
+              visualDensity: VisualDensity.compact,
+            ),
+          ],
+        ),
       ),
     );
   }
