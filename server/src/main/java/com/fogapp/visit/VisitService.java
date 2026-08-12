@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.fogapp.common.NotFoundException;
@@ -22,15 +23,18 @@ public class VisitService {
     private final SpotRepository spotRepository;
     private final VisitProperties properties;
     private final VisitPhotoUrlValidator photoUrlValidator;
+    private final VisitPhotoStorage photoStorage;
 
     public VisitService(VisitRepository visitRepository,
                         SpotRepository spotRepository,
                         VisitProperties properties,
-                        VisitPhotoUrlValidator photoUrlValidator) {
+                        VisitPhotoUrlValidator photoUrlValidator,
+                        VisitPhotoStorage photoStorage) {
         this.visitRepository = visitRepository;
         this.spotRepository = spotRepository;
         this.properties = properties;
         this.photoUrlValidator = photoUrlValidator;
+        this.photoStorage = photoStorage;
     }
 
     /**
@@ -68,16 +72,31 @@ public class VisitService {
     }
 
     /**
-     * 이미 인증한 스팟이면 409 로 막는다(#76).
+     * 인증 사진을 업로드하고 {@code photoUrl} 을 돌려준다.
      *
-     * <p>사진 업로드 전에 부른다. 업로드는 스팟당 1장만 남기므로(이전 파일 삭제),
-     * 이미 인증된 스팟에 다시 올리면 <b>이미 기록된 방문의 사진이 지워진다.</b>
-     * 어차피 인증은 409 로 실패할 요청이니, 파일에 손대기 전에 여기서 끊는다.</p>
+     * <p><b>파일에 손대기 전에</b> 두 가지를 확인한다(#76). 저장이 스팟당 1장만 남기므로
+     * (이전 파일 삭제), 걸러야 할 요청을 그대로 통과시키면 디스크가 쌓이거나 지워지면 안 될
+     * 사진이 지워진다.</p>
+     *
+     * <ol>
+     *   <li><b>스팟 존재</b> — 없는 스팟 id 로도 업로드가 되면 디스크만 채우고 영원히
+     *       인증에 쓰이지 못하는 파일이 남는다 (404)</li>
+     *   <li><b>미인증 상태</b> — 이미 인증한 스팟에 다시 올리면 이미 기록된 방문의 사진이
+     *       지워진다. 어차피 인증이 실패할 요청이다 (409)</li>
+     * </ol>
+     *
+     * <p>반경 검증은 여기서 하지 않는다 — 사진을 찍는 시점과 인증하는 시점이 다를 수 있고,
+     * 위치 검증은 {@link #verify} 몫이다.</p>
      */
-    public void requireNotVerified(Long userId, Long spotId) {
+    @Transactional(readOnly = true)
+    public String uploadPhoto(Long userId, String firebaseUid, Long spotId, MultipartFile file) {
+        if (!spotRepository.existsById(spotId)) {
+            throw new NotFoundException("스팟", spotId);
+        }
         if (visitRepository.existsByUserIdAndSpotId(userId, spotId)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 인증한 스팟입니다.");
         }
+        return photoStorage.store(firebaseUid, spotId, file);
     }
 
     /** 내 인증 목록(최신순). 앱이 걷힌 안개 영역을 복원할 때 쓴다. */

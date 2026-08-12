@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -65,6 +66,20 @@ class VisitPhotoControllerIT {
     @MockBean
     private TokenVerifier tokenVerifier;
 
+    /**
+     * 업로드는 실제로 존재하는 스팟에만 허용된다(#76) — 하드코딩한 id 를 쓰면
+     * 스팟 존재 검증에 걸려 404 가 된다. 테스트마다 스팟을 만들어 그 id 를 쓴다.
+     */
+    private long spotId;
+
+    @BeforeEach
+    void createSpot() {
+        Spot spot = spotRepository.save(new Spot(
+                "PHOTO-IT-" + System.nanoTime(), "12", "사진테스트", "주소", null,
+                "1", "1", null, null, null, null, 37.5665, 126.9780));
+        spotId = spot.getId();
+    }
+
     private void loginAs(String token, String uid) {
         given(tokenVerifier.verify(token)).willReturn(new VerifiedToken(uid, uid + "@example.com", null, null));
     }
@@ -89,15 +104,15 @@ class VisitPhotoControllerIT {
     void 업로드하면_본인_UID_경로의_URL을_돌려준다() throws Exception {
         loginAs("alice-token", "uid-alice");
 
-        String photoUrl = upload("alice-token", 42L);
+        String photoUrl = upload("alice-token", spotId);
 
-        assertThat(photoUrl).startsWith("/api/visits/photos/uid-alice/42/");
+        assertThat(photoUrl).startsWith("/api/visits/photos/uid-alice/" + spotId + "/");
     }
 
     @Test
     void 본인_사진은_조회할_수_있다() throws Exception {
         loginAs("alice-token", "uid-alice");
-        String photoUrl = upload("alice-token", 42L);
+        String photoUrl = upload("alice-token", spotId);
 
         mockMvc.perform(get(photoUrl).header("Authorization", "Bearer alice-token"))
                 .andExpect(status().isOk());
@@ -106,7 +121,7 @@ class VisitPhotoControllerIT {
     @Test
     void 남의_사진은_조회할_수_없다() throws Exception {
         loginAs("alice-token", "uid-alice");
-        String photoUrl = upload("alice-token", 42L);
+        String photoUrl = upload("alice-token", spotId);
 
         // URL 을 알아도 남의 것이면 막혀야 한다 — 파일명 추측 불가에만 기대지 않는다.
         loginAs("bob-token", "uid-bob");
@@ -118,14 +133,14 @@ class VisitPhotoControllerIT {
     void 인증_없이는_업로드할_수_없다() throws Exception {
         mockMvc.perform(multipart("/api/visits/photo")
                         .file(jpeg())
-                        .param("spotId", "42"))
+                        .param("spotId", String.valueOf(spotId)))
                 .andExpect(status().isUnauthorized());
     }
 
     @Test
     void 인증_없이는_사진을_조회할_수_없다() throws Exception {
         loginAs("alice-token", "uid-alice");
-        String photoUrl = upload("alice-token", 42L);
+        String photoUrl = upload("alice-token", spotId);
 
         mockMvc.perform(get(photoUrl))
                 .andExpect(status().isUnauthorized());
@@ -136,9 +151,6 @@ class VisitPhotoControllerIT {
         // #76: 저장은 스팟당 1장만 남기므로, 막지 않으면 이미 기록된 방문의 사진이 지워진다.
         // 어차피 인증이 409 로 실패할 요청이라 파일에 손대기 전에 끊는다.
         loginAs("carol-token", "uid-carol");
-        Long spotId = spotRepository.save(new Spot(
-                "PHOTO-IT-1", "12", "사진테스트", "주소", null,
-                "1", "1", null, null, null, null, 37.5759, 126.9769)).getId();
         String photoUrl = upload("carol-token", spotId);
 
         Long userId = userRepository.findByFirebaseUid("uid-carol").orElseThrow().getId();
@@ -153,6 +165,18 @@ class VisitPhotoControllerIT {
         // 기존 사진은 그대로 있어야 한다.
         mockMvc.perform(get(photoUrl).header("Authorization", "Bearer carol-token"))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void 없는_스팟에는_올릴_수_없다() throws Exception {
+        // #76: 없는 스팟 id 로도 업로드가 되면, 영원히 인증에 쓰이지 못하는 파일만 디스크에 쌓인다.
+        loginAs("dave-token", "uid-dave");
+
+        mockMvc.perform(multipart("/api/visits/photo")
+                        .file(jpeg())
+                        .param("spotId", "999999999")
+                        .header("Authorization", "Bearer dave-token"))
+                .andExpect(status().isNotFound());
     }
 
     @Test

@@ -52,8 +52,7 @@ public class VisitController {
     public ResponseEntity<VisitPhotoResponse> uploadPhoto(@AuthenticationPrincipal AuthUser me,
                                                           @RequestParam("spotId") Long spotId,
                                                           @RequestParam("file") MultipartFile file) {
-        visitService.requireNotVerified(me.userId(), spotId);
-        String photoUrl = photoStorage.store(me.firebaseUid(), spotId, file);
+        String photoUrl = visitService.uploadPhoto(me.userId(), me.firebaseUid(), spotId, file);
         return ResponseEntity.status(HttpStatus.CREATED).body(new VisitPhotoResponse(photoUrl));
     }
 
