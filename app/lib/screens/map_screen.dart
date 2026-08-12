@@ -179,19 +179,39 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   void _openVisitVerify(Spot spot) {
     setState(() => _proximityBanner = null);
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => _MockVisitVerifyScreen(spot: spot)),
+      MaterialPageRoute(
+        builder: (_) => _MockVisitVerifyScreen(spot: spot, onVerified: () => _onVisitVerified(spot)),
+      ),
     );
   }
 
-  /// 이미 인증한 스팟 목록(#46)을 새로 불러온다. 실패해도 알림 자체는 동작해야 하므로
-  /// (조용히 필터가 안 걸릴 뿐) 예외를 삼킨다 — 정복률(#51)과 같은 원칙.
+  /// 이미 인증한 스팟 목록(#46)을 새로 불러오고, 그 좌표로 안개 상태를 복원한다(#49).
+  /// 실패해도 지도 자체는 동작해야 하므로(조용히 필터·복원이 안 걸릴 뿐) 예외를 삼킨다
+  /// — 정복률(#51)과 같은 원칙.
   Future<void> _refreshVisitedSpots() async {
     try {
-      final ids = await ref.read(visitedSpotsServiceProvider).fetchVisitedSpotIds();
-      if (mounted) setState(() => _visitedSpotIds = ids);
+      final visited = await ref.read(visitedSpotsServiceProvider).fetchVisitedSpots();
+      if (!mounted) return;
+      setState(() => _visitedSpotIds = {for (final v in visited) v.spotId});
+      // 애니메이션 없이 즉시 걷어낸다 — 이미 걷힌 영역을 매번 앱을 켤 때마다 다시
+      // "퍼지는" 연출로 보여줄 이유는 없다(#49 to-do: 재진입 시 유지).
+      _fogOverlay?.clearCircles({for (final v in visited) v.spotId.toString(): v.center});
     } catch (_) {
       // no-op
     }
+  }
+
+  /// 방문 인증에 성공했을 때 호출한다(#49). 해당 스팟 반경의 안개를 퍼지는 애니메이션과
+  /// 함께 걷어내고, 이후 이 스팟에는 근접 알림(#46)을 다시 띄우지 않도록 방문 목록에
+  /// 반영한다. 정복률(#51)도 즉시 갱신해 인증 직후 숫자가 바로 올라간 것처럼 보이게 한다.
+  void _onVisitVerified(Spot spot) {
+    unawaited(
+      _fogOverlay?.clearCircleAnimated(spot.id.toString(), NLatLng(spot.lat, spot.lng)),
+    );
+    if (mounted) {
+      setState(() => _visitedSpotIds = {..._visitedSpotIds, spot.id});
+    }
+    unawaited(_refreshConquest());
   }
 
   void _onMapReady(NaverMapController controller) async {
@@ -585,11 +605,16 @@ class _ProximityBanner extends StatelessWidget {
 }
 
 /// 방문 인증 화면(#47)이 병합되기 전까지 붙여두는 자리표시자(#46 issue의 "목으로 먼저
-/// 붙여도 됨" 제안). #47이 merge되면 이 위젯 대신 실제 화면으로 교체한다.
+/// 붙여도 됨" 제안). #47이 merge되면 이 위젯 대신 실제 화면으로 교체하고, 안개 걷힘
+/// 연출(#49)은 실제 인증 API 성공 응답을 받는 지점에서 [onVerified]를 호출하도록 옮긴다.
 class _MockVisitVerifyScreen extends StatelessWidget {
-  const _MockVisitVerifyScreen({required this.spot});
+  const _MockVisitVerifyScreen({required this.spot, required this.onVerified});
 
   final Spot spot;
+
+  /// 실제로는 `POST /api/visits`(#48) 성공 응답을 받는 지점에서 호출돼야 한다.
+  /// 여기서는 그 지점이 아직 없어 버튼으로 대신 트리거한다 — #47이 merge되면 사라진다.
+  final VoidCallback onVerified;
 
   @override
   Widget build(BuildContext context) {
@@ -607,6 +632,14 @@ class _MockVisitVerifyScreen extends StatelessWidget {
                 '현장 사진 촬영 → 방문 인증 화면은 준비 중입니다.\n(#47에서 연결될 예정)',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 24),
+              FilledButton(
+                onPressed: () {
+                  onVerified();
+                  Navigator.of(context).pop();
+                },
+                child: const Text('인증 완료 (임시 — #47 병합 전 테스트용)'),
               ),
             ],
           ),
