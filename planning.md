@@ -44,16 +44,18 @@
 | **Phase 1 인증·데이터** | ✅ 완료 — `dev`에 전부 병합, `main`에도 [#25](../../pull/25) 릴리스로 승격 완료 |
 | **Phase 2 지도 코어** | ✅ 완료 — [#34](../../pull/34)·[#35](../../pull/35)·[#39](../../pull/39)·[#40](../../pull/40)·[#41](../../pull/41) 전부 병합 (스택 충돌은 [#35](../../pull/35)·[#40](../../pull/40)이 `dev` merge로 흡수하며 해소) |
 | **Phase 2 소셜 트랙** | ✅ 완료 — 성향 테스트 화면·저장, 매칭 알고리즘([#37](../../pull/38)), 발자취 좋아요 API 병합 |
-| **Phase 3 탐험 루프 ★MVP★** | 🔄 진행 중 — 근접 감지([#45](../../issues/45))·인증 API([#48](../../issues/48))·Storage 규칙·정복률([#51](../../issues/51), [PR #60](../../pull/60)·[#62](../../pull/62))·사진 촬영 UI([#47](../../pull/57)) 병합 완료. 안개 걷힘 연출([#49](../../issues/49))·스팟 정보 해금([#50](../../issues/50))·인앱 알림([#46](../../issues/46))은 미착수 |
+| **Phase 3 탐험 루프 ★MVP★** | 🔄 진행 중 — 근접 감지([#45](../../issues/45))·근접 알림([#46](../../issues/46), [PR #69](../../pull/69))·인증 API + 사진 저장([#48](../../issues/48), [PR #54](../../pull/54)·[#56](../../pull/56)·[#58](../../pull/58)·[#68](../../pull/68))·정복률([#51](../../issues/51), [PR #60](../../pull/60)·[#62](../../pull/62)) 병합 완료. 사진 촬영 UI([#47](../../pull/57))는 리뷰 승인됐지만 `dev`의 #69와 겹쳐 재충돌 — 병합 전 통합 필요. 안개 걷힘 연출([#49](../../issues/49))·스팟 정보 해금([#50](../../issues/50))은 미착수 |
 | **Phase 4~7** | ⬜ 미착수 |
 
 **해소됨**
 - [#52](../../issues/52) 발자취·매칭 API가 클라이언트의 `userId`를 그대로 신뢰하던 문제 — [#53](../../pull/53)에서 `AuthUser` 기반으로 수정되어 `dev`에 병합.
-- [#57](../../pull/57) 인증 사진 업로드 경로 불일치 — 업로드 경로를 `visits/{uid}/{spotId}/{fileName}`으로 고쳐 Storage 규칙([#56](../../pull/56))·서버 `VisitPhotoUrlValidator`와 일치시킴. geofence 진입 연동·인증 성공 시 정복률 재조회까지 함께 붙임.
+- **[#48](../../issues/48) 사진 보관 방식 전환** — Firebase Storage가 무료(Spark) 요금제에서 버킷 생성이 막혀 [#68](../../pull/68)에서 **서버가 직접 디스크에 보관**하는 방식(팀 결정 B안)으로 전환했습니다. `app/storage.rules`는 삭제됐고, `VisitPhotoStorage`(서버)가 본인 경로 강제·용량 제한·매직 바이트 형식 검증·경로 이탈 방지를 대신합니다. 리뷰 중 조회 엔드포인트에 소유자 확인이 빠진 것을 발견해 **본인만 조회 가능**하도록 좁혔습니다(발자취와 코드상 연결돼 있지 않고, 공개가 필요하면 그때 팀이 명시적으로 결정).
+- **[#57](../../pull/57) 업로드 클라이언트 재작성** — [#68](../../pull/68)로 서버 API 계약이 바뀌면서(Firebase 다운로드 URL → `POST /api/visits/photo` multipart 업로드) `firebase_storage` 기반이던 이 PR의 업로드 코드가 그대로는 동작하지 않게 됐습니다. `VisitPhotoService`로 재작성해 Dio multipart + 서버 상대 경로로 전환, 취소 시 레이스 컨디션과 서버 에러 메시지 표시까지 함께 정리했습니다. 리뷰 승인 완료, `dev` 병합 대기.
 
 **지금의 병목**
 
-1. **[#61](../../pull/61) iOS 빌드 CI 실패** — `AppDelegate.swift`가 최신 Flutter의 "implicit engine" API(`FlutterImplicitEngineDelegate`/`FlutterImplicitEngineBridge`)로 스캐폴딩되어 있는데, 이 레포는 CI에 Flutter 3.24로 고정돼 있어 해당 API가 없습니다. 3.24 호환 형태(`GeneratedPluginRegistrant.register(with: self)`를 `didFinishLaunchingWithOptions`에서 직접 호출)로 되돌려야 합니다.
+1. **[#61](../../pull/61) iOS 빌드 CI 실패** — `AppDelegate.swift`가 최신 Flutter의 "implicit engine" API(`FlutterImplicitEngineDelegate`/`FlutterImplicitEngineBridge`)로 스캐폴딩되어 있는데, 이 레포는 CI에 Flutter 3.24로 고정돼 있어 해당 API가 없습니다. 3.24 호환 형태(`GeneratedPluginRegistrant.register(with: self)`를 `didFinishLaunchingWithOptions`에서 직접 호출)로 되돌려야 합니다. Flutter 버전을 3.44.9로 올리는 대안도 같은 PR에서 시도됐으나, 그 여파로 `flutter analyze`가 새 경고(지도 SDK `nowCameraPosition` experimental 등)를 잡아내 아직 CI가 막혀 있습니다.
+2. **[#57](../../pull/57)·[#69](../../pull/69) 근접 배너 중복 구현** — 두 PR이 "근접 시 배너 → 인증 화면 진입"을 각자 독립적으로 만들었습니다(`_NearbySpotBanner` vs `_ProximityBanner`, `VisitService.myVisits()` vs `VisitedSpotsService`). #69가 먼저 `dev`에 들어가면서 #57이 재충돌 상태입니다. 단순 git 충돌이 아니라 통합 설계가 필요해 UI 담당(oorony)이 직접 정리해야 합니다.
 
 ---
 
@@ -172,12 +174,11 @@ Phase 7  완성 & 출품         QA · 성능 · 배포 · 발표 자료
 | 0-3 | Flutter 앱 스캐폴딩(`app/`) + 폴더 구조·라우팅·상태관리 세팅 | 🟩 UI | ✅ | `app/` (Flutter 3.24 · Riverpod) |
 | 0-4 | Spring Boot 서버 스캐폴딩(`server/`) + 헬스체크 API | 🟦 API | ✅ | `GET /api/health` |
 | 0-5 | PostgreSQL + PostGIS 로컬 실행(docker-compose) | 🟧 INF | ✅ | [docker-compose.yml](docker-compose.yml) |
-| 0-6 | Firebase 프로젝트 생성(Auth/Firestore/Storage/FCM) + 설정 `.gitignore` | 🟧 INF | ⏸ | 절차는 [FIREBASE_AUTH_SETUP.md](docs/FIREBASE_AUTH_SETUP.md)로 문서화 완료, **콘솔 작업 대기** ([#2](../../issues/2)) |
+| 0-6 | Firebase 프로젝트 생성(Auth/Firestore/FCM) + 설정 `.gitignore` | 🟧 INF | ✅ | [#2](../../issues/2) 완료. 절차는 [FIREBASE_AUTH_SETUP.md](docs/FIREBASE_AUTH_SETUP.md) 참고. Storage는 [#68](../../pull/68)에서 미사용으로 확정(서버가 직접 보관) |
 | 0-7 | `.env.example`, `.gitignore`, 시크릿 관리 규칙 문서화 | 🟧 INF | ✅ | [ENV_GUIDE.md](docs/ENV_GUIDE.md) |
 | 0-8 | GitHub Actions CI 뼈대(빌드·린트) | 🟧 INF | ✅ | 변경 영역 감지로 `app`/`server` 잡 분리 |
 
-**완료 기준(DoD)**: 앱이 빈 화면이라도 실행되고, 서버 헬스체크가 200을 반환하며, 모두 로컬 DB에 연결된다.
-→ **0-6을 제외하고 충족.** Firebase 설정 파일이 없어 앱의 `Firebase.initializeApp()`은 아직 실 프로젝트에 붙지 않았습니다.
+**완료 기준(DoD)**: 앱이 빈 화면이라도 실행되고, 서버 헬스체크가 200을 반환하며, 모두 로컬 DB에 연결된다. → **충족.**
 
 ---
 
@@ -243,9 +244,9 @@ Phase 7  완성 & 출품         QA · 성능 · 배포 · 발표 자료
 | # | 작업 | 영역 | 담당 | 상태 | 이슈 | 브랜치 예시 |
 |---|------|------|------|------|------|-------------|
 | 3-1 | 스팟 반경 **geofencing**(근접 감지) | 🟨 MAP | 김시진 | ✅ | [#45](../../issues/45) ([PR #59](../../pull/59)) | `feat/map-geofence` |
-| 3-2 | 근접 시 **인앱 알림**(포그라운드) | 🟨 MAP | 김시진 | ⬜ | [#46](../../issues/46) | `feat/map-proximity-alert` |
-| 3-3 | 현장 사진 촬영 → **방문 인증** UI | 🟩 UI | 송진오 | ✅ | [#47](../../issues/47) ([PR #57](../../pull/57)) | `feat/ui-visit-verify` |
-| 3-4 | 인증 사진 업로드 파이프라인(Storage) + 인증 API | 🟧 INF / 🟦 API | 송건희·박근호 | ✅ | [#48](../../issues/48) ([PR #54](../../pull/54)·[#56](../../pull/56)·[#58](../../pull/58)) | `feat/api-visit`, `feat/infra-photo-upload` |
+| 3-2 | 근접 시 **인앱 알림**(포그라운드) | 🟨 MAP | 김시진 | ✅ | [#46](../../issues/46) ([PR #69](../../pull/69)) | `feat/map-proximity-alert` |
+| 3-3 | 현장 사진 촬영 → **방문 인증** UI | 🟩 UI | 송진오 | 🔄 리뷰 승인, `dev` 병합 대기 | [#47](../../issues/47) ([PR #57](../../pull/57)) | `feat/ui-visit-verify` |
+| 3-4 | 인증 사진 업로드 파이프라인(서버 직접 보관) + 인증 API | 🟧 INF / 🟦 API | 송건희·박근호 | ✅ | [#48](../../issues/48) ([PR #54](../../pull/54)·[#56](../../pull/56)·[#58](../../pull/58)·[#68](../../pull/68)) | `feat/api-visit`, `feat/infra-photo-upload` |
 | 3-5 | 인증 성공 시 해당 반경 **안개 걷힘** 애니메이션 | 🟨 MAP | 김시진 | ⬜ | [#49](../../issues/49) | `feat/map-fog-clear` |
 | 3-6 | 스팟 정보(명칭·주소·소개) 해금 표시 | 🟩 UI | 송진오 | ⬜ | [#50](../../issues/50) | `feat/ui-spot-detail` |
 | 3-7 | 지역별 **정복률(%) 계산·표시** | 🟦 API / 🟩 UI | 박근호·송진오 | ✅ | [#51](../../issues/51) ([PR #60](../../pull/60)·[#62](../../pull/62)) | `feat/api-conquest-rate`, `feat/ui-conquest` |
@@ -266,9 +267,10 @@ Phase 7  완성 & 출품         QA · 성능 · 배포 · 발표 자료
                        #48 사진 저장(서버 보관) ───┘
 ```
 
-**남은 작업 (2026-08-10 기준)**
+**남은 작업 (2026-08-12 기준)**
 
-1. **[#49](../../issues/49) 안개 걷힘·[#50](../../issues/50) 정보 해금·[#46](../../issues/46) 근접 알림** — 아직 미착수. 3-3·3-4(인증 UI·API)가 이미 열려 있으니 바로 시작 가능합니다.
+1. **[#57](../../pull/57) 근접 배너 중복 정리 후 `dev` 병합** — 리뷰는 승인 완료했지만 [#69](../../pull/69)와 재충돌 상태. 통합 후 병합되면 3-3도 닫힙니다.
+2. **[#49](../../issues/49) 안개 걷힘·[#50](../../issues/50) 정보 해금** — 아직 미착수. 3-4(인증 API)가 이미 열려 있으니 바로 시작 가능합니다.
 
 **팀 결정 사항**
 
@@ -281,6 +283,7 @@ Phase 7  완성 & 출품         QA · 성능 · 배포 · 발표 자료
   백그라운드 위치는 iOS `location always` 심사·Android 백그라운드 위치 선언(시연 영상 + 수 주 심사)·상시 포그라운드 서비스 알림·배터리 소모가 한꺼번에 붙는데,
   그 비용이 **Phase 6의 6-1(캐릭터 실시간 위치)·6-4(FCM)와 그대로 중복**됩니다. 위치 소스는 그때 한 번만 만드는 게 맞습니다.
   `SpotGeofenceController`는 위치 소스와 분리돼 있어 판정 로직은 그대로 재사용되므로, 나중에 백그라운드로 확장하는 길이 막히지 않습니다.
+- ✅ **인증 사진 저장소 = 서버 직접 보관** — Firebase Storage는 무료 요금제에서 버킷 생성이 막혀 미채택. [#68](../../pull/68)에서 서버 디스크 보관으로 전환했고, 조회는 **본인만 가능**(안전한 기본값)합니다. 배포 시 저장 경로를 영속 볼륨에 마운트해야 합니다(Phase 7).
 
 **완료 기준(DoD)**: 스팟에 도달해 사진을 찍으면 안개가 걷히고, 지역 정복률이 올라간다. → **데모 가능한 MVP 완성**
 소셜 트랙: 성향 유사도 기반 매칭 후보 산출 로직이 API로 동작한다. ✅
@@ -394,7 +397,7 @@ Phase 7  완성 & 출품         QA · 성능 · 배포 · 발표 자료
 | M0 | 모두가 개발 시작 가능 | `v0.1` | ✅ |
 | M1 | 로그인 + 스팟 데이터 확보 · 🟪 성향 점수 모델 확정 | `v0.2` | ✅ [PR #25](../../pull/25)로 `main` 승격 완료 |
 | M2 | 안개 지도 + 내 위치 표시 · 🟪 성향 테스트·발자취 API 완성 | `v0.3` | ✅ 지도 PR 5건·소셜 트랙 전부 병합 |
-| **M3** | **탐험 핵심 루프 동작 (MVP)** · 🟪 매칭 알고리즘 동작 | `v0.4` | 🔄 매칭·근접감지·인증 UI·인증 API·정복률 ✅ / 안개 걷힘·정보 해금·인앱 알림 ⬜ |
+| **M3** | **탐험 핵심 루프 동작 (MVP)** · 🟪 매칭 알고리즘 동작 | `v0.4` | 🔄 매칭·근접감지·근접알림·인증 API·정복률 ✅ / 인증 UI는 #69와 통합 후 병합 필요 / 안개 걷힘·정보 해금 ⬜ |
 | M4 | 발자취 지도 통합·완성 | `v0.5` | ⬜ (서버 API는 완료) |
 | M5 | 매칭 화면·동행 성사 완성 | `v0.6` | ⬜ (서버 API는 완료) |
 | M6 | 실시간 위치 공유 | `v0.7` | ⬜ |
