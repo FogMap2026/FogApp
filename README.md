@@ -46,7 +46,7 @@
 | **DB 마이그레이션** | Flyway (+ Hibernate `ddl-auto: validate`) | — | 스키마 버전 관리. 스키마 정본은 `V*.sql` |
 | **인증** | Firebase Auth + Firebase Admin SDK | admin 9.3.0 | 앱이 발급한 ID 토큰을 서버가 `verifyIdToken`으로 검증 |
 | **실시간/알림** | Firebase (Firestore + FCM) | — | 실시간 위치 공유, 푸시 알림 (Phase 6) |
-| **스토리지** | Firebase Storage | — | 방문 인증 사진 업로드·저장 (Phase 3) |
+| **스토리지** | 서버 직접 저장 (로컬 디스크) | — | 방문 인증 사진 (Phase 3). Firebase Storage는 무료 요금제에서 버킷 생성이 막혀 미채택 — [STORAGE_SETUP.md](docs/STORAGE_SETUP.md) |
 | **테스트** | JUnit 5 + **Testcontainers**(PostGIS) / `flutter test` | — | 실제 PostGIS 컨테이너로 공간 쿼리까지 검증 |
 | **빌드 도구** | Gradle 8.8 | — | Spring Boot 3.3.x 호환 버전으로 고정 |
 | **CI/CD** | GitHub Actions | — | 변경 영역(`app`/`server`) 감지 후 해당 잡만 실행 |
@@ -97,7 +97,7 @@
 - 방문 인증 사진 업로드·스토리지 파이프라인
 - 푸시 알림(FCM), 인증(Auth) 연동
 - CI/CD, 배포, 환경 구성
-- `Firebase Storage` · `FCM` · `GitHub Actions`
+- `사진 저장(서버)` · `FCM` · `GitHub Actions`
 
 ---
 
