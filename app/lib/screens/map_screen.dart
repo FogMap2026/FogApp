@@ -16,6 +16,7 @@ import '../services/region_lookup_service.dart';
 import '../services/spot_geofence_controller.dart';
 import '../services/spot_marker_controller.dart';
 import '../services/spot_service.dart';
+import '../services/visited_spots_service.dart';
 import 'social/personality_test_screen.dart';
 
 /// 대한민국 전역을 보여주는 기본 카메라 위치(안개 지도의 시작 화면).
@@ -56,6 +57,21 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   List<ConquestRegion> _conquest = const [];
   /// 카메라 중심에서 가장 가까운(=현재 보고 있는) 스팟. 정복률 표시 지역을 고르는 데 쓴다.
   Spot? _nearestLoadedSpot;
+
+  /// 마지막으로 받은 내 위치. "내 위치로 이동" 버튼(#64)에 쓴다.
+  double? _myLat;
+  double? _myLng;
+
+  /// 이미 인증한 스팟 id 목록(#46) — 이 스팟들은 반경에 들어와도 알리지 않는다.
+  Set<int> _visitedSpotIds = const {};
+  /// 이번 앱 실행 세션에서 이미 알림을 띄운 스팟(#46) — 같은 스팟에 재진입해도
+  /// 세션당 1회만 알린다. geofencing의 히스테리시스는 경계 떨림만 막을 뿐,
+  /// 반경을 벗어났다가 다시 들어오는 재진입까지는 막지 않기 때문에 별도로 둔다.
+  final Set<int> _notifiedSpotIds = {};
+  /// 지금 화면에 떠 있는 근접 알림 배너(#46). 새 스팟에 진입하면 큐잉하지 않고
+  /// 가장 최근 것으로 교체한다 — 오래된 배너를 계속 쌓아두는 것보다 "지금 여기"가
+  /// 사용자에게 더 유용한 정보라고 판단했다.
+  GeofenceEnterEvent? _proximityBanner;
 
   @override
   void initState() {
@@ -121,20 +137,61 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     _geofencePositionSubscription = Geolocator.getPositionStream(
       locationSettings: FogLocationTracker.locationSettings,
     ).listen((position) {
+      // 위치를 처음 받는 순간만 rebuild해서 "내 위치로 이동" 버튼을 활성화한다.
+      // 매 위치 갱신마다 다시 그릴 필요는 없다.
+      final hadLocation = _myLat != null;
+      _myLat = position.latitude;
+      _myLng = position.longitude;
+      if (!hadLocation && mounted) setState(() {});
       _geofence?.updatePosition(lat: position.latitude, lng: position.longitude);
     });
   }
 
+  /// 카메라를 마지막으로 받은 내 위치로 이동한다. SDK 기본 위치 버튼
+  /// (`locationButtonEnable`) 대신 우측 컨트롤에 이 버튼을 직접 그린다(#64) —
+  /// 지도 좌하단(Naver 로고 자리)과 겹치지 않게 하기 위함.
+  void _recenterToMe() {
+    final lat = _myLat;
+    final lng = _myLng;
+    if (lat == null || lng == null) return;
+    _controller?.updateCamera(NCameraUpdate.withParams(target: NLatLng(lat, lng)));
+  }
+
   void _onGeofenceEnter(GeofenceEnterEvent event) {
-    // TODO(#46): 인앱 배너/로컬 알림으로 교체. 지금은 판정이 올바르게 동작하는지
-    // 확인할 수 있도록 로그로만 노출한다 — 알림 UI는 #46의 범위다.
-    debugPrint(
-      '[Geofence] 진입: ${event.spot.title} (${event.distanceMeters.toStringAsFixed(0)}m)',
-    );
+    final spotId = event.spot.id;
+    if (_visitedSpotIds.contains(spotId)) return; // 이미 인증한 스팟은 알리지 않는다.
+    if (_notifiedSpotIds.contains(spotId)) return; // 세션당 1회.
+    _notifiedSpotIds.add(spotId);
+    if (mounted) setState(() => _proximityBanner = event);
   }
 
   void _onGeofenceExit(Spot spot) {
-    debugPrint('[Geofence] 이탈: ${spot.title}');
+    // 배너를 보기 전에 반경을 벗어나면(예: 그냥 지나침) 더 이상 유효하지 않으니 닫는다.
+    if (_proximityBanner?.spot.id == spot.id && mounted) {
+      setState(() => _proximityBanner = null);
+    }
+  }
+
+  void _dismissProximityBanner() {
+    if (mounted) setState(() => _proximityBanner = null);
+  }
+
+  void _openVisitVerify(Spot spot) {
+    setState(() => _proximityBanner = null);
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => _MockVisitVerifyScreen(spot: spot)),
+    );
+  }
+
+  /// 이미 인증한 스팟 목록(#46)을 새로 불러온다. 실패해도 알림 자체는 동작해야 하므로
+  /// (조용히 필터가 안 걸릴 뿐) 예외를 삼킨다 — 정복률(#51)과 같은 원칙.
+  Future<void> _refreshVisitedSpots() async {
+    try {
+      final ids = await ref.read(visitedSpotsServiceProvider).fetchVisitedSpotIds();
+      if (mounted) setState(() => _visitedSpotIds = ids);
+    } catch (_) {
+      // no-op
+    }
   }
 
   void _onMapReady(NaverMapController controller) async {
@@ -159,6 +216,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     unawaited(_lookupRegion(initialTarget));
     unawaited(_spotMarkers?.loadAround(initialTarget));
     unawaited(_refreshConquest());
+    unawaited(_refreshVisitedSpots());
     await _requestLocationPermission();
   }
 
@@ -243,12 +301,21 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     final safeAreaPadding = MediaQuery.paddingOf(context);
     final locationIssue = _locationIssue;
 
+    // SDK 콘텐츠 패딩에 우리 오버레이가 차지하는 대략적인 높이를 더한다 — 안 그러면
+    // "내 위치로 이동" 시 마커가 상단 정보 바·하단 액션 영역 뒤에 숨을 수 있다(#64).
+    final contentPadding = EdgeInsets.only(
+      left: safeAreaPadding.left,
+      right: safeAreaPadding.right,
+      top: safeAreaPadding.top + 64,
+      bottom: safeAreaPadding.bottom + 96,
+    );
+
     return Scaffold(
       body: Stack(
         children: [
           NaverMap(
             options: NaverMapViewOptions(
-              contentPadding: safeAreaPadding,
+              contentPadding: contentPadding,
               initialCameraPosition: const NCameraPosition(
                 target: _southKoreaCenter,
                 zoom: 6.7,
@@ -256,7 +323,11 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
               // FogApp은 국내 탐험이 목적이므로 대한민국 밖으로 축소/이동할 이유가 없어 제한한다.
               minZoom: 6,
               extent: _mapExtent,
-              locationButtonEnable: true,
+              // SDK 기본 위치 버튼 대신 우측 컨트롤에 직접 그린다(#64) — 좌하단 Naver
+              // 로고 자리와 겹치는 걸 피하고, 우리 UI를 한 곳(우측 세로 스택)으로 모은다.
+              locationButtonEnable: false,
+              logoAlign: NLogoAlign.leftBottom,
+              logoMargin: const EdgeInsets.only(left: 12, bottom: 12),
             ),
             onMapReady: _onMapReady,
           ),
@@ -281,21 +352,39 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                       padding: const EdgeInsets.only(top: 8),
                       child: _LocationBanner(issue: locationIssue),
                     ),
+                  if (_proximityBanner != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: _ProximityBanner(
+                        event: _proximityBanner!,
+                        onDismiss: _dismissProximityBanner,
+                        onVerify: () => _openVisitVerify(_proximityBanner!.spot),
+                      ),
+                    ),
                 ],
               ),
             ),
           ),
+          // 하단 좌측 액션 영역. 여러 오버레이가 늘어도 이 Column 하나에 세로로
+          // 쌓이므로 서로 겹치지 않는다(#64 — 예전엔 독립된 Align끼리 포개졌음).
+          // Naver 로고(좌하단, logoMargin 12)를 가리지 않도록 하단 여백을 넉넉히 둔다.
           SafeArea(
             child: Align(
               alignment: Alignment.bottomLeft,
               child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: FilledButton.tonal(
-                  // 지도 위 탐험 UI가 준비될 때까지 성향 테스트(#31)로 가는 임시 진입점.
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const PersonalityTestScreen()),
-                  ),
-                  child: const Text('여행 성향 테스트 하기'),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 64),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    FilledButton.tonal(
+                      // 지도 위 탐험 UI가 준비될 때까지 성향 테스트(#31)로 가는 임시 진입점.
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const PersonalityTestScreen()),
+                      ),
+                      child: const Text('여행 성향 테스트 하기'),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -305,9 +394,10 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
               alignment: Alignment.bottomRight,
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: _ZoomControls(
+                child: _MapControls(
                   onZoomIn: () => _zoomBy(1),
                   onZoomOut: () => _zoomBy(-1),
+                  onRecenter: _myLat != null ? _recenterToMe : null,
                 ),
               ),
             ),
@@ -414,12 +504,18 @@ class _LocationBanner extends StatelessWidget {
   }
 }
 
-/// 지도 줌 인/아웃 컨트롤. 핀치 제스처 외의 명시적 조작 수단을 제공한다.
-class _ZoomControls extends StatelessWidget {
-  const _ZoomControls({required this.onZoomIn, required this.onZoomOut});
+/// 지도 우측 세로 컨트롤(#64) — 줌 인/아웃 + 내 위치로 이동을 한 곳에 모은다.
+/// SDK 기본 위치 버튼과 중복되지 않도록 이 화면에서는 이 버튼만 쓴다.
+class _MapControls extends StatelessWidget {
+  const _MapControls({
+    required this.onZoomIn,
+    required this.onZoomOut,
+    required this.onRecenter,
+  });
 
   final VoidCallback onZoomIn;
   final VoidCallback onZoomOut;
+  final VoidCallback? onRecenter;
 
   @override
   Widget build(BuildContext context) {
@@ -433,7 +529,88 @@ class _ZoomControls extends StatelessWidget {
           IconButton(onPressed: onZoomIn, icon: const Icon(Icons.add)),
           const Divider(height: 1),
           IconButton(onPressed: onZoomOut, icon: const Icon(Icons.remove)),
+          const Divider(height: 1),
+          IconButton(onPressed: onRecenter, icon: const Icon(Icons.my_location)),
         ],
+      ),
+    );
+  }
+}
+
+/// 스팟 반경 진입 알림 배너(#46). "여기서 인증할 수 있다"는 것을 알리고 방문 인증
+/// 화면으로 가는 버튼을 제공한다.
+class _ProximityBanner extends StatelessWidget {
+  const _ProximityBanner({
+    required this.event,
+    required this.onDismiss,
+    required this.onVerify,
+  });
+
+  final GeofenceEnterEvent event;
+  final VoidCallback onDismiss;
+  final VoidCallback onVerify;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final distanceLabel = '${event.distanceMeters.toStringAsFixed(0)}m';
+
+    return Material(
+      color: theme.colorScheme.primaryContainer,
+      elevation: 2,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+        child: Row(
+          children: [
+            Icon(Icons.explore_outlined, size: 20, color: theme.colorScheme.onPrimaryContainer),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '${event.spot.title} 근처예요 ($distanceLabel) — 지금 인증할 수 있어요',
+                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onPrimaryContainer),
+              ),
+            ),
+            TextButton(onPressed: onVerify, child: const Text('인증하러 가기')),
+            IconButton(
+              onPressed: onDismiss,
+              icon: Icon(Icons.close, size: 18, color: theme.colorScheme.onPrimaryContainer),
+              visualDensity: VisualDensity.compact,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 방문 인증 화면(#47)이 병합되기 전까지 붙여두는 자리표시자(#46 issue의 "목으로 먼저
+/// 붙여도 됨" 제안). #47이 merge되면 이 위젯 대신 실제 화면으로 교체한다.
+class _MockVisitVerifyScreen extends StatelessWidget {
+  const _MockVisitVerifyScreen({required this.spot});
+
+  final Spot spot;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(spot.title)),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.camera_alt_outlined, size: 48),
+              const SizedBox(height: 16),
+              Text(
+                '현장 사진 촬영 → 방문 인증 화면은 준비 중입니다.\n(#47에서 연결될 예정)',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

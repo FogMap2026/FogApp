@@ -1,131 +1,117 @@
 package com.fogapp.visit;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 /**
- * 인증 사진 URL 출처 검증(#56 리뷰 후속). 컨테이너 없이 순수 로직만 본다.
+ * 인증 사진 URL 출처 검증(#48). 컨테이너 없이 순수 로직만 본다.
+ *
+ * <p>사진을 서버가 직접 보관하므로(팀 결정 B안), 검증 대상은 Firebase 다운로드 URL이 아니라
+ * 업로드 응답이 돌려준 상대 경로 {@code /api/visits/photos/{uid}/{spotId}/{파일}} 이다.</p>
  */
 class VisitPhotoUrlValidatorTest {
 
-    private static final String BUCKET = "fogmap-9355b.firebasestorage.app";
     private static final String UID = "abc123UID";
     private static final Long SPOT_ID = 42L;
 
-    private static VisitPhotoUrlValidator validator(String bucket, boolean firebaseEnabled) {
-        VisitProperties props = new VisitProperties();
-        props.setStorageBucket(bucket);
-        return new VisitPhotoUrlValidator(props, firebaseEnabled);
+    private final VisitPhotoUrlValidator sut = new VisitPhotoUrlValidator();
+
+    private static String photoUrl(String uid, Object spotId, String fileName) {
+        return "/api/visits/photos/" + uid + "/" + spotId + "/" + fileName;
     }
 
-    private static String downloadUrl(String objectPath) {
-        // Firebase 다운로드 URL은 객체 경로를 퍼센트 인코딩해 담는다.
-        return "https://firebasestorage.googleapis.com/v0/b/" + BUCKET + "/o/"
-                + objectPath.replace("/", "%2F") + "?alt=media&token=6f0c6d1e-abc";
+    @Test
+    void 본인_경로면_통과한다() {
+        String url = photoUrl(UID, SPOT_ID, "1712345678901-0a1b2c3d4e5f6071.jpg");
+
+        assertThatCode(() -> sut.validate(url, UID, SPOT_ID)).doesNotThrowAnyException();
     }
 
-    @Nested
-    class 버킷이_설정된_경우 {
+    @Test
+    void 남의_UID_경로면_거부한다() {
+        String url = photoUrl("SOMEONE_ELSE", SPOT_ID, "1.jpg");
 
-        private final VisitPhotoUrlValidator sut = validator(BUCKET, false);
-
-        @Test
-        void 본인_경로면_통과한다() {
-            String url = downloadUrl("visits/" + UID + "/" + SPOT_ID + "/1712345678901.jpg");
-
-            assertThatCode(() -> sut.validate(url, UID, SPOT_ID)).doesNotThrowAnyException();
-        }
-
-        @Test
-        void 남의_UID_경로면_거부한다() {
-            String url = downloadUrl("visits/SOMEONE_ELSE/" + SPOT_ID + "/1.jpg");
-
-            assertThatThrownBy(() -> sut.validate(url, UID, SPOT_ID))
-                    .isInstanceOf(IllegalArgumentException.class);
-        }
-
-        @Test
-        void 다른_스팟_경로면_거부한다() {
-            String url = downloadUrl("visits/" + UID + "/999/1.jpg");
-
-            assertThatThrownBy(() -> sut.validate(url, UID, SPOT_ID))
-                    .isInstanceOf(IllegalArgumentException.class);
-        }
-
-        @Test
-        void 외부_호스트면_거부한다() {
-            assertThatThrownBy(() -> sut.validate("https://evil.com/aaa.jpg", UID, SPOT_ID))
-                    .isInstanceOf(IllegalArgumentException.class);
-        }
-
-        @Test
-        void 다른_버킷이면_거부한다() {
-            String url = "https://firebasestorage.googleapis.com/v0/b/other-bucket.app/o/"
-                    + ("visits/" + UID + "/" + SPOT_ID + "/1.jpg").replace("/", "%2F");
-
-            assertThatThrownBy(() -> sut.validate(url, UID, SPOT_ID))
-                    .isInstanceOf(IllegalArgumentException.class);
-        }
-
-        @Test
-        void visits_밖의_경로면_거부한다() {
-            String url = downloadUrl("public/" + UID + "/" + SPOT_ID + "/1.jpg");
-
-            assertThatThrownBy(() -> sut.validate(url, UID, SPOT_ID))
-                    .isInstanceOf(IllegalArgumentException.class);
-        }
-
-        @Test
-        void UID_접두사만_같은_경로를_통과시키지_않는다() {
-            // visits/abc123UIDEXTRA/... 가 visits/abc123UID/ 로 오인되면 안 된다.
-            String url = downloadUrl("visits/" + UID + "EXTRA/" + SPOT_ID + "/1.jpg");
-
-            assertThatThrownBy(() -> sut.validate(url, UID, SPOT_ID))
-                    .isInstanceOf(IllegalArgumentException.class);
-        }
-
-        @Test
-        void 스팟ID_접두사만_같은_경로를_통과시키지_않는다() {
-            // spotId=42 인데 421 경로가 통과하면 안 된다.
-            String url = downloadUrl("visits/" + UID + "/421/1.jpg");
-
-            assertThatThrownBy(() -> sut.validate(url, UID, SPOT_ID))
-                    .isInstanceOf(IllegalArgumentException.class);
-        }
-
-        @Test
-        void URL_형식이_아니면_거부한다() {
-            assertThatThrownBy(() -> sut.validate("not a url at all", UID, SPOT_ID))
-                    .isInstanceOf(IllegalArgumentException.class);
-        }
+        assertThatThrownBy(() -> sut.validate(url, UID, SPOT_ID))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
-    @Nested
-    class 버킷이_비어있는_경우 {
+    @Test
+    void 다른_스팟_경로면_거부한다() {
+        String url = photoUrl(UID, 999, "1.jpg");
 
-        private final VisitPhotoUrlValidator sut = validator("", false);
+        assertThatThrownBy(() -> sut.validate(url, UID, SPOT_ID))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 
-        @Test
-        void 검증이_꺼진다() {
-            assertThat(sut.isEnabled()).isFalse();
-        }
+    @Test
+    void 외부_URL이면_거부한다() {
+        // 서버가 보관하므로 외부 호스트 URL은 인증 근거가 될 수 없다.
+        assertThatThrownBy(() -> sut.validate("https://evil.com/aaa.jpg", UID, SPOT_ID))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 
-        @Test
-        void 어떤_URL도_통과시킨다() {
-            assertThatCode(() -> sut.validate("https://evil.com/aaa.jpg", UID, SPOT_ID))
-                    .doesNotThrowAnyException();
-        }
+    @Test
+    void 절대_URL_형태면_거부한다() {
+        // 호스트가 붙은 형태는 받지 않는다 — 업로드 응답 그대로만 통과시킨다.
+        String url = "https://api.fogapp.example.com" + photoUrl(UID, SPOT_ID, "1.jpg");
 
-        @Test
-        void firebase가_켜져_있으면_기동을_중단한다() {
-            // 검증이 꺼진 채로 실제 서비스가 뜨는 것을 막는다.
-            assertThatThrownBy(() -> validator("", true))
-                    .isInstanceOf(IllegalStateException.class)
-                    .hasMessageContaining("visit.storage-bucket");
-        }
+        assertThatThrownBy(() -> sut.validate(url, UID, SPOT_ID))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void visits_사진_경로가_아니면_거부한다() {
+        assertThatThrownBy(() -> sut.validate("/api/footprints/photos/" + UID + "/1.jpg", UID, SPOT_ID))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void 경로_이탈_시도를_거부한다() {
+        String url = "/api/visits/photos/" + UID + "/" + SPOT_ID + "/../../other/1/1.jpg";
+
+        assertThatThrownBy(() -> sut.validate(url, UID, SPOT_ID))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void UID_접두사만_같은_경로를_통과시키지_않는다() {
+        // visits/abc123UIDEXTRA/... 가 visits/abc123UID/ 로 오인되면 안 된다.
+        String url = photoUrl(UID + "EXTRA", SPOT_ID, "1.jpg");
+
+        assertThatThrownBy(() -> sut.validate(url, UID, SPOT_ID))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void 스팟ID_접두사만_같은_경로를_통과시키지_않는다() {
+        // spotId=42 인데 421 경로가 통과하면 안 된다.
+        String url = photoUrl(UID, 421, "1.jpg");
+
+        assertThatThrownBy(() -> sut.validate(url, UID, SPOT_ID))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void 하위_디렉터리를_더_판_경로는_거부한다() {
+        String url = photoUrl(UID, SPOT_ID, "sub/1.jpg");
+
+        assertThatThrownBy(() -> sut.validate(url, UID, SPOT_ID))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void 파일명이_없으면_거부한다() {
+        String url = photoUrl(UID, SPOT_ID, "");
+
+        assertThatThrownBy(() -> sut.validate(url, UID, SPOT_ID))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void photoUrl이_비면_거부한다() {
+        assertThatThrownBy(() -> sut.validate("", UID, SPOT_ID))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 }

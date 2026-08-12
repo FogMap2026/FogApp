@@ -23,11 +23,16 @@ public class VisitProperties {
     private double radiusMeters = 100;
 
     /**
-     * 인증 사진이 저장되는 Firebase Storage 버킷 (예: {@code fogmap-9355b.firebasestorage.app}).
+     * 인증 사진을 저장할 디렉터리. 서버가 직접 보관한다(팀 결정 B안).
      *
-     * <p>비어 있으면 photoUrl 출처 검증을 건너뛴다(로컬·CI). 단
-     * {@code firebase.enabled=true} 인 환경에서는 반드시 설정해야 하며,
-     * 없으면 {@link VisitPhotoUrlValidator} 가 기동을 중단시킨다.</p>
+     * <p>Firebase Storage 는 무료(Spark) 요금제에서 버킷 생성이 막혀 사용하지 않는다.
+     * 로그인(Firebase Auth)·푸시(FCM)는 그대로 쓰고 <b>사진만</b> 서버에 둔다.</p>
+     *
+     * <p>⚠️ 배포 시 이 경로를 <b>영속 볼륨</b>에 마운트해야 한다. 컨테이너 재시작으로
+     * 사라지면 이미 인증된 방문의 사진이 통째로 유실된다(Phase 7 배포 구성 항목).</p>
      */
-    private String storageBucket = "";
+    private String photoStoragePath = "./data/visit-photos";
+
+    /** 인증 사진 1장당 허용 최대 바이트. 앱이 업로드 전에 리사이즈·압축하는 것을 전제로 한다. */
+    private long maxPhotoBytes = 5L * 1024 * 1024;
 }
