@@ -13,7 +13,7 @@ import 'spot_service.dart';
 /// 스팟이 매우 밀집한 지역에서 마커 수가 많아지면 클러스터링이 필요할 수 있다 —
 /// 지금은 반경([_radiusMeters])으로 요청량을 제한하는 선에서 대응한다.
 class SpotMarkerController {
-  SpotMarkerController(this._mapController, this._spotService, {this.onSpotsLoaded});
+  SpotMarkerController(this._mapController, this._spotService, {this.onSpotsLoaded, this.onSpotTapped});
 
   final NaverMapController _mapController;
   final SpotService _spotService;
@@ -21,6 +21,9 @@ class SpotMarkerController {
   /// 스팟 목록을 새로 불러올 때마다 호출된다. geofencing(#45)이 별도 API 호출 없이
   /// 이 목록을 후보로 재사용할 수 있도록 노출하는 용도.
   final void Function(List<Spot> spots)? onSpotsLoaded;
+
+  /// 마커를 탭했을 때 호출된다(#70 발자취 작성 진입점).
+  final void Function(Spot spot)? onSpotTapped;
 
   static const _radiusMeters = 5000.0;
 
@@ -53,13 +56,18 @@ class SpotMarkerController {
   }
 
   NMarker _toMarker(Spot spot) {
-    return NMarker(
+    final marker = NMarker(
       id: 'spot-${spot.id}',
       position: NLatLng(spot.lat, spot.lng),
       // unlocked 스팟은 Phase 3에서 실제 정보를 담은 마커로 대체될 예정이라
       // 지금은 항상 숨김 톤으로 그린다 (서버도 현재 unlocked=false만 내려준다).
       iconTintColor: spot.unlocked ? Colors.transparent : _hiddenTint,
     );
+    final onTapped = onSpotTapped;
+    if (onTapped != null) {
+      marker.setOnTapListener((_) => onTapped(spot));
+    }
+    return marker;
   }
 
   void dispose() {
