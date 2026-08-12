@@ -35,4 +35,26 @@ public class VisitProperties {
 
     /** 인증 사진 1장당 허용 최대 바이트. 앱이 업로드 전에 리사이즈·압축하는 것을 전제로 한다. */
     private long maxPhotoBytes = 5L * 1024 * 1024;
+
+    /**
+     * 인증되지 않은 사진을 남겨두는 시간(시간 단위, #76).
+     *
+     * <p>업로드와 인증이 분리돼 있어, 방금 올린 사진은 아직 참조가 없는 게 정상이다.
+     * 이 시간이 지난 뒤에도 {@code visits}가 가리키지 않으면 고아로 보고 정리한다.
+     * 너무 짧으면 사용자가 사진을 확인하는 동안 파일이 사라진다.</p>
+     */
+    private long photoRetentionHours = 24;
+
+    /** 고아 사진 정리 배치 설정(#76). */
+    private final PhotoCleanup photoCleanup = new PhotoCleanup();
+
+    @Getter
+    @Setter
+    public static class PhotoCleanup {
+
+        /** 기본 off — 로컬·CI 에서 파일이 예고 없이 사라지지 않게 한다. 배포 환경에서 켠다. */
+        private boolean enabled = false;
+
+        private String cron = "0 10 4 * * *";
+    }
 }

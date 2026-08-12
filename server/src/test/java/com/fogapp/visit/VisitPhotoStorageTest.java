@@ -149,6 +149,33 @@ class VisitPhotoStorageTest {
     }
 
     @Test
+    void 같은_스팟에_다시_올리면_이전_사진은_지운다() throws IOException {
+        // #76: 업로드에는 반경 검사가 없어, 상한이 없으면 한 계정이 같은 스팟에 무한히 쌓을 수 있다.
+        String first = sut.store(UID, SPOT_ID, jpeg(new byte[]{1}));
+        String second = sut.store(UID, SPOT_ID, jpeg(new byte[]{2}));
+
+        Path dir = tempDir.resolve(UID).resolve(String.valueOf(SPOT_ID));
+        try (var files = Files.list(dir)) {
+            assertThat(files).hasSize(1);
+        }
+        assertThat(sut.load(UID, String.valueOf(SPOT_ID), fileNameOf(second)).exists()).isTrue();
+        assertThat(sut.load(UID, String.valueOf(SPOT_ID), fileNameOf(first)).exists()).isFalse();
+    }
+
+    @Test
+    void 다른_스팟_사진은_건드리지_않는다() throws IOException {
+        String other = sut.store(UID, 7L, jpeg(new byte[]{1}));
+
+        sut.store(UID, SPOT_ID, jpeg(new byte[]{2}));
+
+        assertThat(sut.load(UID, "7", fileNameOf(other)).exists()).isTrue();
+    }
+
+    private static String fileNameOf(String photoUrl) {
+        return photoUrl.substring(photoUrl.lastIndexOf('/') + 1);
+    }
+
+    @Test
     void 읽을_때도_경로_이탈을_막는다() {
         assertThatThrownBy(() -> sut.load("..", "..", "1712345678901-0a1b2c3d4e5f6071.jpg"))
                 .isInstanceOf(IllegalArgumentException.class);

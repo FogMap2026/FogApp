@@ -10,6 +10,8 @@ import java.util.HexFormat;
 import java.util.Locale;
 import java.util.regex.Pattern;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
@@ -28,6 +30,8 @@ import org.springframework.web.multipart.MultipartFile;
  */
 @Component
 public class VisitPhotoStorage {
+
+    private static final Logger log = LoggerFactory.getLogger(VisitPhotoStorage.class);
 
     /** 경로에 들어갈 수 있는 안전한 문자만 허용한다 — 경로 이탈(../)·구분자 삽입 차단. */
     private static final Pattern SAFE_SEGMENT = Pattern.compile("[A-Za-z0-9._-]{1,128}");
@@ -72,6 +76,10 @@ public class VisitPhotoStorage {
 
         try {
             Files.createDirectories(dir);
+            // 스팟당 1장만 남긴다(#76). 정복은 visits (user_id, spot_id) 유니크로 1인 1회라
+            // 한 사람이 한 스팟에 여러 장을 가질 이유가 없다. 이걸로 한 사용자의 최대 사용량이
+            // "스팟 수 × 장당 상한"으로 묶이고, 재업로드가 누적되지 않는다.
+            deleteExistingPhotos(dir);
             try (InputStream in = file.getInputStream()) {
                 Files.copy(in, dir.resolve(fileName), StandardCopyOption.REPLACE_EXISTING);
             }
@@ -110,6 +118,38 @@ public class VisitPhotoStorage {
             return "image/webp";
         }
         return "image/jpeg";
+    }
+
+    /**
+     * 같은 스팟 디렉터리의 기존 사진을 지운다(#76).
+     *
+     * <p>지우지 못한 파일이 있어도 업로드는 계속한다 — 정리 실패로 인증 자체를 막을 이유는 없다.
+     * 남은 파일은 {@link VisitPhotoCleaner}가 나중에 걷어간다.</p>
+     */
+    private void deleteExistingPhotos(Path dir) throws IOException {
+        if (!Files.isDirectory(dir)) {
+            return;
+        }
+        try (var entries = Files.list(dir)) {
+            entries.filter(Files::isRegularFile).forEach(p -> {
+                try {
+                    Files.deleteIfExists(p);
+                } catch (IOException e) {
+                    log.warn("이전 인증 사진을 지우지 못했습니다: {}", p, e);
+                }
+            });
+        }
+    }
+
+    /** 저장 루트. 고아 파일 정리(#76)가 훑을 대상이다. */
+    Path root() {
+        return root;
+    }
+
+    /** 파일 경로를 {@code photoUrl} 형태로 되돌린다. 고아 판정 시 DB 값과 대조하는 데 쓴다(#76). */
+    String toPhotoUrl(Path file) {
+        Path relative = root.relativize(file.normalize());
+        return "/api/visits/photos/" + relative.toString().replace(java.io.File.separatorChar, '/');
     }
 
     private Path resolveDir(String firebaseUid, String spotId) {
