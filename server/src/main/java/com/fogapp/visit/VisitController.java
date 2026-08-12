@@ -49,7 +49,7 @@ public class VisitController {
     public ResponseEntity<VisitPhotoResponse> uploadPhoto(@AuthenticationPrincipal AuthUser me,
                                                           @RequestParam("spotId") Long spotId,
                                                           @RequestParam("file") MultipartFile file) {
-        String photoUrl = photoStorage.store(me.firebaseUid(), spotId, file);
+        String photoUrl = visitService.uploadPhoto(me.firebaseUid(), spotId, file);
         return ResponseEntity.status(HttpStatus.CREATED).body(new VisitPhotoResponse(photoUrl));
     }
 

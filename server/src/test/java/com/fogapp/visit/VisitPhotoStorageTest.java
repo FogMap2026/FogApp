@@ -1,11 +1,13 @@
 package com.fogapp.visit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,6 +32,67 @@ class VisitPhotoStorageTest {
     @BeforeEach
     void setUp() {
         sut = storageWithMaxBytes(5L * 1024 * 1024);
+    }
+
+    private VisitPhotoStorage storageWithQuota(long maxBytesPerUser) {
+        VisitProperties props = new VisitProperties();
+        props.setPhotoStoragePath(tempDir.toString());
+        props.setMaxPhotoBytesPerUser(maxBytesPerUser);
+        return new VisitPhotoStorage(props);
+    }
+
+    // ── 용량 상한·정리 (#76) ─────────────────────────────────────────────
+
+    @Test
+    void 같은_스팟에_재업로드하면_이전_사진은_지워진다() throws Exception {
+        String first = sut.store(UID, SPOT_ID, jpeg(new byte[]{1}));
+        String second = sut.store(UID, SPOT_ID, jpeg(new byte[]{2}));
+
+        assertThat(first).isNotEqualTo(second);
+
+        Path dir = tempDir.resolve(UID).resolve(String.valueOf(SPOT_ID));
+        try (Stream<Path> files = Files.list(dir)) {
+            // 스팟당 1장만 남는다 — 재업로드가 쌓이면 디스크가 무한정 늘어난다.
+            assertThat(files.filter(Files::isRegularFile).toList()).hasSize(1);
+        }
+    }
+
+    @Test
+    void 다른_스팟의_사진은_지우지_않는다() throws Exception {
+        sut.store(UID, SPOT_ID, jpeg(new byte[]{1}));
+        sut.store(UID, 99L, jpeg(new byte[]{2}));
+
+        assertThat(Files.list(tempDir.resolve(UID).resolve(String.valueOf(SPOT_ID))).count()).isEqualTo(1);
+        assertThat(Files.list(tempDir.resolve(UID).resolve("99")).count()).isEqualTo(1);
+    }
+
+    @Test
+    void 사용자_총_용량을_넘으면_거부한다() {
+        VisitPhotoStorage tight = storageWithQuota(40);
+        tight.store(UID, 1L, jpeg(new byte[20]));   // 23바이트
+
+        assertThatThrownBy(() -> tight.store(UID, 2L, jpeg(new byte[20])))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("총 용량");
+    }
+
+    @Test
+    void 같은_스팟_덮어쓰기는_상한_근처에서도_허용한다() {
+        // 교체될 파일을 사용량에서 빼지 않으면, 상한에 닿은 순간 덮어쓰기조차 막힌다.
+        VisitPhotoStorage tight = storageWithQuota(40);
+        tight.store(UID, SPOT_ID, jpeg(new byte[20]));
+
+        assertThatCode(() -> tight.store(UID, SPOT_ID, jpeg(new byte[20])))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void 다른_사용자의_사용량은_내_상한에_포함되지_않는다() {
+        VisitPhotoStorage tight = storageWithQuota(40);
+        tight.store("otherUser", 1L, jpeg(new byte[20]));
+
+        assertThatCode(() -> tight.store(UID, 1L, jpeg(new byte[20])))
+                .doesNotThrowAnyException();
     }
 
     private VisitPhotoStorage storageWithMaxBytes(long maxBytes) {

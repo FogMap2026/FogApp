@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.fogapp.common.NotFoundException;
@@ -22,15 +23,18 @@ public class VisitService {
     private final SpotRepository spotRepository;
     private final VisitProperties properties;
     private final VisitPhotoUrlValidator photoUrlValidator;
+    private final VisitPhotoStorage photoStorage;
 
     public VisitService(VisitRepository visitRepository,
                         SpotRepository spotRepository,
                         VisitProperties properties,
-                        VisitPhotoUrlValidator photoUrlValidator) {
+                        VisitPhotoUrlValidator photoUrlValidator,
+                        VisitPhotoStorage photoStorage) {
         this.visitRepository = visitRepository;
         this.spotRepository = spotRepository;
         this.properties = properties;
         this.photoUrlValidator = photoUrlValidator;
+        this.photoStorage = photoStorage;
     }
 
     /**
@@ -65,6 +69,21 @@ public class VisitService {
         }
 
         return visitRepository.save(new Visit(userId, spotId, photoUrl, lat, lng));
+    }
+
+    /**
+     * 인증 사진을 업로드하고 {@code photoUrl} 을 돌려준다.
+     *
+     * <p>스팟 존재를 먼저 확인한다(#76) — 없는 스팟 id 로도 업로드가 되면 디스크만 채우고
+     * 영원히 인증에 쓰이지 못하는 파일이 쌓인다. 반경 검증은 여기서 하지 않는다.
+     * 사진을 찍는 시점과 인증하는 시점이 다를 수 있고, 위치 검증은 {@link #verify} 몫이다.</p>
+     */
+    @Transactional(readOnly = true)
+    public String uploadPhoto(String firebaseUid, Long spotId, MultipartFile file) {
+        if (!spotRepository.existsById(spotId)) {
+            throw new NotFoundException("스팟", spotId);
+        }
+        return photoStorage.store(firebaseUid, spotId, file);
     }
 
     /** 내 인증 목록(최신순). 앱이 걷힌 안개 영역을 복원할 때 쓴다. */

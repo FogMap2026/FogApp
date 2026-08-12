@@ -9,6 +9,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.HexFormat;
 import java.util.Locale;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
@@ -37,10 +38,12 @@ public class VisitPhotoStorage {
 
     private final Path root;
     private final long maxBytes;
+    private final long maxBytesPerUser;
 
     public VisitPhotoStorage(VisitProperties properties) {
         this.root = Paths.get(properties.getPhotoStoragePath()).toAbsolutePath().normalize();
         this.maxBytes = properties.getMaxPhotoBytes();
+        this.maxBytesPerUser = properties.getMaxPhotoBytesPerUser();
     }
 
     /**
@@ -66,20 +69,92 @@ public class VisitPhotoStorage {
         // 확장자·Content-Type 은 클라이언트가 마음대로 보낼 수 있다. 실제 바이트로 판정한다.
         ImageType type = sniff(file);
 
+        requireUnderUserQuota(firebaseUid, file.getSize(), spotId);
+
         String fileName = System.currentTimeMillis() + "-" + randomHex() + "." + type.extension();
         Path dir = resolveDir(firebaseUid, String.valueOf(spotId));
         requireInsideRoot(dir);
 
+        Path target = dir.resolve(fileName);
         try {
             Files.createDirectories(dir);
             try (InputStream in = file.getInputStream()) {
-                Files.copy(in, dir.resolve(fileName), StandardCopyOption.REPLACE_EXISTING);
+                Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
             }
         } catch (IOException e) {
             throw new IllegalStateException("사진을 저장하지 못했습니다.", e);
         }
 
+        // 스팟당 1장만 남긴다(#76). 정복은 1인 1회(visits 유니크)라 한 스팟에 여러 장을
+        // 가질 이유가 없고, 재업로드가 쌓이는 것도 막는다.
+        //
+        // 순서가 중요하다 — 새 파일을 쓴 뒤에 지운다. 반대로 하면 복사가 실패했을 때
+        // 기존 사진까지 잃는다. 지우기가 실패해도 업로드 자체는 성공으로 둔다(다음 업로드가 정리).
+        deleteSiblingsOf(dir, fileName);
+
         return "/api/visits/photos/" + firebaseUid + "/" + spotId + "/" + fileName;
+    }
+
+    /**
+     * 사용자 총 사용량이 상한을 넘지 않는지 확인한다(#76).
+     *
+     * <p>같은 스팟에 재업로드하는 경우 기존 파일이 곧 교체되므로 그 디렉터리는 사용량에서 뺀다 —
+     * 빼지 않으면 상한 근처에서 "덮어쓰기"조차 거부되는 이상한 상태가 된다.</p>
+     */
+    private void requireUnderUserQuota(String firebaseUid, long incomingBytes, Long spotId) {
+        Path userDir = root.resolve(firebaseUid).normalize();
+        requireInsideRoot(userDir);
+        if (!Files.isDirectory(userDir)) {
+            return;
+        }
+
+        Path replacing = userDir.resolve(String.valueOf(spotId)).normalize();
+        long used = directorySize(userDir) - directorySize(replacing);
+
+        if (used + incomingBytes > maxBytesPerUser) {
+            throw new IllegalArgumentException(
+                    "인증 사진 총 용량이 " + (maxBytesPerUser / (1024 * 1024)) + "MB 를 넘습니다. "
+                            + "기존 인증 사진을 정리한 뒤 다시 시도해 주세요.");
+        }
+    }
+
+    /** 디렉터리 내 파일 크기 합. 없으면 0. 조회 실패는 0으로 보고 업로드를 막지 않는다. */
+    private static long directorySize(Path dir) {
+        if (!Files.isDirectory(dir)) {
+            return 0;
+        }
+        try (Stream<Path> paths = Files.walk(dir)) {
+            return paths.filter(Files::isRegularFile).mapToLong(VisitPhotoStorage::sizeOf).sum();
+        } catch (IOException e) {
+            // 용량 계산이 실패했다고 업로드를 막으면 저장 자체가 불가능해진다.
+            // 상한은 방어선이지 필수 경로가 아니므로 0으로 보고 통과시킨다.
+            return 0;
+        }
+    }
+
+    private static long sizeOf(Path path) {
+        try {
+            return Files.size(path);
+        } catch (IOException e) {
+            return 0;
+        }
+    }
+
+    /** {@code dir} 안에서 {@code keep} 을 제외한 파일을 지운다. */
+    private static void deleteSiblingsOf(Path dir, String keep) {
+        try (Stream<Path> paths = Files.list(dir)) {
+            paths.filter(Files::isRegularFile)
+                    .filter(p -> !p.getFileName().toString().equals(keep))
+                    .forEach(p -> {
+                        try {
+                            Files.deleteIfExists(p);
+                        } catch (IOException ignored) {
+                            // 다음 업로드가 다시 정리한다.
+                        }
+                    });
+        } catch (IOException ignored) {
+            // 위와 같다 — 정리 실패가 업로드를 실패시키면 안 된다.
+        }
     }
 
     /**
