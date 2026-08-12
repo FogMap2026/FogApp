@@ -3,6 +3,7 @@ package com.fogapp.footprint;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -75,6 +76,52 @@ class FootprintControllerIT {
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(body).get("id").asLong();
+    }
+
+    @Test
+    void 발자취_응답에_작성자_닉네임과_프로필이_담긴다() throws Exception {
+        // #71: userId 만 내려주면 앱이 사용자마다 프로필을 따로 조회해야 하는데,
+        // GET /api/profile 은 본인 것만 주므로 남의 프로필을 볼 방법 자체가 없다.
+        loginAs("alice-token", "uid-alice");
+        createFootprintAs("alice-token", "앨리스 글");
+        jdbcTemplate.update(
+                "UPDATE users SET nickname = ?, profile_image_url = ? WHERE firebase_uid = ?",
+                "앨리스", "https://cdn.example.com/alice.png", "uid-alice");
+
+        mockMvc.perform(get("/api/footprints?spotId=" + spotId)
+                        .header("Authorization", "Bearer alice-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].authorNickname").value("앨리스"))
+                .andExpect(jsonPath("$[0].authorProfileImageUrl").value("https://cdn.example.com/alice.png"));
+    }
+
+    @Test
+    void 닉네임이_없는_작성자도_목록이_내려간다() throws Exception {
+        // 가입 직후 닉네임을 정하지 않은 사용자가 있다. 작성자 이름을 못 찾았다고
+        // 목록 전체가 실패하면 안 된다 — 화면에서 대체 문구를 쓰게 null 로 내려보낸다.
+        loginAs("dave-token", "uid-dave");
+        createFootprintAs("dave-token", "닉네임 없는 글");
+        jdbcTemplate.update("UPDATE users SET nickname = NULL WHERE firebase_uid = ?", "uid-dave");
+
+        mockMvc.perform(get("/api/footprints?spotId=" + spotId)
+                        .header("Authorization", "Bearer dave-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].authorNickname").doesNotExist())
+                .andExpect(jsonPath("$[0].content").value("닉네임 없는 글"));
+    }
+
+    @Test
+    void 발자취가_없는_스팟은_빈_목록을_돌려준다() throws Exception {
+        // 작성자 조회가 IN () 으로 깨지지 않는지 확인한다.
+        loginAs("alice-token", "uid-alice");
+        Long emptySpotId = jdbcTemplate.queryForObject(
+                "INSERT INTO spots (content_id, title) VALUES (?, ?) RETURNING id",
+                Long.class, "content-empty-" + System.nanoTime(), "빈 스팟");
+
+        mockMvc.perform(get("/api/footprints?spotId=" + emptySpotId)
+                        .header("Authorization", "Bearer alice-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
     }
 
     @Test

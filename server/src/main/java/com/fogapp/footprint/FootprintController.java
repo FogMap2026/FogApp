@@ -41,12 +41,12 @@ public class FootprintController {
                                                       @Valid @RequestBody FootprintCreateRequest request) {
         Footprint footprint = footprintService.create(
                 me.userId(), request.spotId(), request.content(), request.photoUrl());
-        return ResponseEntity.status(HttpStatus.CREATED).body(FootprintResponse.from(footprint));
+        return ResponseEntity.status(HttpStatus.CREATED).body(footprintService.withAuthor(footprint));
     }
 
     @GetMapping("/{id}")
     public FootprintResponse get(@PathVariable Long id) {
-        return FootprintResponse.from(footprintService.get(id));
+        return footprintService.withAuthor(footprintService.get(id));
     }
 
     @GetMapping
@@ -61,13 +61,13 @@ public class FootprintController {
         } else {
             throw new IllegalArgumentException("spotId 또는 userId 중 하나는 필수입니다.");
         }
-        return footprints.stream().map(FootprintResponse::from).toList();
+        return footprintService.withAuthors(footprints);
     }
 
     @PatchMapping("/{id}")
     public FootprintResponse update(@AuthenticationPrincipal AuthUser me, @PathVariable Long id,
                                      @Valid @RequestBody FootprintUpdateRequest request) {
-        return FootprintResponse.from(
+        return footprintService.withAuthor(
                 footprintService.update(me.userId(), id, request.content(), request.photoUrl()));
     }
 
