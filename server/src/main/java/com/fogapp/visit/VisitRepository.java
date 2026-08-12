@@ -1,6 +1,8 @@
 package com.fogapp.visit;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -13,6 +15,18 @@ public interface VisitRepository extends JpaRepository<Visit, Long> {
 
     /** 내 인증 목록(최신순). 3-5 안개 해제 영역 복원과 3-6 해금 판정이 소비한다. */
     List<Visit> findByUserIdOrderByVerifiedAtDesc(Long userId);
+
+    /**
+     * 주어진 스팟들 중 이 사용자가 인증한 것의 id(#50 해금 판정).
+     *
+     * <p>스팟 하나하나 {@code existsByUserIdAndSpotId} 를 부르면 응답 한 번에 최대 200 번(페이지 상한)
+     * 질의하게 된다. 한 번에 가져와 메모리에서 대조한다.</p>
+     *
+     * <p>사용자의 <b>전체</b> 인증을 가져오지 않고 조회 대상으로 좁히는 이유: 전체는 사용자가
+     * 탐험할수록 무한정 커지지만, 이 방식은 페이지 크기를 넘지 않는다.</p>
+     */
+    @Query("SELECT v.spotId FROM Visit v WHERE v.userId = :userId AND v.spotId IN :spotIds")
+    Set<Long> findVisitedSpotIds(@Param("userId") Long userId, @Param("spotIds") Collection<Long> spotIds);
 
     /**
      * 인증 좌표가 스팟 반경(m) 안인지 DB에서 판정한다(#48 서버측 검증).
