@@ -33,8 +33,8 @@ Firebase 프로젝트 소유자/편집자 권한이 있는 사람이 직접 수�
 
 ## 2. 앱 설정 파일 발급 (Flutter — `flutterfire configure`)
 
-앱은 아직 `firebase_options.dart`가 없는 상태이며(`app/lib/main.dart`의 TODO 참고),
-이 항목이 완료되어야 연결할 수 있습니다.
+> ✅ **Android는 완료**입니다 — `firebase_options.dart` · `android/app/google-services.json` 커밋됨.
+> ⏸ **iOS `GoogleService-Info.plist`만 남았습니다.** 아래 2-1 참고.
 
 1. Firebase 콘솔에서 Android/iOS 앱 등록 (패키지명/번들 ID는 `app/android`, `app/ios`
    스캐폴딩 확정 후 UI 담당(@oorony)과 함께 결정)
@@ -48,6 +48,35 @@ Firebase 프로젝트 소유자/편집자 권한이 있는 사람이 직접 수�
    - 🔒 커밋으로 공유하는 대신 **콘솔에서 API 키 사용처를 제한**해야 합니다 (아래 4장 체크리스트).
 3. `app/lib/main.dart`의 `Firebase.initializeApp()` 호출에 생성된 `options`를 연결
    (연결 작업은 @oorony에게 핸드오프)
+
+### 2-1. iOS `GoogleService-Info.plist` — **Mac 없이 받을 수 있습니다**
+
+Windows에서 `flutterfire configure`를 돌리면 iOS 설정 파일이 생성되지 않을 수 있는데,
+**이건 Mac이 없어서가 아니라 CLI 동작의 문제입니다.** 파일 자체는 콘솔에서 웹으로 내려받습니다.
+
+1. [Firebase 콘솔](https://console.firebase.google.com/) → 프로젝트 설정 → **내 앱 → iOS 앱 추가**
+2. **번들 ID: `com.fogapp.fogapp`** (`app/ios/Runner.xcodeproj` 에 이미 설정돼 있음 — 반드시 일치시킬 것)
+3. `GoogleService-Info.plist` 다운로드
+4. **`app/ios/Runner/` 에 넣고 커밋** (클라이언트 설정이므로 커밋 대상 — 3-2 정책)
+
+> 이 파일이 없어도 `firebase_options.dart` 에 iOS 설정이 들어 있어 빌드와 초기화는 됩니다.
+> 다만 일부 네이티브 SDK가 이 파일을 직접 읽으므로, iOS를 실제로 돌리기 전에는 넣어야 합니다.
+
+### 2-2. iOS 권한 문구 (`Info.plist`)
+
+iOS는 권한 문구가 없으면 **해당 기능을 쓰는 순간 앱이 죽습니다. 그런데 빌드는 통과합니다** —
+CI로 못 잡는 종류라 네이티브 기능을 추가할 때마다 직접 확인해야 합니다.
+
+현재 `app/ios/Runner/Info.plist` 에 들어 있는 문구:
+
+| 키 | 용도 |
+|----|------|
+| `NSLocationUsageDescription` · `NSLocationWhenInUseUsageDescription` | 지도 내 위치·근접 감지 |
+| `NSCameraUsageDescription` | 방문 인증 사진 촬영 |
+| `NSMotionUsageDescription` | 나침반(바라보는 방향) |
+
+> 백그라운드 위치(Phase 6, 6-5)를 도입하면 `NSLocationAlwaysAndWhenInUseUsageDescription` 와
+> 백그라운드 모드 설정이 추가로 필요합니다.
 
 ## 3. 서버 — 서비스 계정 키 발급 (ID 토큰 검증용)
 

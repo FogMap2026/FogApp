@@ -273,6 +273,9 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     );
     _cameraSubscription = controller.nowCameraPositionStream.listen(_onCameraChanged);
     if (mounted) setState(() => _mapReady = true);
+    // flutter_naver_map 이 experimental 로 표시한 API 지만, 초기 카메라 위치를 얻을
+    // 다른 경로가 없다. SDK 가 정식 API 를 제공하면 교체할 것.
+    // ignore: experimental_member_use
     final initialTarget = controller.nowCameraPosition.target;
     unawaited(_lookupRegion(initialTarget));
     unawaited(_spotMarkers?.loadAround(initialTarget));
@@ -490,7 +493,7 @@ class _TopInfoBar extends StatelessWidget {
     final rateLabel = rate == null ? '정복률 --%' : '정복률 ${(rate * 100).round()}%';
 
     return Material(
-      color: theme.colorScheme.surface.withOpacity(0.92),
+      color: theme.colorScheme.surface.withValues(alpha: 0.92),
       elevation: 2,
       borderRadius: BorderRadius.circular(12),
       child: Padding(
@@ -580,7 +583,7 @@ class _MapControls extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Theme.of(context).colorScheme.surface.withOpacity(0.92),
+      color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.92),
       elevation: 2,
       borderRadius: BorderRadius.circular(12),
       child: Column(
