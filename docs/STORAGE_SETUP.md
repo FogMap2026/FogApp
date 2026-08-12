@@ -51,6 +51,10 @@ Firebase Storage였다면 Security Rules가 해 줬을 방어를 서버 코드�
 |------|------|------|
 | **본인 경로에만 쓰기** | 저장 경로의 `{uid}`를 인증 토큰의 `AuthUser.firebaseUid`로만 만든다. 요청으로 받지 않는다 | `VisitPhotoStorage.store()` |
 | **용량 제한** | 5MB 초과 거부 (`visit.max-photo-bytes`) | `VisitPhotoStorage.store()` |
+| **총량 제한** | 스팟당 1장만 유지 + 사용자당 총 200MB (`visit.max-photo-bytes-per-user`) | `VisitPhotoStorage.store()` |
+| **없는 스팟 차단** | 존재하지 않는 `spotId` 업로드는 404 | `VisitService.uploadPhoto()` |
+| **재업로드 차단** | 이미 인증한 스팟은 409 — 기존 사진이 지워지지 않게 | `VisitService.uploadPhoto()` |
+| **고아 파일 정리** | `visits`가 참조하지 않는 오래된 파일 제거 | `VisitPhotoCleaner` |
 | **형식 제한** | JPEG·PNG·WebP만. **매직 바이트로 판정** — 확장자·Content-Type 위장을 막는다 | `VisitPhotoStorage.sniff()` |
 | **경로 이탈 차단** | 파일명은 서버가 생성. 경로 조각 검증 + 최종 경로가 루트 밖이면 거부 | `VisitPhotoStorage` |
 | **남의 사진으로 인증 금지** | `photoUrl`이 본인 `{uid}/{spotId}` 경로인지 대조 | `VisitPhotoUrlValidator` |
@@ -71,6 +75,11 @@ Firebase Storage였다면 Security Rules가 해 줬을 방어를 서버 코드�
 visit:
   photo-storage-path: ${VISIT_PHOTO_STORAGE_PATH:./data/visit-photos}
   max-photo-bytes: ${VISIT_MAX_PHOTO_BYTES:5242880}   # 5MB
+  max-photo-bytes-per-user: ${VISIT_MAX_PHOTO_BYTES_PER_USER:209715200}   # 200MB
+  photo-retention-hours: ${VISIT_PHOTO_RETENTION_HOURS:24}
+  photo-cleanup:
+    enabled: ${VISIT_PHOTO_CLEANUP_ENABLED:false}      # 배포 환경에서 true
+    cron: ${VISIT_PHOTO_CLEANUP_CRON:0 10 4 * * *}
 
 spring:
   servlet:
@@ -80,6 +89,20 @@ spring:
 ```
 
 > `max-photo-bytes`와 `multipart.max-file-size`는 **함께 움직여야 한다.** multipart 쪽이 더 작으면 서비스 검증에 닿기 전에 서블릿 컨테이너가 먼저 잘라내 오류 메시지가 달라진다.
+
+### 디스크 사용량은 어떻게 묶여 있나 (#76)
+
+업로드(`POST /api/visits/photo`)에는 **반경 검사가 없다.** 반경은 인증(`POST /api/visits`) 단계의 조건이라, 업로드만 반복하면 한 계정이 임의의 `spotId`로 계속 파일을 쌓을 수 있다. 네 겹으로 묶는다.
+
+1. **올릴 수 있는 스팟인지 먼저 확인.** 없는 `spotId`면 404, 이미 인증한 스팟이면 409 — 둘 다 **파일에 손대기 전에** 끊는다. 없는 스팟에 올린 파일은 영원히 인증에 쓰이지 못하고, 이미 인증한 스팟에 다시 올리면 (2) 때문에 **이미 기록된 방문의 사진이 지워진다.**
+2. **스팟당 1장.** 같은 `{uid}/{spotId}` 디렉터리에 다시 올리면 이전 파일을 지운다. 정복은 `visits (user_id, spot_id)` 유니크라 한 사람이 한 스팟에 여러 장을 가질 이유가 없다. 재업로드가 누적되지 않는다.
+   > **순서가 중요하다** — 새 파일을 **쓴 뒤에** 지운다. 반대로 하면 복사가 실패했을 때 새 사진도 옛 사진도 없는 상태가 된다.
+3. **사용자당 총량 상한(기본 200MB).** (2)만으로는 부족하다 — 스팟당 1장이어도 전국 스팟이 수만 개라 한 계정이 수백 GB를 점유할 수 있다. 같은 스팟에 덮어쓰는 경우 교체될 디렉터리를 사용량에서 빼야 한다(빼지 않으면 상한 근처에서 덮어쓰기조차 거부된다).
+4. **고아 파일 정리.** 업로드 후 인증이 422(반경 밖)로 실패하면 사진만 남는다. `VisitPhotoCleaner`가 `visits.photo_url`과 대조해 참조 없는 파일을 지운다.
+
+> ⚠️ **유예 시간(`photo-retention-hours`)을 0에 가깝게 낮추지 말 것.** 방금 올린 사진은 인증 전이라 **정상적으로** 참조가 없다. 유예 없이 지우면 사용자가 사진을 확인하는 동안 파일이 사라져, 원인을 알 수 없는 인증 실패가 된다.
+
+정리 배치는 **기본 off**다. 로컬·CI에서 파일이 예고 없이 사라지지 않게 하기 위함이며, 켜는 것은 배포 환경의 선택이다.
 
 ### 로컬 실행
 
@@ -97,6 +120,7 @@ volumes:
   - fogapp_photos:/app/data/visit-photos
 environment:
   VISIT_PHOTO_STORAGE_PATH: /app/data/visit-photos
+  VISIT_PHOTO_CLEANUP_ENABLED: "true"   # 고아 사진 정리 배치(#76) — 배포에서 켠다
 ```
 
 백업 대상에도 DB와 함께 이 디렉터리를 포함할 것.
@@ -111,11 +135,12 @@ environment:
   | 코드 | 의미 | 안내 |
   |---|---|---|
   | 201 | 업로드/인증 성공 | — |
-  | 400 | 형식·용량 문제 | "JPEG·PNG·WebP 5MB 이하만 가능" |
+  | 400 | 형식·용량 문제 | "JPEG·PNG·WebP 5MB 이하만 가능" / 총량 초과 시 서버 메시지 그대로 |
   | 401 | 미인증 | 로그인 유도 |
+  | 404 | 없는 스팟 | "스팟 정보를 찾을 수 없습니다" |
   | 409 | 이미 인증한 스팟 | "이미 정복한 곳입니다" |
   | 422 | 스팟 반경 밖 | "조금 더 가까이 가주세요" |
-- ⚠️ 인증(②)이 실패해도 업로드된 사진(①)은 서버에 남는다. 고아 파일 정리는 후속 과제로 둔다.
+- ⚠️ 인증(②)이 반경 밖(422)으로 실패하면 업로드된 사진(①)은 서버에 남는다. 유예 시간 뒤 `VisitPhotoCleaner`가 정리한다.
 
 ---
 

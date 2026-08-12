@@ -11,6 +11,8 @@ import java.util.Locale;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
@@ -29,6 +31,8 @@ import org.springframework.web.multipart.MultipartFile;
  */
 @Component
 public class VisitPhotoStorage {
+
+    private static final Logger log = LoggerFactory.getLogger(VisitPhotoStorage.class);
 
     /** 경로에 들어갈 수 있는 안전한 문자만 허용한다 — 경로 이탈(../)·구분자 삽입 차단. */
     private static final Pattern SAFE_SEGMENT = Pattern.compile("[A-Za-z0-9._-]{1,128}");
@@ -81,16 +85,16 @@ public class VisitPhotoStorage {
             try (InputStream in = file.getInputStream()) {
                 Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
             }
+            // 스팟당 1장만 남긴다(#76). 정복은 visits (user_id, spot_id) 유니크로 1인 1회라
+            // 한 사람이 한 스팟에 여러 장을 가질 이유가 없다. 이걸로 한 사용자의 최대 사용량이
+            // "스팟 수 × 장당 상한"으로 묶이고, 재업로드가 누적되지 않는다.
+            //
+            // 순서가 중요하다 — 새 파일을 쓴 "뒤에" 지운다. 반대로 하면 복사가 실패했을 때
+            // 새 사진도 옛 사진도 없는 상태가 된다(#79 리뷰).
+            deleteOtherPhotos(dir, fileName);
         } catch (IOException e) {
             throw new IllegalStateException("사진을 저장하지 못했습니다.", e);
         }
-
-        // 스팟당 1장만 남긴다(#76). 정복은 1인 1회(visits 유니크)라 한 스팟에 여러 장을
-        // 가질 이유가 없고, 재업로드가 쌓이는 것도 막는다.
-        //
-        // 순서가 중요하다 — 새 파일을 쓴 뒤에 지운다. 반대로 하면 복사가 실패했을 때
-        // 기존 사진까지 잃는다. 지우기가 실패해도 업로드 자체는 성공으로 둔다(다음 업로드가 정리).
-        deleteSiblingsOf(dir, fileName);
 
         return "/api/visits/photos/" + firebaseUid + "/" + spotId + "/" + fileName;
     }
@@ -140,23 +144,6 @@ public class VisitPhotoStorage {
         }
     }
 
-    /** {@code dir} 안에서 {@code keep} 을 제외한 파일을 지운다. */
-    private static void deleteSiblingsOf(Path dir, String keep) {
-        try (Stream<Path> paths = Files.list(dir)) {
-            paths.filter(Files::isRegularFile)
-                    .filter(p -> !p.getFileName().toString().equals(keep))
-                    .forEach(p -> {
-                        try {
-                            Files.deleteIfExists(p);
-                        } catch (IOException ignored) {
-                            // 다음 업로드가 다시 정리한다.
-                        }
-                    });
-        } catch (IOException ignored) {
-            // 위와 같다 — 정리 실패가 업로드를 실패시키면 안 된다.
-        }
-    }
-
     /**
      * 저장된 사진을 읽는다. 경로 조각은 모두 검증하며, 최종 경로가 루트 밖이면 거부한다.
      *
@@ -185,6 +172,43 @@ public class VisitPhotoStorage {
             return "image/webp";
         }
         return "image/jpeg";
+    }
+
+    /**
+     * 같은 스팟 디렉터리에서 방금 쓴 파일을 뺀 나머지를 지운다(#76).
+     *
+     * <p>반드시 새 파일을 <b>쓴 뒤에</b> 부른다. 먼저 지우면 복사가 실패했을 때
+     * 새 사진도 옛 사진도 없는 상태가 된다.</p>
+     *
+     * <p>지우지 못한 파일이 있어도 업로드는 계속한다 — 정리 실패로 인증 자체를 막을 이유는 없다.
+     * 남은 파일은 {@link VisitPhotoCleaner}가 나중에 걷어간다.</p>
+     */
+    private void deleteOtherPhotos(Path dir, String keepFileName) throws IOException {
+        if (!Files.isDirectory(dir)) {
+            return;
+        }
+        try (var entries = Files.list(dir)) {
+            entries.filter(Files::isRegularFile)
+                    .filter(p -> !p.getFileName().toString().equals(keepFileName))
+                    .forEach(p -> {
+                        try {
+                            Files.deleteIfExists(p);
+                        } catch (IOException e) {
+                            log.warn("이전 인증 사진을 지우지 못했습니다: {}", p, e);
+                        }
+                    });
+        }
+    }
+
+    /** 저장 루트. 고아 파일 정리(#76)가 훑을 대상이다. */
+    Path root() {
+        return root;
+    }
+
+    /** 파일 경로를 {@code photoUrl} 형태로 되돌린다. 고아 판정 시 DB 값과 대조하는 데 쓴다(#76). */
+    String toPhotoUrl(Path file) {
+        Path relative = root.relativize(file.normalize());
+        return "/api/visits/photos/" + relative.toString().replace(java.io.File.separatorChar, '/');
     }
 
     private Path resolveDir(String firebaseUid, String spotId) {

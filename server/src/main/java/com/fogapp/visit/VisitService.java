@@ -74,14 +74,27 @@ public class VisitService {
     /**
      * 인증 사진을 업로드하고 {@code photoUrl} 을 돌려준다.
      *
-     * <p>스팟 존재를 먼저 확인한다(#76) — 없는 스팟 id 로도 업로드가 되면 디스크만 채우고
-     * 영원히 인증에 쓰이지 못하는 파일이 쌓인다. 반경 검증은 여기서 하지 않는다.
-     * 사진을 찍는 시점과 인증하는 시점이 다를 수 있고, 위치 검증은 {@link #verify} 몫이다.</p>
+     * <p><b>파일에 손대기 전에</b> 두 가지를 확인한다(#76). 저장이 스팟당 1장만 남기므로
+     * (이전 파일 삭제), 걸러야 할 요청을 그대로 통과시키면 디스크가 쌓이거나 지워지면 안 될
+     * 사진이 지워진다.</p>
+     *
+     * <ol>
+     *   <li><b>스팟 존재</b> — 없는 스팟 id 로도 업로드가 되면 디스크만 채우고 영원히
+     *       인증에 쓰이지 못하는 파일이 남는다 (404)</li>
+     *   <li><b>미인증 상태</b> — 이미 인증한 스팟에 다시 올리면 이미 기록된 방문의 사진이
+     *       지워진다. 어차피 인증이 실패할 요청이다 (409)</li>
+     * </ol>
+     *
+     * <p>반경 검증은 여기서 하지 않는다 — 사진을 찍는 시점과 인증하는 시점이 다를 수 있고,
+     * 위치 검증은 {@link #verify} 몫이다.</p>
      */
     @Transactional(readOnly = true)
-    public String uploadPhoto(String firebaseUid, Long spotId, MultipartFile file) {
+    public String uploadPhoto(Long userId, String firebaseUid, Long spotId, MultipartFile file) {
         if (!spotRepository.existsById(spotId)) {
             throw new NotFoundException("스팟", spotId);
+        }
+        if (visitRepository.existsByUserIdAndSpotId(userId, spotId)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 인증한 스팟입니다.");
         }
         return photoStorage.store(firebaseUid, spotId, file);
     }

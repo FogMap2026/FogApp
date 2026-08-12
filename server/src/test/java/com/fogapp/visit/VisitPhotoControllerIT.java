@@ -26,6 +26,7 @@ import com.fogapp.auth.TokenVerifier;
 import com.fogapp.auth.VerifiedToken;
 import com.fogapp.spot.Spot;
 import com.fogapp.spot.SpotRepository;
+import com.fogapp.user.UserRepository;
 
 /**
  * 인증 사진 업로드·조회 엔드포인트(#48)의 접근 통제를 검증한다.
@@ -53,11 +54,17 @@ class VisitPhotoControllerIT {
     @Autowired
     private ObjectMapper objectMapper;
 
-    @MockBean
-    private TokenVerifier tokenVerifier;
+    @Autowired
+    private VisitRepository visitRepository;
+
+    @Autowired
+    private UserRepository userRepository;
 
     @Autowired
     private SpotRepository spotRepository;
+
+    @MockBean
+    private TokenVerifier tokenVerifier;
 
     /**
      * 업로드는 실제로 존재하는 스팟에만 허용된다(#76) — 하드코딩한 id 를 쓰면
@@ -137,6 +144,39 @@ class VisitPhotoControllerIT {
 
         mockMvc.perform(get(photoUrl))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void 이미_인증한_스팟에는_다시_올릴_수_없다() throws Exception {
+        // #76: 저장은 스팟당 1장만 남기므로, 막지 않으면 이미 기록된 방문의 사진이 지워진다.
+        // 어차피 인증이 409 로 실패할 요청이라 파일에 손대기 전에 끊는다.
+        loginAs("carol-token", "uid-carol");
+        String photoUrl = upload("carol-token", spotId);
+
+        Long userId = userRepository.findByFirebaseUid("uid-carol").orElseThrow().getId();
+        visitRepository.save(new Visit(userId, spotId, photoUrl, 37.5759, 126.9769));
+
+        mockMvc.perform(multipart("/api/visits/photo")
+                        .file(jpeg())
+                        .param("spotId", String.valueOf(spotId))
+                        .header("Authorization", "Bearer carol-token"))
+                .andExpect(status().isConflict());
+
+        // 기존 사진은 그대로 있어야 한다.
+        mockMvc.perform(get(photoUrl).header("Authorization", "Bearer carol-token"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void 없는_스팟에는_올릴_수_없다() throws Exception {
+        // #76: 없는 스팟 id 로도 업로드가 되면, 영원히 인증에 쓰이지 못하는 파일만 디스크에 쌓인다.
+        loginAs("dave-token", "uid-dave");
+
+        mockMvc.perform(multipart("/api/visits/photo")
+                        .file(jpeg())
+                        .param("spotId", "999999999")
+                        .header("Authorization", "Bearer dave-token"))
+                .andExpect(status().isNotFound());
     }
 
     @Test

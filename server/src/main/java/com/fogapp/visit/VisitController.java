@@ -44,12 +44,15 @@ public class VisitController {
      * 인증 사진 업로드. 저장 경로는 서버가 정하며 로그인한 사용자 본인 경로에만 쓴다.
      *
      * <p>응답의 {@code photoUrl} 을 <b>그대로</b> {@code POST /api/visits} 에 넘겨야 한다.</p>
+     *
+     * <p>이미 인증한 스팟이면 409 — 어차피 인증이 실패할 요청이고, 저장은 스팟당 1장만
+     * 남기므로 그냥 두면 이미 기록된 방문의 사진이 지워진다(#76).</p>
      */
     @PostMapping("/photo")
     public ResponseEntity<VisitPhotoResponse> uploadPhoto(@AuthenticationPrincipal AuthUser me,
                                                           @RequestParam("spotId") Long spotId,
                                                           @RequestParam("file") MultipartFile file) {
-        String photoUrl = visitService.uploadPhoto(me.firebaseUid(), spotId, file);
+        String photoUrl = visitService.uploadPhoto(me.userId(), me.firebaseUid(), spotId, file);
         return ResponseEntity.status(HttpStatus.CREATED).body(new VisitPhotoResponse(photoUrl));
     }
 

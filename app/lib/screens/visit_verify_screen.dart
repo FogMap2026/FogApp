@@ -140,10 +140,21 @@ class _VisitVerifyScreenState extends ConsumerState<VisitVerifyScreen> {
       // 여기서 에러 화면으로 덮어쓰면 안 된다.
       if (e.type == DioExceptionType.cancel) return;
       if (!mounted) return;
+      final statusCode = e.response?.statusCode;
+      // 이미 인증한 스팟은 사진 업로드 자체가 막힌다(#76) — "다시 시도"로는 해결되지
+      // 않으니 별도 메시지로 안내한다. VisitService.verify()의 같은 케이스
+      // (VisitVerifyException)와 문구를 맞췄다.
+      if (statusCode == 409) {
+        setState(() {
+          _errorMessage = '이미 인증한 스팟이에요.';
+          _stage = _Stage.error;
+        });
+        return;
+      }
       // 형식·용량 문제(400)는 서버가 이미 구체적인 한국어 메시지를 내려준다
       // (예: "사진 용량은 5MB 이하만 업로드할 수 있습니다.") — 그대로 보여준다.
       final responseData = e.response?.data;
-      final serverMessage = e.response?.statusCode == 400 && responseData is Map
+      final serverMessage = statusCode == 400 && responseData is Map
           ? responseData['message'] as String?
           : null;
       setState(() {
