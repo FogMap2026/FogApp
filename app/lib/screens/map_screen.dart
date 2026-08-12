@@ -55,13 +55,15 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
 
   /// 반경 안에 들어와 인증 가능한 스팟(#45 진입 이벤트로 채워짐, #47 진입점).
   Spot? _nearbySpot;
-  double? _myLat;
-  double? _myLng;
 
   /// 정복률(#51) 조회 결과 전체. 표시할 지역만 골라 쓴다.
   List<ConquestRegion> _conquest = const [];
   /// 카메라 중심에서 가장 가까운(=현재 보고 있는) 스팟. 정복률 표시 지역을 고르는 데 쓴다.
   Spot? _nearestLoadedSpot;
+
+  /// 마지막으로 받은 내 위치. "내 위치로 이동" 버튼(#64)과 인증 화면 진입(#47)에 쓴다.
+  double? _myLat;
+  double? _myLng;
 
   @override
   void initState() {
@@ -127,10 +129,24 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     _geofencePositionSubscription = Geolocator.getPositionStream(
       locationSettings: FogLocationTracker.locationSettings,
     ).listen((position) {
+      // 위치를 처음 받는 순간만 rebuild해서 "내 위치로 이동" 버튼을 활성화한다.
+      // 매 위치 갱신마다 다시 그릴 필요는 없다.
+      final hadLocation = _myLat != null;
       _myLat = position.latitude;
       _myLng = position.longitude;
+      if (!hadLocation && mounted) setState(() {});
       _geofence?.updatePosition(lat: position.latitude, lng: position.longitude);
     });
+  }
+
+  /// 카메라를 마지막으로 받은 내 위치로 이동한다. SDK 기본 위치 버튼
+  /// (`locationButtonEnable`) 대신 우측 컨트롤에 이 버튼을 직접 그린다(#64) —
+  /// 지도 좌하단(Naver 로고 자리)과 겹치지 않게 하기 위함.
+  void _recenterToMe() {
+    final lat = _myLat;
+    final lng = _myLng;
+    if (lat == null || lng == null) return;
+    _controller?.updateCamera(NCameraUpdate.withParams(target: NLatLng(lat, lng)));
   }
 
   void _onGeofenceEnter(GeofenceEnterEvent event) {
@@ -276,12 +292,21 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     final safeAreaPadding = MediaQuery.paddingOf(context);
     final locationIssue = _locationIssue;
 
+    // SDK 콘텐츠 패딩에 우리 오버레이가 차지하는 대략적인 높이를 더한다 — 안 그러면
+    // "내 위치로 이동" 시 마커가 상단 정보 바·하단 액션 영역 뒤에 숨을 수 있다(#64).
+    final contentPadding = EdgeInsets.only(
+      left: safeAreaPadding.left,
+      right: safeAreaPadding.right,
+      top: safeAreaPadding.top + 64,
+      bottom: safeAreaPadding.bottom + 96,
+    );
+
     return Scaffold(
       body: Stack(
         children: [
           NaverMap(
             options: NaverMapViewOptions(
-              contentPadding: safeAreaPadding,
+              contentPadding: contentPadding,
               initialCameraPosition: const NCameraPosition(
                 target: _southKoreaCenter,
                 zoom: 6.7,
@@ -289,7 +314,11 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
               // FogApp은 국내 탐험이 목적이므로 대한민국 밖으로 축소/이동할 이유가 없어 제한한다.
               minZoom: 6,
               extent: _mapExtent,
-              locationButtonEnable: true,
+              // SDK 기본 위치 버튼 대신 우측 컨트롤에 직접 그린다(#64) — 좌하단 Naver
+              // 로고 자리와 겹치는 걸 피하고, 우리 UI를 한 곳(우측 세로 스택)으로 모은다.
+              locationButtonEnable: false,
+              logoAlign: NLogoAlign.leftBottom,
+              logoMargin: const EdgeInsets.only(left: 12, bottom: 12),
             ),
             onMapReady: _onMapReady,
           ),
@@ -318,27 +347,30 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
               ),
             ),
           ),
-          if (_nearbySpot != null)
-            SafeArea(
-              child: Align(
-                alignment: Alignment.bottomCenter,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: _NearbySpotBanner(spot: _nearbySpot!, onVerify: _openVisitVerify),
-                ),
-              ),
-            ),
+          // 하단 좌측 액션 영역. 여러 오버레이가 늘어도 이 Column 하나에 세로로
+          // 쌓이므로 서로 겹치지 않는다(#64 — 예전엔 독립된 Align끼리 포개졌음).
+          // Naver 로고(좌하단, logoMargin 12)를 가리지 않도록 하단 여백을 넉넉히 둔다.
           SafeArea(
             child: Align(
               alignment: Alignment.bottomLeft,
               child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: FilledButton.tonal(
-                  // 지도 위 탐험 UI가 준비될 때까지 성향 테스트(#31)로 가는 임시 진입점.
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const PersonalityTestScreen()),
-                  ),
-                  child: const Text('여행 성향 테스트 하기'),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 64),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_nearbySpot != null) ...[
+                      _NearbySpotBanner(spot: _nearbySpot!, onVerify: _openVisitVerify),
+                      const SizedBox(height: 8),
+                    ],
+                    FilledButton.tonal(
+                      // 지도 위 탐험 UI가 준비될 때까지 성향 테스트(#31)로 가는 임시 진입점.
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const PersonalityTestScreen()),
+                      ),
+                      child: const Text('여행 성향 테스트 하기'),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -348,9 +380,10 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
               alignment: Alignment.bottomRight,
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: _ZoomControls(
+                child: _MapControls(
                   onZoomIn: () => _zoomBy(1),
                   onZoomOut: () => _zoomBy(-1),
+                  onRecenter: _myLat != null ? _recenterToMe : null,
                 ),
               ),
             ),
@@ -495,12 +528,18 @@ class _NearbySpotBanner extends StatelessWidget {
   }
 }
 
-/// 지도 줌 인/아웃 컨트롤. 핀치 제스처 외의 명시적 조작 수단을 제공한다.
-class _ZoomControls extends StatelessWidget {
-  const _ZoomControls({required this.onZoomIn, required this.onZoomOut});
+/// 지도 우측 세로 컨트롤(#64) — 줌 인/아웃 + 내 위치로 이동을 한 곳에 모은다.
+/// SDK 기본 위치 버튼과 중복되지 않도록 이 화면에서는 이 버튼만 쓴다.
+class _MapControls extends StatelessWidget {
+  const _MapControls({
+    required this.onZoomIn,
+    required this.onZoomOut,
+    required this.onRecenter,
+  });
 
   final VoidCallback onZoomIn;
   final VoidCallback onZoomOut;
+  final VoidCallback? onRecenter;
 
   @override
   Widget build(BuildContext context) {
@@ -514,6 +553,8 @@ class _ZoomControls extends StatelessWidget {
           IconButton(onPressed: onZoomIn, icon: const Icon(Icons.add)),
           const Divider(height: 1),
           IconButton(onPressed: onZoomOut, icon: const Icon(Icons.remove)),
+          const Divider(height: 1),
+          IconButton(onPressed: onRecenter, icon: const Icon(Icons.my_location)),
         ],
       ),
     );

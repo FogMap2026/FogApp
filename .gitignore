@@ -55,3 +55,8 @@ desktop.ini
 *.log
 tmp/
 temp/
+
+# ===== 업로드 파일 (인증 사진, #48) =====
+# 서버가 직접 보관한다. 실제 파일은 저장소에 넣지 않는다.
+server/data/
+data/visit-photos/
