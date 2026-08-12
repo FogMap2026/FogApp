@@ -1,88 +1,60 @@
 package com.fogapp.visit;
 
-import java.net.URI;
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
-
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 /**
- * 인증 사진 URL이 <b>본인이 올린 것</b>인지 검증한다 (#56 리뷰 후속).
+ * 인증 사진 URL이 <b>본인이 이 서버에 올린 것</b>인지 검증한다 (#48).
  *
- * <p>서버는 사진 바이너리를 받지 않고 URL만 저장하므로, Storage Security Rules
- * (`app/storage.rules`)가 업로드를 본인 경로로 잠가도 <b>서버가 그 경로를 요구하지 않으면
- * 우회된다</b> — 아무 URL이나 넣어도 인증이 성립해 "사진으로 방문을 인증한다"는 성질이 깨진다.
- * 이 검증이 Rules 와 짝을 이뤄 그 구멍을 닫는다.</p>
+ * <p>서버는 {@code POST /api/visits} 에서 사진 바이너리가 아니라 URL만 받는다. 그래서
+ * 업로드 엔드포인트가 경로를 본인 것으로 강제해도, <b>인증 단계가 그 경로를 요구하지 않으면
+ * 우회된다</b> — 아무 문자열이나 넣어도 인증이 성립해 "사진으로 방문을 인증한다"는 성질이 깨진다.
+ * 이 검증이 업로드 제약과 짝을 이뤄 그 구멍을 닫는다.</p>
  *
- * <p>기대 형태 (Firebase Storage 다운로드 URL):</p>
+ * <p>기대 형태 (업로드 응답이 돌려주는 상대 경로):</p>
  * <pre>
- * https://firebasestorage.googleapis.com/v0/b/{bucket}/o/visits%2F{firebaseUid}%2F{spotId}%2F{file}?alt=media&amp;token=...
+ * /api/visits/photos/{firebaseUid}/{spotId}/{파일명}
  * </pre>
  *
- * <p>버킷이 설정되지 않으면 검증을 건너뛴다(로컬·CI). 다만 인증이 실제로 켜진
- * 환경({@code firebase.enabled=true})에서는 버킷 설정을 <b>강제</b>해 조용히
- * 무방비가 되는 것을 막는다 — 기동 시점에 실패한다.</p>
+ * <p>절대 URL을 받지 않는 이유: 호스트가 환경마다 달라 검증 기준이 흔들리고,
+ * 외부 URL을 넣을 여지를 남기기 때문이다. 업로드 응답 그대로만 통과시킨다.</p>
  */
 @Component
 public class VisitPhotoUrlValidator {
 
-    private static final String STORAGE_HOST = "firebasestorage.googleapis.com";
-
-    private final String bucket;
-
-    public VisitPhotoUrlValidator(VisitProperties properties,
-                                  @Value("${firebase.enabled:false}") boolean firebaseEnabled) {
-        this.bucket = properties.getStorageBucket();
-
-        if (firebaseEnabled && !StringUtils.hasText(this.bucket)) {
-            throw new IllegalStateException(
-                    "firebase.enabled=true 인데 visit.storage-bucket 이 비어 있습니다. "
-                            + "인증 사진 URL 검증이 꺼진 채로 뜨는 것을 막기 위해 기동을 중단합니다. "
-                            + "(예: fogmap-9355b.firebasestorage.app)");
-        }
-    }
-
-    /** 검증이 켜져 있는지. 버킷 미설정 시 꺼진다. */
-    public boolean isEnabled() {
-        return StringUtils.hasText(bucket);
-    }
+    static final String PATH_PREFIX = "/api/visits/photos/";
 
     /**
-     * {@code photoUrl} 이 기대 버킷의 {@code visits/{firebaseUid}/{spotId}/} 하위를 가리키는지 확인한다.
+     * {@code photoUrl} 이 {@code /api/visits/photos/{firebaseUid}/{spotId}/} 하위를 가리키는지 확인한다.
      *
      * @throws IllegalArgumentException 형식이 다르거나 남의 경로일 때
      */
     public void validate(String photoUrl, String firebaseUid, Long spotId) {
-        if (!isEnabled()) {
-            return;
+        if (!StringUtils.hasText(photoUrl)) {
+            throw new IllegalArgumentException("photoUrl 이 비어 있습니다.");
+        }
+        if (!StringUtils.hasText(firebaseUid)) {
+            throw new IllegalArgumentException("사용자 식별자가 없습니다.");
         }
 
-        URI uri;
-        try {
-            uri = URI.create(photoUrl);
-        } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("photoUrl 형식이 올바르지 않습니다.", e);
+        // 경로 이탈로 접두사 검사를 통과시키려는 시도(/api/visits/photos/me/1/../../other)를 막는다.
+        if (photoUrl.contains("..")) {
+            throw new IllegalArgumentException("photoUrl 에 허용되지 않은 경로가 포함되어 있습니다.");
+        }
+        if (!photoUrl.startsWith(PATH_PREFIX)) {
+            throw new IllegalArgumentException("photoUrl 은 이 서버의 인증 사진 경로여야 합니다.");
         }
 
-        if (!STORAGE_HOST.equalsIgnoreCase(uri.getHost())) {
-            throw new IllegalArgumentException("photoUrl 은 프로젝트 Storage 주소여야 합니다.");
+        // 조각 단위로 대조한다. 문자열 startsWith 만 쓰면 uid "abc" 가 "abcEXTRA" 를,
+        // spotId 42 가 421 을 통과시킨다.
+        String rest = photoUrl.substring(PATH_PREFIX.length());
+        String[] parts = rest.split("/");
+        if (parts.length != 3) {
+            throw new IllegalArgumentException("photoUrl 형식이 올바르지 않습니다.");
         }
-
-        String rawPath = uri.getRawPath();
-        String objectPrefix = "/v0/b/" + bucket + "/o/";
-        if (rawPath == null || !rawPath.startsWith(objectPrefix)) {
-            throw new IllegalArgumentException("photoUrl 의 버킷이 올바르지 않습니다.");
-        }
-
-        // 객체 경로는 퍼센트 인코딩돼 있다 (visits%2F...). 디코드 후 소유 경로와 대조한다.
-        String objectName = URLDecoder.decode(
-                rawPath.substring(objectPrefix.length()), StandardCharsets.UTF_8);
-
-        String expected = "visits/" + firebaseUid + "/" + spotId + "/";
-        if (!objectName.startsWith(expected)) {
-            // 남의 UID·다른 스팟 경로를 가리키는 경우. 어느 쪽인지는 굳이 알려주지 않는다.
+        if (!parts[0].equals(firebaseUid) || !parts[1].equals(String.valueOf(spotId))
+                || parts[2].isEmpty()) {
+            // 남의 UID·다른 스팟 경로인 경우. 어느 쪽인지는 굳이 알려주지 않는다.
             throw new IllegalArgumentException("photoUrl 이 본인이 업로드한 인증 사진 경로가 아닙니다.");
         }
     }

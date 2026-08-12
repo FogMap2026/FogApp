@@ -280,7 +280,7 @@ dev ← #35 feat/ui-map-screen ← #40 feat/map-spot-load
                                ├─► 3-4 인증 API ─┬─► 3-5 안개 걷힘
                                │   (허브)         ├─► 3-6 정보 해금
                                │                 └─► 3-7 정복률 ─► ★MVP 완성★
-                          #2 Firebase Storage ───┘
+                       #48 사진 저장(서버 보관) ───┘
 ```
 
 **착수 우선순위**
