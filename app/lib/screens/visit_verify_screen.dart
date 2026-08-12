@@ -1,20 +1,21 @@
 import 'dart:io';
 
 import 'package:camera/camera.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/spot.dart';
-import '../services/visit_photo_uploader.dart';
+import '../services/visit_photo_service.dart';
 import '../services/visit_service.dart';
 
 enum _Stage { capturing, preview, uploading, success, error }
 
 /// 스팟 반경 안에서 사진을 찍어 방문을 인증하는 화면(#47).
 ///
-/// 갤러리 선택은 허용하지 않는다 — 현장 촬영만 인증으로 인정한다. 근접 감지(3-1, #45)와
-/// 스팟 상세 화면(3-6, #50)이 아직 없어 지도에서 이 화면으로 들어오는 진입점은 아직
-/// 연결되어 있지 않다 — 두 이슈가 끝나면 마커 탭 → 반경 확인 → 이 화면 순으로 이어붙인다.
+/// 갤러리 선택은 허용하지 않는다 — 현장 촬영만 인증으로 인정한다. 근접 감지(#45)가
+/// 반경 진입을 알리면 `MapScreen`이 이 화면을 띄운다. 스팟 상세 화면(3-6, #50)이
+/// 아직 없어, 해금 후 상세 정보로 이어지는 흐름은 이후 붙는다.
 class VisitVerifyScreen extends ConsumerStatefulWidget {
   const VisitVerifyScreen({
     required this.spot,
@@ -38,7 +39,7 @@ class _VisitVerifyScreenState extends ConsumerState<VisitVerifyScreen> {
   XFile? _capturedPhoto;
   double _uploadProgress = 0;
   String? _errorMessage;
-  Future<bool> Function()? _cancelUpload;
+  void Function()? _cancelUpload;
 
   @override
   void initState() {
@@ -60,8 +61,8 @@ class _VisitVerifyScreenState extends ConsumerState<VisitVerifyScreen> {
         (c) => c.lensDirection == CameraLensDirection.back,
         orElse: () => cameras.first,
       );
-      // Storage 규칙(#48, PR #56)이 5MB 미만만 허용하므로, high 대신 medium으로
-      // 원본 용량 자체를 줄인다(별도 압축 라이브러리 없이 5MB 제한을 안정적으로 지킴).
+      // 서버가 사진을 5MB 미만으로만 받으므로(#48, VisitPhotoStorage), high 대신
+      // medium으로 원본 용량 자체를 줄인다(별도 압축 라이브러리 없이 제한을 안정적으로 지킴).
       final controller = CameraController(back, ResolutionPreset.medium, enableAudio: false);
       await controller.initialize();
       if (!mounted) {
@@ -116,15 +117,15 @@ class _VisitVerifyScreenState extends ConsumerState<VisitVerifyScreen> {
       _uploadProgress = 0;
     });
 
-    final uploader = ref.read(visitPhotoUploaderProvider);
-    final upload = uploader.upload(file: File(photo.path), spotId: widget.spot.id);
+    final photoService = ref.read(visitPhotoServiceProvider);
+    final upload = photoService.upload(file: File(photo.path), spotId: widget.spot.id);
     _cancelUpload = upload.cancel;
     upload.progress.listen((p) {
       if (mounted) setState(() => _uploadProgress = p);
     });
 
     try {
-      final photoUrl = await upload.downloadUrl;
+      final photoUrl = await upload.photoUrl;
       final visitService = ref.read(visitServiceProvider);
       await visitService.verify(
         spotId: widget.spot.id,
@@ -134,6 +135,21 @@ class _VisitVerifyScreenState extends ConsumerState<VisitVerifyScreen> {
       );
       if (!mounted) return;
       setState(() => _stage = _Stage.success);
+    } on DioException catch (e) {
+      // 사용자가 취소한 경우 _cancelUploadPressed가 이미 화면을 되돌려놨다 —
+      // 여기서 에러 화면으로 덮어쓰면 안 된다.
+      if (e.type == DioExceptionType.cancel) return;
+      if (!mounted) return;
+      // 형식·용량 문제(400)는 서버가 이미 구체적인 한국어 메시지를 내려준다
+      // (예: "사진 용량은 5MB 이하만 업로드할 수 있습니다.") — 그대로 보여준다.
+      final responseData = e.response?.data;
+      final serverMessage = e.response?.statusCode == 400 && responseData is Map
+          ? responseData['message'] as String?
+          : null;
+      setState(() {
+        _errorMessage = serverMessage ?? '업로드 중 문제가 발생했습니다. 다시 시도해주세요.';
+        _stage = _Stage.error;
+      });
     } on VisitVerifyException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -149,8 +165,8 @@ class _VisitVerifyScreenState extends ConsumerState<VisitVerifyScreen> {
     }
   }
 
-  Future<void> _cancelUploadPressed() async {
-    await _cancelUpload?.call();
+  void _cancelUploadPressed() {
+    _cancelUpload?.call();
     if (mounted) setState(() => _stage = _Stage.preview);
   }
 
