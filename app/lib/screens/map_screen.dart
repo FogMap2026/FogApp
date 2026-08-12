@@ -225,20 +225,25 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       // 방금 인증한 스팟은 바로 반영해, 재조회 전이라도 다시 알리지 않는다.
       setState(() => _visitedSpotIds = {..._visitedSpotIds, spot.id});
       unawaited(_refreshConquest());
+      // 안개 걷힘 연출(#49) — 스팟 좌표 기준 반경을 퍼지듯 넓혀가며 걷어낸다.
+      unawaited(_fogOverlay?.clearCircleAnimated(spot.id.toString(), NLatLng(spot.lat, spot.lng)));
     }
   }
 
-  /// 이미 인증한 스팟 목록(#46)을 새로 불러온다. 실패해도 알림 자체는 동작해야 하므로
-  /// (조용히 필터가 안 걸릴 뿐) 예외를 삼킨다 — 정복률(#51)과 같은 원칙.
+  /// 이미 인증한 스팟 목록(#46)을 새로 불러오고, 그 좌표로 안개 상태를 복원한다(#49).
+  /// 실패해도 지도 자체는 동작해야 하므로(조용히 필터·복원이 안 걸릴 뿐) 예외를 삼킨다
+  /// — 정복률(#51)과 같은 원칙.
   ///
   /// #46이 만든 `VisitedSpotsService`는 `VisitService.myVisits()`와 조회 범위가
   /// 겹쳐서 흡수했다 — 방문 목록을 두 곳에서 따로 관리할 이유가 없다.
   Future<void> _refreshVisitedSpots() async {
     try {
       final visits = await ref.read(visitServiceProvider).myVisits();
-      if (mounted) {
-        setState(() => _visitedSpotIds = visits.map((v) => v.spotId).toSet());
-      }
+      if (!mounted) return;
+      setState(() => _visitedSpotIds = visits.map((v) => v.spotId).toSet());
+      // 애니메이션 없이 즉시 걷어낸다 — 이미 걷힌 영역을 매번 앱을 켤 때마다 다시
+      // "퍼지는" 연출로 보여줄 이유는 없다(#49 to-do: 재진입 시 유지).
+      _fogOverlay?.clearCircles({for (final v in visits) v.spotId.toString(): NLatLng(v.lat, v.lng)});
     } catch (_) {
       // no-op
     }
