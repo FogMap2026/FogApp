@@ -228,8 +228,8 @@ cd app    && flutter test
 | `GET` | `/api/profile` | 내 프로필 조회 | 1 |
 | `PATCH` | `/api/profile` | 닉네임·프로필 이미지 수정 | 1 |
 | `PATCH` | `/api/profile/personality` | 성향 테스트 결과 저장 | 2 |
-| `GET` | `/api/spots?region={code}&page&size` | 지역 코드별 스팟 목록(페이지네이션) | 1 |
-| `GET` | `/api/spots/nearby?lat&lng&radius` | 반경 내 스팟 조회 (PostGIS `ST_DWithin`, 최대 20km) | 1 |
+| `GET` | `/api/spots?region={code}&page&size` | 지역 코드별 스팟 목록(페이지네이션). `unlocked`·`overview`는 **로그인한 사용자 기준** | 1·3 |
+| `GET` | `/api/spots/nearby?lat&lng&radius` | 반경 내 스팟 조회 (PostGIS `ST_DWithin`, 최대 20km) | 1·3 |
 | `POST` `GET` `PATCH` `DELETE` | `/api/footprints`, `/api/footprints/{id}` | 발자취 CRUD (`spotId` 또는 `userId`로 목록 조회) | 1·2 |
 | `POST` `DELETE` | `/api/footprints/{id}/likes` | 좋아요 등록·취소 (1인 1회) | 2 |
 | `POST` `GET` `PATCH` `DELETE` | `/api/matches`, `/api/matches/{id}` | 동행 요청 생성·조회·상태 변경·취소 | 1·5 |
