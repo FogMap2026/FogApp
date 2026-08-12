@@ -17,6 +17,17 @@ class FootprintService {
     );
     return Footprint.fromJson(response.data!);
   }
+
+  /// 스팟의 발자취 목록(#71). 최신순으로 내려온다. 페이지네이션은 서버에 아직 없다.
+  Future<List<Footprint>> listBySpot(int spotId) async {
+    final response = await _apiClient.dio.get<List<dynamic>>(
+      '/api/footprints',
+      queryParameters: {'spotId': spotId},
+    );
+    return (response.data ?? [])
+        .map((e) => Footprint.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
 }
 
 final footprintServiceProvider = Provider<FootprintService>((ref) {
