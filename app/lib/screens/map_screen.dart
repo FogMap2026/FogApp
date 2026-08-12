@@ -17,6 +17,7 @@ import '../services/spot_geofence_controller.dart';
 import '../services/spot_marker_controller.dart';
 import '../services/spot_service.dart';
 import '../services/visited_spots_service.dart';
+import 'footprint_create_screen.dart';
 import 'social/personality_test_screen.dart';
 
 /// 대한민국 전역을 보여주는 기본 카메라 위치(안개 지도의 시작 화면).
@@ -176,6 +177,37 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     if (mounted) setState(() => _proximityBanner = null);
   }
 
+  /// 스팟 마커를 탭하면 뜨는 진입 시트(#70). 스팟 상세 화면(#50)이 아직 없어
+  /// 지금은 "발자취 남기기" 진입점만 최소로 제공한다 — #50이 붙으면 그 상세
+  /// 시트 안의 액션 중 하나로 흡수될 예정이다.
+  Future<void> _onSpotTapped(Spot spot) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.edit_note_outlined),
+              title: const Text('발자취 남기기'),
+              onTap: () async {
+                Navigator.of(sheetContext).pop();
+                final written = await Navigator.of(context).push<bool>(
+                  MaterialPageRoute(builder: (_) => FootprintCreateScreen(spot: spot)),
+                );
+                if (written == true && mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('발자취를 남겼어요.')),
+                  );
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _openVisitVerify(Spot spot) {
     setState(() => _proximityBanner = null);
     Navigator.of(context).push(
@@ -209,6 +241,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
         // fetchNearby는 가까운 순으로 내려주므로 첫 번째가 현재 보고 있는 지역의 대표 스팟이다.
         if (mounted) setState(() => _nearestLoadedSpot = spots.isEmpty ? null : spots.first);
       },
+      onSpotTapped: _onSpotTapped,
     );
     _cameraSubscription = controller.nowCameraPositionStream.listen(_onCameraChanged);
     if (mounted) setState(() => _mapReady = true);
