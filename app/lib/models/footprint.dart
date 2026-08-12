@@ -1,7 +1,8 @@
-/// 서버 `FootprintResponse`(#1-8, #23, #71)에 대응하는 발자취 모델.
+/// 서버 `FootprintResponse`(#1-8, #23, #71, #72)에 대응하는 발자취 모델.
 ///
-/// 작성자 정보([authorNickname]·[authorProfileImageUrl])는 목록 응답에 함께 담겨 온다.
-/// 카드마다 프로필을 따로 조회하지 않아도 되고, 애초에 남의 프로필을 조회하는 API는 없다.
+/// 작성자 정보([authorNickname]·[authorProfileImageUrl])와 [likedByMe]는 목록 응답에
+/// 함께 담겨 온다. 카드마다 프로필·좋아요 여부를 따로 조회하지 않아도 되고, 애초에
+/// 남의 프로필을 조회하는 API는 없다.
 class Footprint {
   const Footprint({
     required this.id,
@@ -9,6 +10,7 @@ class Footprint {
     required this.spotId,
     required this.content,
     required this.likeCount,
+    required this.likedByMe,
     required this.createdAt,
     this.photoUrl,
     this.authorNickname,
@@ -24,6 +26,7 @@ class Footprint {
         content: json['content'] as String,
         photoUrl: json['photoUrl'] as String?,
         likeCount: json['likeCount'] as int,
+        likedByMe: json['likedByMe'] as bool? ?? false,
         createdAt: DateTime.parse(json['createdAt'] as String),
       );
 
@@ -38,6 +41,10 @@ class Footprint {
   final String content;
   final String? photoUrl;
   final int likeCount;
+
+  /// 로그인한 사용자가 이 발자취에 좋아요를 눌렀는지(#72).
+  final bool likedByMe;
+
   final DateTime createdAt;
 
   /// 카드에 표시할 작성자 이름. 닉네임이 없으면 대체 문구를 쓴다.

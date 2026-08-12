@@ -201,4 +201,42 @@ class FootprintControllerIT {
                         .content("{\"spotId\":" + spotId + ",\"content\":\"익명 글\"}"))
                 .andExpect(status().isUnauthorized());
     }
+
+    @Test
+    void 좋아요를_누른_사용자에게만_likedByMe가_true다() throws Exception {
+        // #72: 배치 조회가 사용자별로 정확히 갈리는지 확인한다.
+        loginAs("alice-token", "uid-alice");
+        Long footprintId = createFootprintAs("alice-token", "앨리스 글");
+
+        loginAs("bob-token", "uid-bob");
+        mockMvc.perform(post("/api/footprints/" + footprintId + "/likes")
+                        .header("Authorization", "Bearer bob-token"))
+                .andExpect(status().isNoContent());
+
+        // 좋아요를 누른 밥은 true
+        mockMvc.perform(get("/api/footprints?spotId=" + spotId)
+                        .header("Authorization", "Bearer bob-token"))
+                .andExpect(jsonPath("$[0].likedByMe").value(true));
+
+        // 좋아요를 안 누른 캐롤은 같은 발자취라도 false
+        loginAs("carol-token", "uid-carol");
+        mockMvc.perform(get("/api/footprints?spotId=" + spotId)
+                        .header("Authorization", "Bearer carol-token"))
+                .andExpect(jsonPath("$[0].likedByMe").value(false));
+    }
+
+    @Test
+    void 단건_조회도_likedByMe를_포함한다() throws Exception {
+        loginAs("alice-token", "uid-alice");
+        Long footprintId = createFootprintAs("alice-token", "앨리스 글");
+
+        mockMvc.perform(post("/api/footprints/" + footprintId + "/likes")
+                        .header("Authorization", "Bearer alice-token"))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/footprints/" + footprintId)
+                        .header("Authorization", "Bearer alice-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.likedByMe").value(true));
+    }
 }
