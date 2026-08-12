@@ -49,6 +49,7 @@ class SpotQueryServiceIT {
     @Autowired
     private VisitRepository visitRepository;
 
+    /** area_code 는 VARCHAR(16) 이다 — 테스트용 지역 코드도 16자를 넘기면 저장에서 깨진다. */
     private Spot spot(String contentId, String areaCode, Double lat, Double lng) {
         return new Spot(contentId, "12", "스팟-" + contentId, "주소", null,
                 areaCode, "1", null, null, null, "이곳의 소개 글", lat, lng);
@@ -133,7 +134,7 @@ class SpotQueryServiceIT {
 
     @Test
     void 해금은_사용자마다_따로_판정된다() {
-        String area = "AREA-PERUSER-TEST";
+        String area = "AREA-PERUSER";
         Spot target = spotRepository.save(spot("PERUSER", area, 37.5, 127.0));
         Long explorer = user("explorer").getId();
         Long stranger = user("stranger").getId();
