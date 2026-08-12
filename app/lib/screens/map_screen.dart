@@ -16,9 +16,10 @@ import '../services/region_lookup_service.dart';
 import '../services/spot_geofence_controller.dart';
 import '../services/spot_marker_controller.dart';
 import '../services/spot_service.dart';
-import '../services/visited_spots_service.dart';
+import '../services/visit_service.dart';
 import 'footprint_create_screen.dart';
 import 'social/personality_test_screen.dart';
+import 'visit_verify_screen.dart';
 
 /// 대한민국 전역을 보여주는 기본 카메라 위치(안개 지도의 시작 화면).
 const _southKoreaCenter = NLatLng(36.5, 127.8);
@@ -59,7 +60,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   /// 카메라 중심에서 가장 가까운(=현재 보고 있는) 스팟. 정복률 표시 지역을 고르는 데 쓴다.
   Spot? _nearestLoadedSpot;
 
-  /// 마지막으로 받은 내 위치. "내 위치로 이동" 버튼(#64)에 쓴다.
+  /// 마지막으로 받은 내 위치. "내 위치로 이동" 버튼(#64)과 인증 화면 진입(#47)에 쓴다.
   double? _myLat;
   double? _myLng;
 
@@ -208,19 +209,36 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     );
   }
 
-  void _openVisitVerify(Spot spot) {
+  /// 근접 알림(#46)의 "인증하러 가기"에서 실제 인증 화면(#47)으로 진입한다.
+  Future<void> _openVisitVerify(Spot spot) async {
     setState(() => _proximityBanner = null);
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => _MockVisitVerifyScreen(spot: spot)),
+    final lat = _myLat;
+    final lng = _myLng;
+    if (lat == null || lng == null) return; // 이론상 거의 없음 — geofencing 자체가 위치 스트림에서 나온다.
+
+    final verified = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => VisitVerifyScreen(spot: spot, currentLat: lat, currentLng: lng),
+      ),
     );
+    if (verified == true) {
+      // 방금 인증한 스팟은 바로 반영해, 재조회 전이라도 다시 알리지 않는다.
+      setState(() => _visitedSpotIds = {..._visitedSpotIds, spot.id});
+      unawaited(_refreshConquest());
+    }
   }
 
   /// 이미 인증한 스팟 목록(#46)을 새로 불러온다. 실패해도 알림 자체는 동작해야 하므로
   /// (조용히 필터가 안 걸릴 뿐) 예외를 삼킨다 — 정복률(#51)과 같은 원칙.
+  ///
+  /// #46이 만든 `VisitedSpotsService`는 `VisitService.myVisits()`와 조회 범위가
+  /// 겹쳐서 흡수했다 — 방문 목록을 두 곳에서 따로 관리할 이유가 없다.
   Future<void> _refreshVisitedSpots() async {
     try {
-      final ids = await ref.read(visitedSpotsServiceProvider).fetchVisitedSpotIds();
-      if (mounted) setState(() => _visitedSpotIds = ids);
+      final visits = await ref.read(visitServiceProvider).myVisits();
+      if (mounted) {
+        setState(() => _visitedSpotIds = visits.map((v) => v.spotId).toSet());
+      }
     } catch (_) {
       // no-op
     }
@@ -253,8 +271,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     await _requestLocationPermission();
   }
 
-  /// 정복률(#51) 목록을 새로 불러온다. 스팟 인증(#47)이 이 화면에 연결되면
-  /// 인증 성공 직후에도 호출해 최신 수치를 반영해야 한다.
+  /// 정복률(#51) 목록을 새로 불러온다. 지도 진입 시, 그리고 방문 인증(#47) 성공 직후 호출한다.
   Future<void> _refreshConquest() async {
     try {
       final regions = await ref.read(conquestServiceProvider).myConquest();
@@ -611,38 +628,6 @@ class _ProximityBanner extends StatelessWidget {
               visualDensity: VisualDensity.compact,
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// 방문 인증 화면(#47)이 병합되기 전까지 붙여두는 자리표시자(#46 issue의 "목으로 먼저
-/// 붙여도 됨" 제안). #47이 merge되면 이 위젯 대신 실제 화면으로 교체한다.
-class _MockVisitVerifyScreen extends StatelessWidget {
-  const _MockVisitVerifyScreen({required this.spot});
-
-  final Spot spot;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(spot.title)),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.camera_alt_outlined, size: 48),
-              const SizedBox(height: 16),
-              Text(
-                '현장 사진 촬영 → 방문 인증 화면은 준비 중입니다.\n(#47에서 연결될 예정)',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-            ],
-          ),
         ),
       ),
     );
