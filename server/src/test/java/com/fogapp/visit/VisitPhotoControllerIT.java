@@ -23,6 +23,9 @@ import org.testcontainers.utility.DockerImageName;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fogapp.auth.TokenVerifier;
 import com.fogapp.auth.VerifiedToken;
+import com.fogapp.spot.Spot;
+import com.fogapp.spot.SpotRepository;
+import com.fogapp.user.UserRepository;
 
 /**
  * 인증 사진 업로드·조회 엔드포인트(#48)의 접근 통제를 검증한다.
@@ -49,6 +52,15 @@ class VisitPhotoControllerIT {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private VisitRepository visitRepository;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private SpotRepository spotRepository;
 
     @MockBean
     private TokenVerifier tokenVerifier;
@@ -117,6 +129,30 @@ class VisitPhotoControllerIT {
 
         mockMvc.perform(get(photoUrl))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void 이미_인증한_스팟에는_다시_올릴_수_없다() throws Exception {
+        // #76: 저장은 스팟당 1장만 남기므로, 막지 않으면 이미 기록된 방문의 사진이 지워진다.
+        // 어차피 인증이 409 로 실패할 요청이라 파일에 손대기 전에 끊는다.
+        loginAs("carol-token", "uid-carol");
+        Long spotId = spotRepository.save(new Spot(
+                "PHOTO-IT-1", "12", "사진테스트", "주소", null,
+                "1", "1", null, null, null, null, 37.5759, 126.9769)).getId();
+        String photoUrl = upload("carol-token", spotId);
+
+        Long userId = userRepository.findByFirebaseUid("uid-carol").orElseThrow().getId();
+        visitRepository.save(new Visit(userId, spotId, photoUrl, 37.5759, 126.9769));
+
+        mockMvc.perform(multipart("/api/visits/photo")
+                        .file(jpeg())
+                        .param("spotId", String.valueOf(spotId))
+                        .header("Authorization", "Bearer carol-token"))
+                .andExpect(status().isConflict());
+
+        // 기존 사진은 그대로 있어야 한다.
+        mockMvc.perform(get(photoUrl).header("Authorization", "Bearer carol-token"))
+                .andExpect(status().isOk());
     }
 
     @Test

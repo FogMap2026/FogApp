@@ -11,6 +11,9 @@ public interface VisitRepository extends JpaRepository<Visit, Long> {
     /** 한 사용자당 스팟 1회 정복(#48). 유니크 제약에 걸리기 전에 미리 걸러 409를 명확히 돌려준다. */
     boolean existsByUserIdAndSpotId(Long userId, Long spotId);
 
+    /** 고아 사진 판정(#76). 이 URL을 가리키는 인증 기록이 있으면 지우면 안 된다. */
+    boolean existsByPhotoUrl(String photoUrl);
+
     /** 내 인증 목록(최신순). 3-5 안개 해제 영역 복원과 3-6 해금 판정이 소비한다. */
     List<Visit> findByUserIdOrderByVerifiedAtDesc(Long userId);
 

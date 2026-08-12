@@ -67,6 +67,19 @@ public class VisitService {
         return visitRepository.save(new Visit(userId, spotId, photoUrl, lat, lng));
     }
 
+    /**
+     * 이미 인증한 스팟이면 409 로 막는다(#76).
+     *
+     * <p>사진 업로드 전에 부른다. 업로드는 스팟당 1장만 남기므로(이전 파일 삭제),
+     * 이미 인증된 스팟에 다시 올리면 <b>이미 기록된 방문의 사진이 지워진다.</b>
+     * 어차피 인증은 409 로 실패할 요청이니, 파일에 손대기 전에 여기서 끊는다.</p>
+     */
+    public void requireNotVerified(Long userId, Long spotId) {
+        if (visitRepository.existsByUserIdAndSpotId(userId, spotId)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 인증한 스팟입니다.");
+        }
+    }
+
     /** 내 인증 목록(최신순). 앱이 걷힌 안개 영역을 복원할 때 쓴다. */
     public List<Visit> listByUser(Long userId) {
         return visitRepository.findByUserIdOrderByVerifiedAtDesc(userId);

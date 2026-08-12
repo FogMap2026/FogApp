@@ -149,6 +149,68 @@ class VisitPhotoStorageTest {
     }
 
     @Test
+    void 같은_스팟에_다시_올리면_이전_사진은_지운다() throws IOException {
+        // #76: 업로드에는 반경 검사가 없어, 상한이 없으면 한 계정이 같은 스팟에 무한히 쌓을 수 있다.
+        String first = sut.store(UID, SPOT_ID, jpeg(new byte[]{1}));
+        String second = sut.store(UID, SPOT_ID, jpeg(new byte[]{2}));
+
+        Path dir = tempDir.resolve(UID).resolve(String.valueOf(SPOT_ID));
+        try (var files = Files.list(dir)) {
+            assertThat(files).hasSize(1);
+        }
+        assertThat(sut.load(UID, String.valueOf(SPOT_ID), fileNameOf(second)).exists()).isTrue();
+        assertThat(sut.load(UID, String.valueOf(SPOT_ID), fileNameOf(first)).exists()).isFalse();
+    }
+
+    @Test
+    void 다른_스팟_사진은_건드리지_않는다() throws IOException {
+        String other = sut.store(UID, 7L, jpeg(new byte[]{1}));
+
+        sut.store(UID, SPOT_ID, jpeg(new byte[]{2}));
+
+        assertThat(sut.load(UID, "7", fileNameOf(other)).exists()).isTrue();
+    }
+
+    @Test
+    void 저장에_실패해도_기존_사진은_남는다() throws IOException {
+        // 새 파일을 쓰기 "전에" 지우면, 복사가 실패했을 때 새 사진도 옛 사진도 없는 상태가 된다.
+        // 순서를 바꾸면 이 테스트가 깨진다. (#79 리뷰)
+        String kept = sut.store(UID, SPOT_ID, jpeg(new byte[]{1}));
+
+        assertThatThrownBy(() -> sut.store(UID, SPOT_ID, jpegFailingOnSecondRead()))
+                .isInstanceOf(IllegalStateException.class);
+
+        Path dir = tempDir.resolve(UID).resolve(String.valueOf(SPOT_ID));
+        try (var files = Files.list(dir)) {
+            assertThat(files).hasSize(1);
+        }
+        assertThat(sut.load(UID, String.valueOf(SPOT_ID), fileNameOf(kept)).exists()).isTrue();
+    }
+
+    /**
+     * 첫 읽기(매직 바이트 판정)는 통과하고 두 번째 읽기(실제 복사)에서 실패하는 파일.
+     * 디스크 풀·IO 오류로 {@code Files.copy} 가 도중에 죽는 상황을 흉내 낸다.
+     */
+    private static MockMultipartFile jpegFailingOnSecondRead() {
+        byte[] bytes = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 7, 7, 7};
+        return new MockMultipartFile("file", "photo.jpg", "image/jpeg", bytes) {
+            private int reads = 0;
+
+            @Override
+            public java.io.InputStream getInputStream() throws IOException {
+                if (reads++ > 0) {
+                    throw new IOException("디스크가 가득 찼습니다(테스트).");
+                }
+                return super.getInputStream();
+            }
+        };
+    }
+
+    private static String fileNameOf(String photoUrl) {
+        return photoUrl.substring(photoUrl.lastIndexOf('/') + 1);
+    }
+
+    @Test
     void 읽을_때도_경로_이탈을_막는다() {
         assertThatThrownBy(() -> sut.load("..", "..", "1712345678901-0a1b2c3d4e5f6071.jpg"))
                 .isInstanceOf(IllegalArgumentException.class);
