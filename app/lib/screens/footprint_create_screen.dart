@@ -56,7 +56,11 @@ class _FootprintCreateScreenState extends ConsumerState<FootprintCreateScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('${widget.spot.title}에 발자취 남기기')),
+      // 해금 전 스팟은 이름을 노출하지 않는다(SpotMarkerController와 같은 원칙) —
+      // unlocked일 때만 실제 이름을 쓰고, 아니면 일반 문구로 대체한다(oorony 리뷰).
+      appBar: AppBar(
+        title: Text(widget.spot.unlocked ? '${widget.spot.title}에 발자취 남기기' : '발자취 남기기'),
+      ),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
