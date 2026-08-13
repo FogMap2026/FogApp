@@ -14,6 +14,7 @@ jobs:
     outputs:
       app: ${{ steps.filter.outputs.app }}
       server: ${{ steps.filter.outputs.server }}
+      container: ${{ steps.filter.outputs.container }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -24,6 +25,9 @@ jobs:
               - 'app/**'
             server:
               - 'server/**'
+            container:
+              - 'server/**'
+              - 'docker-compose.yml'
 
   app:
     name: Flutter App
@@ -175,3 +179,41 @@ jobs:
 
       - name: Build
         run: gradle build --no-daemon
+
+  # 서버 이미지가 실제로 빌드되고, 뜨고, 요청을 받는지 확인한다(#86).
+  # Dockerfile 이 깨진 건 배포 직전에 알게 되면 늦다.
+  container:
+    name: Server Container
+    needs: changes
+    if: ${{ needs.changes.outputs.container == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 빌드 성공 != 동작. 이미지를 만들고 DB 와 함께 실제로 기동시킨다 —
+      # Flyway 마이그레이션 실패나 잘못된 ENTRYPOINT 는 빌드만으로는 안 잡힌다.
+      # (compose 가 server 이미지를 빌드하므로 docker build 를 따로 부르지 않는다)
+      - name: Build and start stack
+        run: docker compose up -d --build --wait --wait-timeout 300
+        env:
+          DB_PASSWORD: ci-test-password
+
+      - name: Health check
+        run: curl -fsS http://localhost:8080/api/health | tee /dev/stderr | grep -q '"status":"UP"'
+
+      # 인증 사진 경로가 볼륨 마운트 지점과 같은지, 그리고 non-root 로 쓸 수 있는지
+      # 확인한다. 이 둘이 어긋나면 서버는 정상 동작하는데 재시작 때 사진만 사라진다(#76, 7-7).
+      - name: Verify photo volume is writable by the app user
+        run: |
+          docker compose exec -T server sh -c 'test -w "$VISIT_PHOTO_STORAGE_PATH"'
+          docker inspect fogapp-server \
+            --format '{{range .Mounts}}{{.Destination}}{{"\n"}}{{end}}' \
+            | grep -qx /app/data/visit-photos
+
+      - name: Server logs on failure
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
