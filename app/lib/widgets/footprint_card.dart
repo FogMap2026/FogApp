@@ -1,24 +1,66 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/footprint.dart';
 import '../services/api_client.dart';
+import '../services/footprint_service.dart';
 
 /// 발자취 카드(#71). 스팟 상세(#50)와 내 발자취 모아보기(#73)가 함께 쓴다 —
 /// 같은 카드를 두 화면에서 따로 만들지 않기 위해 여기 하나로 둔다.
 ///
-/// 좋아요는 이 카드에서는 표시만 한다(개수·눌렀는지). 탭해서 토글하는 상호작용은
-/// #72에서 이 위젯을 감싸는 쪽에 붙인다 — 카드 자체는 그 상태를 모른다.
-class FootprintCard extends StatefulWidget {
+/// 좋아요(#72)는 카드가 직접 낙관적으로 처리한다 — 탭 즉시 하트·개수를 반영하고,
+/// 요청이 실패하면 되돌린다. 서버가 멱등 처리라(이미 누른 상태에서 좋아요를 또 보내도
+/// 조용히 무시) 로컬 상태가 서버와 어긋나도 다음 성공 요청에서 항상 올바르게 수렴한다.
+class FootprintCard extends ConsumerStatefulWidget {
   const FootprintCard({required this.footprint, super.key});
 
   final Footprint footprint;
 
   @override
-  State<FootprintCard> createState() => _FootprintCardState();
+  ConsumerState<FootprintCard> createState() => _FootprintCardState();
 }
 
-class _FootprintCardState extends State<FootprintCard> {
+class _FootprintCardState extends ConsumerState<FootprintCard> {
   bool _expanded = false;
+  late bool _likedByMe;
+  late int _likeCount;
+  bool _likeInFlight = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _likedByMe = widget.footprint.likedByMe;
+    _likeCount = widget.footprint.likeCount;
+  }
+
+  Future<void> _toggleLike() async {
+    if (_likeInFlight) return;
+    final wasLiked = _likedByMe;
+    final previousCount = _likeCount;
+    setState(() {
+      _likedByMe = !wasLiked;
+      _likeCount = previousCount + (wasLiked ? -1 : 1);
+      _likeInFlight = true;
+    });
+
+    final service = ref.read(footprintServiceProvider);
+    try {
+      if (wasLiked) {
+        await service.unlike(widget.footprint.id);
+      } else {
+        await service.like(widget.footprint.id);
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _likedByMe = wasLiked;
+        _likeCount = previousCount;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('좋아요 처리에 실패했어요.')));
+    } finally {
+      if (mounted) setState(() => _likeInFlight = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -75,16 +117,24 @@ class _FootprintCardState extends State<FootprintCard> {
               ),
             ],
             const SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(
-                  footprint.likedByMe ? Icons.favorite : Icons.favorite_border,
-                  size: 18,
-                  color: footprint.likedByMe ? theme.colorScheme.error : theme.colorScheme.onSurfaceVariant,
+            InkWell(
+              onTap: _toggleLike,
+              borderRadius: BorderRadius.circular(16),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      _likedByMe ? Icons.favorite : Icons.favorite_border,
+                      size: 18,
+                      color: _likedByMe ? theme.colorScheme.error : theme.colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 4),
+                    Text('$_likeCount', style: theme.textTheme.bodySmall),
+                  ],
                 ),
-                const SizedBox(width: 4),
-                Text('${footprint.likeCount}', style: theme.textTheme.bodySmall),
-              ],
+              ),
             ),
           ],
         ),
