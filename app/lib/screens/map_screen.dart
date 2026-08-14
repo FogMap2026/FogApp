@@ -17,6 +17,7 @@ import '../services/spot_geofence_controller.dart';
 import '../services/spot_marker_controller.dart';
 import '../services/spot_service.dart';
 import '../services/visit_service.dart';
+import 'profile_screen.dart';
 import 'social/personality_test_screen.dart';
 import 'spot_detail_screen.dart';
 import 'visit_verify_screen.dart';
@@ -446,6 +447,16 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                         MaterialPageRoute(builder: (_) => const PersonalityTestScreen()),
                       ),
                       child: const Text('여행 성향 테스트 하기'),
+                    ),
+                    const SizedBox(height: 8),
+                    FilledButton.tonalIcon(
+                      // 제대로 된 네비게이션(하단 바 등)이 붙기 전까지의 최소 진입점(#73) —
+                      // 성향 테스트 버튼과 같은 임시 성격이다.
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                      ),
+                      icon: const Icon(Icons.person_outline),
+                      label: const Text('내 프로필'),
                     ),
                   ],
                 ),

@@ -5,6 +5,8 @@ import '../models/footprint.dart';
 import '../services/api_client.dart';
 import '../services/footprint_service.dart';
 
+enum _CardAction { edit, delete }
+
 /// 발자취 카드(#71). 스팟 상세(#50)와 내 발자취 모아보기(#73)가 함께 쓴다 —
 /// 같은 카드를 두 화면에서 따로 만들지 않기 위해 여기 하나로 둔다.
 ///
@@ -12,9 +14,15 @@ import '../services/footprint_service.dart';
 /// 요청이 실패하면 되돌린다. 서버가 멱등 처리라(이미 누른 상태에서 좋아요를 또 보내도
 /// 조용히 무시) 로컬 상태가 서버와 어긋나도 다음 성공 요청에서 항상 올바르게 수렴한다.
 class FootprintCard extends ConsumerStatefulWidget {
-  const FootprintCard({required this.footprint, super.key});
+  const FootprintCard({required this.footprint, this.onEdit, this.onDelete, super.key});
 
   final Footprint footprint;
+
+  /// 내 발자취 모아보기(#73)에서만 준다 — 있을 때만 수정 메뉴를 보여준다.
+  final VoidCallback? onEdit;
+
+  /// 내 발자취 모아보기(#73)에서만 준다 — 있을 때만 삭제 메뉴를 보여준다.
+  final VoidCallback? onDelete;
 
   @override
   ConsumerState<FootprintCard> createState() => _FootprintCardState();
@@ -93,6 +101,24 @@ class _FootprintCardState extends ConsumerState<FootprintCard> {
                     ],
                   ),
                 ),
+                if (widget.onEdit != null || widget.onDelete != null)
+                  PopupMenuButton<_CardAction>(
+                    icon: const Icon(Icons.more_vert, size: 20),
+                    onSelected: (action) {
+                      switch (action) {
+                        case _CardAction.edit:
+                          widget.onEdit?.call();
+                        case _CardAction.delete:
+                          widget.onDelete?.call();
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      if (widget.onEdit != null)
+                        const PopupMenuItem(value: _CardAction.edit, child: Text('수정')),
+                      if (widget.onDelete != null)
+                        const PopupMenuItem(value: _CardAction.delete, child: Text('삭제')),
+                    ],
+                  ),
               ],
             ),
             const SizedBox(height: 8),
