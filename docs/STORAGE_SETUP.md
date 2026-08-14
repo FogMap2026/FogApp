@@ -110,20 +110,25 @@ spring:
 
 ---
 
-## 5. ⚠️ 배포 시 반드시 할 일 (Phase 7)
+## 5. ✅ 영속 볼륨 — `docker-compose.yml` 에 반영됨 (7-7)
 
-**저장 경로를 영속 볼륨에 마운트해야 한다.** 컨테이너가 재시작될 때 사라지면, 이미 인증된 방문의 사진이 통째로 유실되고 `visits.photo_url`은 깨진 링크만 남는다.
+**저장 경로가 영속 볼륨에 붙어 있어야 한다.** 컨테이너가 재시작될 때 사라지면, 이미 인증된 방문의 사진이 통째로 유실되고 `visits.photo_url`은 깨진 링크만 남는다.
+
+[#86](https://github.com/FogMap2026/FogApp/issues/86)에서 처리했다 — 루트 `docker-compose.yml` 의 `server` 서비스에 이미 들어 있다.
 
 ```yaml
-# 예시 — 배포 구성 시
 volumes:
   - fogapp_photos:/app/data/visit-photos
 environment:
-  VISIT_PHOTO_STORAGE_PATH: /app/data/visit-photos
-  VISIT_PHOTO_CLEANUP_ENABLED: "true"   # 고아 사진 정리 배치(#76) — 배포에서 켠다
+  VISIT_PHOTO_STORAGE_PATH: /app/data/visit-photos      # ⚠️ 위 마운트 지점과 같아야 한다
+  VISIT_PHOTO_CLEANUP_ENABLED: "true"                   # 고아 사진 정리 배치(#76)
 ```
 
-백업 대상에도 DB와 함께 이 디렉터리를 포함할 것.
+> ⚠️ **두 값이 어긋나면 조용히 깨진다.** 서버는 정상 동작하고 업로드도 성공하는데, 파일이 볼륨 **밖**에 쌓여 재시작 순간 전부 사라진다. 경로를 바꿀 일이 생기면 반드시 둘을 함께 바꿀 것.
+
+> ⚠️ `docker compose down -v` 는 이 볼륨을 지운다. 평소에는 `-v` 없이 쓸 것.
+
+**백업 대상에도 DB와 함께 이 볼륨을 포함할 것.** 아직 백업 구성은 없다 — 배포처가 정해질 때 함께 정한다.
 
 ---
 

@@ -402,27 +402,31 @@ dev ← #35 feat/ui-map-screen ← #40 feat/map-spot-load
 |---|------|------|------|
 | 7-1 | 통합 QA·버그 픽스(`fix/*`) | 전원 | ⬜ |
 | 7-2 | 성능 최적화(지도 렌더·쿼리·이미지) | 🟨 MAP / 🟦 API / 🟧 INF | ⬜ |
-| 7-3 | 배포 파이프라인 완성(CI/CD) + 릴리스 빌드 | 🟧 INF | ⬜ (CI 빌드·린트만 ✅) |
+| 7-3 | 배포 파이프라인 완성(CI/CD) + 릴리스 빌드 | 🟧 INF | 🔶 컨테이너화 ✅ ([#86](../../issues/86)) · CD 는 배포처 미정 |
 | 7-4 | 시연 시나리오·발표 자료·데모 영상 | 🟦 API(PM) 주도, 전원 | ⬜ |
 | 7-5 | 라이선스 확정 + README 최종 정리 | 🟦 API(PM) | ⬜ 라이선스 미확정 |
 | 7-6 | **iOS 실기기 확인** — Mac 대여 후 시뮬레이터·실기기 실행 | 🟩 UI / 🟨 MAP | ⬜ |
-| 7-7 | **인증 사진 저장 경로를 영속 볼륨에 마운트** | 🟧 INF | ⬜ |
+| 7-7 | **인증 사진 저장 경로를 영속 볼륨에 마운트** | 🟧 INF | ✅ ([#86](../../issues/86)) |
 
 **완료 기준(DoD)**: `main`에 안정 버전이 있고, 시연·발표 준비가 끝난다. 🎉
 
-### ⚠️ 7-7 — 놓치면 데이터가 사라집니다
+### ✅ 7-7 — 인증 사진 볼륨 (완료)
 
 사진 보관이 Firebase Storage에서 **서버 로컬 디스크**로 바뀌었습니다([#68](../../pull/68)).
 컨테이너를 그냥 띄우면 **재시작할 때마다 인증 사진이 전부 사라지고** `visits.photo_url` 은 깨진 링크만 남습니다.
+
+[#86](../../issues/86)에서 `docker-compose.yml` 의 `server` 서비스에 반영했습니다.
 
 ```yaml
 volumes:
   - fogapp_photos:/app/data/visit-photos
 environment:
-  VISIT_PHOTO_STORAGE_PATH: /app/data/visit-photos
+  VISIT_PHOTO_STORAGE_PATH: /app/data/visit-photos   # ⚠️ 위 마운트 지점과 같아야 한다
 ```
 
-**백업 대상에도 DB와 함께 이 디렉터리를 포함**해야 합니다. 자세한 내용은 [docs/STORAGE_SETUP.md](docs/STORAGE_SETUP.md) 5장 참고.
+> ⚠️ **두 값이 어긋나면 조용히 깨집니다.** 서버는 정상 동작하고 업로드도 성공하는데, 파일이 볼륨 **밖**에 쌓여 재시작 순간 전부 사라집니다. CI(`Server Container` 잡)가 매번 대조합니다.
+
+**남은 것 — 백업.** 볼륨은 생겼지만 백업 구성은 없습니다. 배포처가 정해질 때 DB와 함께 정합니다. 자세한 내용은 [docs/STORAGE_SETUP.md](docs/STORAGE_SETUP.md) 5장 참고.
 
 ### 🍎 7-6 — iOS는 빌드까지만 검증돼 있습니다
 
