@@ -1,23 +1,42 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/footprint.dart';
 import '../models/spot.dart';
+import '../services/footprint_service.dart';
+import '../widgets/footprint_card.dart';
 import 'footprint_create_screen.dart';
 
-/// 스팟 상세 화면(#50). 마커를 탭하면 열린다 — 발자취 작성(#70) 진입점도 여기 있다.
+/// 스팟 상세 화면(#50). 마커를 탭하면 열린다 — 발자취 작성(#70)·조회(#71) 진입점도 여기 있다.
 ///
-/// 해금 여부(`unlocked`)로 레이아웃만 나눈다. 서버가 해금 전에는 `overview` 자체를
-/// 내려주지 않으므로(`Spot` 모델 문서 참고) 클라이언트가 따로 가릴 정보가 없다.
-class SpotDetailScreen extends StatefulWidget {
+/// 해금 여부(`unlocked`)로 나뉘는 건 스팟 정보(이름·주소·소개)뿐이다. 발자취는
+/// 방문 인증과 독립적이라(#70 결정) 잠긴 스팟에서도 목록을 그대로 보여준다.
+class SpotDetailScreen extends ConsumerStatefulWidget {
   const SpotDetailScreen({required this.spot, super.key});
 
   final Spot spot;
 
   @override
-  State<SpotDetailScreen> createState() => _SpotDetailScreenState();
+  ConsumerState<SpotDetailScreen> createState() => _SpotDetailScreenState();
 }
 
-class _SpotDetailScreenState extends State<SpotDetailScreen> {
+class _SpotDetailScreenState extends ConsumerState<SpotDetailScreen> {
   bool _overviewExpanded = false;
+  late Future<List<Footprint>> _footprintsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _footprintsFuture = _loadFootprints();
+  }
+
+  Future<List<Footprint>> _loadFootprints() {
+    return ref.read(footprintServiceProvider).listBySpot(widget.spot.id);
+  }
+
+  void _refreshFootprints() {
+    setState(() => _footprintsFuture = _loadFootprints());
+  }
 
   Future<void> _openFootprintWrite() async {
     final written = await Navigator.of(context).push<bool>(
@@ -25,6 +44,7 @@ class _SpotDetailScreenState extends State<SpotDetailScreen> {
     );
     if (written == true && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('발자취를 남겼어요.')));
+      _refreshFootprints();
     }
   }
 
@@ -46,10 +66,59 @@ class _SpotDetailScreenState extends State<SpotDetailScreen> {
                 icon: const Icon(Icons.edit_note_outlined),
                 label: const Text('발자취 남기기'),
               ),
+              const SizedBox(height: 24),
+              Text('발자취', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              _buildFootprintList(context),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildFootprintList(BuildContext context) {
+    return FutureBuilder<List<Footprint>>(
+      future: _footprintsFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (snapshot.hasError) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Center(
+              child: Column(
+                children: [
+                  Text('발자취를 불러오지 못했어요.', style: Theme.of(context).textTheme.bodyMedium),
+                  const SizedBox(height: 8),
+                  TextButton(onPressed: _refreshFootprints, child: const Text('다시 시도')),
+                ],
+              ),
+            ),
+          );
+        }
+        final footprints = snapshot.data!;
+        if (footprints.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Center(
+              child: Text(
+                '첫 발자취를 남겨보세요',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+              ),
+            ),
+          );
+        }
+        return Column(
+          children: [for (final footprint in footprints) FootprintCard(footprint: footprint)],
+        );
+      },
     );
   }
 
