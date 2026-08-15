@@ -1,1 +1,22 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"fogmap-9355b","appId":"1:234315915688:android:bf23bf7c77ef8879867d9d","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"fogmap-9355b","configurations":{"android":"1:234315915688:android:bf23bf7c77ef8879867d9d","ios":"1:234315915688:ios:2940a923b2c5dc00867d9d"}}}}}}
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "fogmap-9355b",
+          "appId": "1:234315915688:android:bf23bf7c77ef8879867d9d",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "fogmap-9355b",
+          "configurations": {
+            "android": "1:234315915688:android:bf23bf7c77ef8879867d9d",
+            "ios": "1:234315915688:ios:2940a923b2c5dc00867d9d"
+          }
+        }
+      }
+    }
+  }
+}

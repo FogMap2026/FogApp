@@ -21,7 +21,9 @@ import 'location_permission_gate.dart';
 /// [NMyLocationTracker]가 기본으로 처리한다. `MapScreen`은 여기에 더해 백그라운드
 /// 진입 시 추적 모드 자체를 끄는 더 적극적인 절전 처리를 별도로 수행한다.
 class FogLocationTracker extends NMyLocationTracker {
-  static const _locationSettings = LocationSettings(
+  /// geofencing(#45) 등 다른 위치 구독자도 같은 배터리 절충안을 쓰도록 공개해둔다 —
+  /// 독립된 GPS 스트림을 또 만들 때 서로 다른 정확도/주기를 쓰지 않게 하기 위함.
+  static const locationSettings = LocationSettings(
     accuracy: LocationAccuracy.high,
     distanceFilter: 15,
   );
@@ -38,14 +40,14 @@ class FogLocationTracker extends NMyLocationTracker {
     }
 
     final position = await Geolocator.getCurrentPosition(
-      desiredAccuracy: _locationSettings.accuracy,
+      desiredAccuracy: locationSettings.accuracy,
     );
     return NLatLng(position.latitude, position.longitude);
   }
 
   @override
   Stream<NLatLng> get locationStream => Geolocator.getPositionStream(
-        locationSettings: _locationSettings,
+        locationSettings: locationSettings,
       ).map((p) => NLatLng(p.latitude, p.longitude));
 
   /// 나침반(자기장 센서) 기반 heading. GPS 이동 방향(`Position.heading`)은 실제로

@@ -3,8 +3,11 @@ name: CI
 on:
   push:
     branches: [main, dev]
+  # ⚠️ branches 필터를 두지 않는다. base 를 main·dev 로 제한하면 스택 PR
+  # (base 가 다른 feature 브랜치인 PR)에서 CI 가 아예 돌지 않는다 — 체크 목록이
+  # 비어 있어 "통과"로 오해하기 쉬운데, 실은 실행조차 안 된 상태다(#89 에서 발견).
+  # 아래 Detect changes 가 변경 없는 잡을 건너뛰므로 실행 비용은 거의 늘지 않는다.
   pull_request:
-    branches: [main, dev]
 
 jobs:
   # 변경된 영역 감지 — 관련 없는 잡은 건너뛴다.
@@ -14,6 +17,7 @@ jobs:
     outputs:
       app: ${{ steps.filter.outputs.app }}
       server: ${{ steps.filter.outputs.server }}
+      container: ${{ steps.filter.outputs.container }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -24,6 +28,9 @@ jobs:
               - 'app/**'
             server:
               - 'server/**'
+            container:
+              - 'server/**'
+              - 'docker-compose.yml'
 
   app:
     name: Flutter App
@@ -38,7 +45,7 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.24.0"
+          flutter-version: "3.44.9"
           channel: stable
 
       # 플랫폼 폴더 생성 (lib/ 는 유지)
@@ -55,6 +62,101 @@ jobs:
 
       - name: Analyze
         run: flutter analyze
+
+  # 설치 가능한 Android APK 를 만들어 아티팩트로 올린다.
+  #
+  # 팀원이 Flutter·Android SDK 를 설치하지 않고도 실기기에서 결과물을 확인할 수 있게 하려는
+  # 목적이다. 실행 페이지의 Artifacts 에서 apk 를 받아 폰에 설치하면 된다(출처를 알 수 없는
+  # 앱 설치 허용 필요).
+  #
+  # 디버그 빌드인 이유: 릴리스 서명 키(keystore)가 없어도 설치되는 APK 가 나온다.
+  # 스토어 배포용이 아니라 "지금 만든 걸 눈으로 본다" 가 목적이라 이걸로 충분하다.
+  apk:
+    name: Android APK
+    needs: changes
+    if: ${{ needs.changes.outputs.app == 'true' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      # app/android 는 Gradle 9.1 · AGP 9.0 을 쓴다(app/android/gradle/wrapper 참고).
+      # Gradle 9 는 JDK 17 이상을 요구하며, AGP 9 조합에서는 21 이 안전하다.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.9"
+          channel: stable
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # 두 값은 코드가 --dart-define 으로 받게 돼 있다(app/lib/main.dart, api_client.dart).
+      # 시크릿이 비어 있어도 빌드는 되지만, NAVER_MAP_CLIENT_ID 가 없으면 지도가 뜨지 않는다.
+      # API_BASE_URL 은 실기기에서 PC LAN IP 로 지정해야 서버에 닿는다(기본값은 에뮬레이터용).
+      - name: Build debug APK
+        run: |
+          flutter build apk --debug \
+            --dart-define=NAVER_MAP_CLIENT_ID=${{ secrets.NAVER_MAP_CLIENT_ID }} \
+            --dart-define=API_BASE_URL=${{ secrets.API_BASE_URL || 'http://10.0.2.2:8080' }}
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: fogapp-debug-apk
+          path: app/build/app/outputs/flutter-apk/app-debug.apk
+          retention-days: 14
+
+  # iOS 빌드 검증. 팀에 Mac 이 없어 실행 확인은 못 하지만, 최소한 "iOS 에서 컴파일조차
+  # 안 되는" 상태로 방치되는 것은 막는다. macOS 러너는 공개 저장소라 무료다.
+  #
+  # ⚠️ 빌드 성공 != 동작. Info.plist 권한 문구 누락처럼 런타임에만 터지는 문제는
+  #    여기서 못 잡는다. 실기기 확인은 Mac 을 구했을 때 별도로 해야 한다.
+  ios:
+    name: iOS Build
+    needs: changes
+    if: ${{ needs.changes.outputs.app == 'true' }}
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.9"
+          channel: stable
+
+      # CocoaPods 의존성 캐시 — 캐시 없으면 pod install 에만 3분 넘게 걸린다.
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: |
+            app/ios/Pods
+            ~/Library/Caches/CocoaPods
+          key: ${{ runner.os }}-pods-${{ hashFiles('app/pubspec.lock', 'app/ios/Podfile.lock') }}
+          restore-keys: ${{ runner.os }}-pods-
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # 시뮬레이터 대상으로 빌드한다 — 서명이 아예 필요 없다.
+      #
+      # `flutter build ios --no-codesign` 은 쓰지 않는다. 그건 실기기용 패키징이라
+      # 컴파일이 끝난 뒤 마지막 단계에서 Development Team 을 요구하고, Apple Developer
+      # 계정이 없으면 실패한다(실제로 그렇게 실패했다). 시뮬레이터 빌드는 그 단계가 없어
+      # "iOS 에서 컴파일되는가" 만 확인하려는 우리 목적에 정확히 맞는다.
+      #
+      # ios/ 스캐폴딩은 저장소에 커밋돼 있으므로 flutter create 로 덮지 않는다.
+      - name: Build for simulator
+        run: flutter build ios --simulator
 
   server:
     name: Spring Boot Server
@@ -80,3 +182,41 @@ jobs:
 
       - name: Build
         run: gradle build --no-daemon
+
+  # 서버 이미지가 실제로 빌드되고, 뜨고, 요청을 받는지 확인한다(#86).
+  # Dockerfile 이 깨진 건 배포 직전에 알게 되면 늦다.
+  container:
+    name: Server Container
+    needs: changes
+    if: ${{ needs.changes.outputs.container == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 빌드 성공 != 동작. 이미지를 만들고 DB 와 함께 실제로 기동시킨다 —
+      # Flyway 마이그레이션 실패나 잘못된 ENTRYPOINT 는 빌드만으로는 안 잡힌다.
+      # (compose 가 server 이미지를 빌드하므로 docker build 를 따로 부르지 않는다)
+      - name: Build and start stack
+        run: docker compose up -d --build --wait --wait-timeout 300
+        env:
+          DB_PASSWORD: ci-test-password
+
+      - name: Health check
+        run: curl -fsS http://localhost:8080/api/health | tee /dev/stderr | grep -q '"status":"UP"'
+
+      # 인증 사진 경로가 볼륨 마운트 지점과 같은지, 그리고 non-root 로 쓸 수 있는지
+      # 확인한다. 이 둘이 어긋나면 서버는 정상 동작하는데 재시작 때 사진만 사라진다(#76, 7-7).
+      - name: Verify photo volume is writable by the app user
+        run: |
+          docker compose exec -T server sh -c 'test -w "$VISIT_PHOTO_STORAGE_PATH"'
+          docker inspect fogapp-server \
+            --format '{{range .Mounts}}{{.Destination}}{{"\n"}}{{end}}' \
+            | grep -qx /app/data/visit-photos
+
+      - name: Server logs on failure
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

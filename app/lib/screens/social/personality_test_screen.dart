@@ -82,21 +82,21 @@ class _QuestionTile extends StatelessWidget {
             Text('매우 그렇다', style: TextStyle(fontSize: 11, color: Colors.grey)),
           ],
         ),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: List.generate(5, (i) {
-            final score = i + 1;
-            return Column(
-              children: [
-                Radio<int>(
-                  value: score,
-                  groupValue: value,
-                  onChanged: (v) => onChanged(v!),
-                ),
-                Text('$score'),
-              ],
-            );
-          }),
+        RadioGroup<int>(
+          groupValue: value,
+          onChanged: (v) => onChanged(v!),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: List.generate(5, (i) {
+              final score = i + 1;
+              return Column(
+                children: [
+                  Radio<int>(value: score),
+                  Text('$score'),
+                ],
+              );
+            }),
+          ),
         ),
       ],
     );

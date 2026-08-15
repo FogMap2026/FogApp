@@ -21,4 +21,52 @@ public class VisitProperties {
 
     /** 인증 가능 반경(m). 팀 합의 전 잠정값 — 확정 시 앱(#45)과 함께 변경할 것. */
     private double radiusMeters = 100;
+
+    /**
+     * 인증 사진을 저장할 디렉터리. 서버가 직접 보관한다(팀 결정 B안).
+     *
+     * <p>Firebase Storage 는 무료(Spark) 요금제에서 버킷 생성이 막혀 사용하지 않는다.
+     * 로그인(Firebase Auth)·푸시(FCM)는 그대로 쓰고 <b>사진만</b> 서버에 둔다.</p>
+     *
+     * <p>⚠️ 배포 시 이 경로를 <b>영속 볼륨</b>에 마운트해야 한다. 컨테이너 재시작으로
+     * 사라지면 이미 인증된 방문의 사진이 통째로 유실된다(Phase 7 배포 구성 항목).</p>
+     */
+    private String photoStoragePath = "./data/visit-photos";
+
+    /** 인증 사진 1장당 허용 최대 바이트. 앱이 업로드 전에 리사이즈·압축하는 것을 전제로 한다. */
+    private long maxPhotoBytes = 5L * 1024 * 1024;
+
+    /**
+     * 사용자 한 명이 인증 사진으로 쓸 수 있는 총 용량(#76).
+     *
+     * <p>사진 보관이 Firebase Storage 에서 서버 디스크로 옮겨지면서, 무제한 업로드의 결과가
+     * "요금 증가"에서 <b>"서버 디스크 고갈 → 서비스 중단"</b>으로 바뀌었다. 스팟당 1장만
+     * 유지해도 전국 스팟이 수만 개라 한 계정이 수백 GB 를 점유할 수 있어, 총량으로 한 번 더 막는다.</p>
+     *
+     * <p>기본 200MB — 5MB 사진 기준 약 40개 스팟이다. 실사용에서 부족하면 올리면 되지만,
+     * <b>무제한으로 두지는 말 것.</b></p>
+     */
+    private long maxPhotoBytesPerUser = 200L * 1024 * 1024;
+
+    /**
+     * 인증되지 않은 사진을 남겨두는 시간(시간 단위, #76).
+     *
+     * <p>업로드와 인증이 분리돼 있어, 방금 올린 사진은 아직 참조가 없는 게 정상이다.
+     * 이 시간이 지난 뒤에도 {@code visits}가 가리키지 않으면 고아로 보고 정리한다.
+     * 너무 짧으면 사용자가 사진을 확인하는 동안 파일이 사라진다.</p>
+     */
+    private long photoRetentionHours = 24;
+
+    /** 고아 사진 정리 배치 설정(#76). */
+    private final PhotoCleanup photoCleanup = new PhotoCleanup();
+
+    @Getter
+    @Setter
+    public static class PhotoCleanup {
+
+        /** 기본 off — 로컬·CI 에서 파일이 예고 없이 사라지지 않게 한다. 배포 환경에서 켠다. */
+        private boolean enabled = false;
+
+        private String cron = "0 10 4 * * *";
+    }
 }

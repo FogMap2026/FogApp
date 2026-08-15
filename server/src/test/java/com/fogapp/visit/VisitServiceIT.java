@@ -71,14 +71,22 @@ class VisitServiceIT {
         return userRepository.save(new User("visit-it-uid-" + n, "u" + n + "@test.io", "탐험가" + n, null));
     }
 
+    /**
+     * 업로드 응답이 돌려주는 형태의 photoUrl. 서버가 사진을 직접 보관하므로(#48 B안),
+     * 인증 단계는 본인 경로를 가리키는 URL만 받는다.
+     */
+    private static String photoUrl(User user, Long spotId) {
+        return "/api/visits/photos/" + user.getFirebaseUid() + "/" + spotId
+                + "/1712345678901-0a1b2c3d4e5f6071.jpg";
+    }
+
     @Test
     void 반경_안에서_인증하면_기록이_남는다() {
         User user = newUser();
         Spot spot = newSpot(SPOT_LAT, SPOT_LNG);
 
         // 스팟에서 약 20m 떨어진 지점 (위도 0.0002도 ≈ 22m)
-        Visit visit = visitService.verify(
-                user.getId(), spot.getId(), "https://storage/photo.jpg", SPOT_LAT + 0.0002, SPOT_LNG);
+        Visit visit = visitService.verify(user.getId(), user.getFirebaseUid(), spot.getId(), photoUrl(user, spot.getId()), SPOT_LAT + 0.0002, SPOT_LNG);
 
         assertThat(visit.getId()).isNotNull();
         assertThat(visit.getUserId()).isEqualTo(user.getId());
@@ -91,8 +99,7 @@ class VisitServiceIT {
         User user = newUser();
         Spot spot = newSpot(SPOT_LAT, SPOT_LNG);
 
-        Visit visit = visitService.verify(
-                user.getId(), spot.getId(), "https://storage/photo.jpg", SPOT_LAT, SPOT_LNG);
+        Visit visit = visitService.verify(user.getId(), user.getFirebaseUid(), spot.getId(), photoUrl(user, spot.getId()), SPOT_LAT, SPOT_LNG);
 
         // V4 트리거가 lat/lng 로부터 geom 을 채웠는지 (애플리케이션은 geom 을 건드리지 않는다)
         Boolean filled = jdbcTemplate.queryForObject(
@@ -106,8 +113,7 @@ class VisitServiceIT {
         Spot spot = newSpot(SPOT_LAT, SPOT_LNG);
 
         // 부산 — 반경(기본 100m) 밖
-        assertThatThrownBy(() -> visitService.verify(
-                user.getId(), spot.getId(), "https://storage/photo.jpg", 35.1796, 129.0756))
+        assertThatThrownBy(() -> visitService.verify(user.getId(), user.getFirebaseUid(), spot.getId(), photoUrl(user, spot.getId()), 35.1796, 129.0756))
                 .isInstanceOfSatisfying(ResponseStatusException.class,
                         e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY));
 
@@ -118,10 +124,9 @@ class VisitServiceIT {
     void 같은_스팟을_두_번_인증할_수_없다() {
         User user = newUser();
         Spot spot = newSpot(SPOT_LAT, SPOT_LNG);
-        visitService.verify(user.getId(), spot.getId(), "https://storage/1.jpg", SPOT_LAT, SPOT_LNG);
+        visitService.verify(user.getId(), user.getFirebaseUid(), spot.getId(), photoUrl(user, spot.getId()), SPOT_LAT, SPOT_LNG);
 
-        assertThatThrownBy(() -> visitService.verify(
-                user.getId(), spot.getId(), "https://storage/2.jpg", SPOT_LAT, SPOT_LNG))
+        assertThatThrownBy(() -> visitService.verify(user.getId(), user.getFirebaseUid(), spot.getId(), photoUrl(user, spot.getId()), SPOT_LAT, SPOT_LNG))
                 .isInstanceOfSatisfying(ResponseStatusException.class,
                         e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
     }
@@ -132,8 +137,8 @@ class VisitServiceIT {
         User first = newUser();
         User second = newUser();
 
-        visitService.verify(first.getId(), spot.getId(), "https://storage/1.jpg", SPOT_LAT, SPOT_LNG);
-        Visit other = visitService.verify(second.getId(), spot.getId(), "https://storage/2.jpg", SPOT_LAT, SPOT_LNG);
+        visitService.verify(first.getId(), first.getFirebaseUid(), spot.getId(), photoUrl(first, spot.getId()), SPOT_LAT, SPOT_LNG);
+        Visit other = visitService.verify(second.getId(), second.getFirebaseUid(), spot.getId(), photoUrl(second, spot.getId()), SPOT_LAT, SPOT_LNG);
 
         assertThat(other.getId()).isNotNull();
     }
@@ -142,8 +147,7 @@ class VisitServiceIT {
     void 없는_스팟은_404다() {
         User user = newUser();
 
-        assertThatThrownBy(() -> visitService.verify(
-                user.getId(), 999_999_999L, "https://storage/photo.jpg", SPOT_LAT, SPOT_LNG))
+        assertThatThrownBy(() -> visitService.verify(user.getId(), user.getFirebaseUid(), 999_999_999L, photoUrl(user, 999_999_999L), SPOT_LAT, SPOT_LNG))
                 .isInstanceOf(NotFoundException.class);
     }
 
@@ -152,8 +156,7 @@ class VisitServiceIT {
         User user = newUser();
         Spot spot = newSpot(null, null); // geom 이 NULL 로 남는다 (V2 규칙)
 
-        assertThatThrownBy(() -> visitService.verify(
-                user.getId(), spot.getId(), "https://storage/photo.jpg", SPOT_LAT, SPOT_LNG))
+        assertThatThrownBy(() -> visitService.verify(user.getId(), user.getFirebaseUid(), spot.getId(), photoUrl(user, spot.getId()), SPOT_LAT, SPOT_LNG))
                 .isInstanceOfSatisfying(ResponseStatusException.class,
                         e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY));
     }
@@ -164,8 +167,7 @@ class VisitServiceIT {
         Spot spot = newSpot(SPOT_LAT, SPOT_LNG);
 
         // PostGIS geography 캐스팅까지 가면 500 이 되므로 서비스가 먼저 걸러야 한다.
-        assertThatThrownBy(() -> visitService.verify(
-                user.getId(), spot.getId(), "https://storage/photo.jpg", 200.0, 500.0))
+        assertThatThrownBy(() -> visitService.verify(user.getId(), user.getFirebaseUid(), spot.getId(), photoUrl(user, spot.getId()), 200.0, 500.0))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -175,8 +177,8 @@ class VisitServiceIT {
         Spot a = newSpot(SPOT_LAT, SPOT_LNG);
         Spot b = newSpot(SPOT_LAT, SPOT_LNG);
 
-        visitService.verify(user.getId(), a.getId(), "https://storage/a.jpg", SPOT_LAT, SPOT_LNG);
-        visitService.verify(user.getId(), b.getId(), "https://storage/b.jpg", SPOT_LAT, SPOT_LNG);
+        visitService.verify(user.getId(), user.getFirebaseUid(), a.getId(), photoUrl(user, a.getId()), SPOT_LAT, SPOT_LNG);
+        visitService.verify(user.getId(), user.getFirebaseUid(), b.getId(), photoUrl(user, b.getId()), SPOT_LAT, SPOT_LNG);
 
         assertThat(visitService.listByUser(user.getId()))
                 .hasSize(2)

@@ -41,16 +41,18 @@ public class FootprintController {
                                                       @Valid @RequestBody FootprintCreateRequest request) {
         Footprint footprint = footprintService.create(
                 me.userId(), request.spotId(), request.content(), request.photoUrl());
-        return ResponseEntity.status(HttpStatus.CREATED).body(FootprintResponse.from(footprint));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(footprintService.withAuthor(footprint, me.userId()));
     }
 
     @GetMapping("/{id}")
-    public FootprintResponse get(@PathVariable Long id) {
-        return FootprintResponse.from(footprintService.get(id));
+    public FootprintResponse get(@AuthenticationPrincipal AuthUser me, @PathVariable Long id) {
+        return footprintService.withAuthor(footprintService.get(id), me.userId());
     }
 
+    /** 발자취 목록(#71). 작성자 닉네임·프로필 이미지와 내가 좋아요 눌렀는지(#72)를 함께 내려준다. */
     @GetMapping
-    public List<FootprintResponse> list(
+    public List<FootprintResponse> list(@AuthenticationPrincipal AuthUser me,
             @RequestParam(required = false) Long spotId,
             @RequestParam(required = false) Long userId) {
         List<Footprint> footprints;
@@ -61,14 +63,14 @@ public class FootprintController {
         } else {
             throw new IllegalArgumentException("spotId 또는 userId 중 하나는 필수입니다.");
         }
-        return footprints.stream().map(FootprintResponse::from).toList();
+        return footprintService.withAuthors(footprints, me.userId());
     }
 
     @PatchMapping("/{id}")
     public FootprintResponse update(@AuthenticationPrincipal AuthUser me, @PathVariable Long id,
                                      @Valid @RequestBody FootprintUpdateRequest request) {
-        return FootprintResponse.from(
-                footprintService.update(me.userId(), id, request.content(), request.photoUrl()));
+        Footprint footprint = footprintService.update(me.userId(), id, request.content(), request.photoUrl());
+        return footprintService.withAuthor(footprint, me.userId());
     }
 
     @DeleteMapping("/{id}")

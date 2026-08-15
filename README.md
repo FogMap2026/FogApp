@@ -14,7 +14,7 @@
 - 지역별 정복률(예: `경주 15%`)을 실시간 수치로 피드백하여 즉각적인 성취감 제공
 
 ### 2. 위치 기반 인증 & 알림
-- 스팟 반경 접근 시 실시간 위치 정보 기반 근접 알림(푸시) 전송
+- 스팟 반경 접근 시 실시간 위치 기반 근접 알림 — 앱 사용 중 인앱 알림(Phase 3), 백그라운드 푸시(Phase 6)
 - 현장에서 사진 촬영으로 방문 인증 → 상세 정보 및 리스트 해금
 
 ### 3. 여행 성향 매칭 (Partner Matching)
@@ -36,17 +36,20 @@
 ## 🛠️ 기술 스택
 
 > 아래는 **실제로 채택·적용된 스택**입니다. 버전은 [app/pubspec.yaml](app/pubspec.yaml)·[server/build.gradle](server/build.gradle)이 정본입니다.
+>
+> ⚠️ **Flutter는 3.44.9로 맞춰주세요.** `app/android`(Gradle 9.1 · AGP 9.0)와 `app/ios`(implicit engine API) 스캐폴딩이
+> 이 버전 기준이라, 더 낮은 버전에서는 **네이티브 빌드가 아예 되지 않습니다.** CI도 같은 버전으로 고정돼 있습니다.
 
 | 영역 | 기술 | 버전 | 선택 이유 |
 |------|------|------|-----------|
-| **모바일 앱** | Flutter (Dart) + Riverpod | Flutter 3.24 / Dart ≥3.4 | iOS/Android 단일 코드베이스, 지도·카메라·위치 플러그인 성숙 |
+| **모바일 앱** | Flutter (Dart) + Riverpod | **Flutter 3.44.9** / Dart ≥3.4 | iOS/Android 단일 코드베이스, 지도·카메라·위치 플러그인 성숙 |
 | **지도 SDK** | Naver Maps SDK (`flutter_naver_map`) | 1.3.x | 국내 지도 정확도, 커스텀 안개 오버레이 구현 용이 |
 | **백엔드** | Spring Boot (Java) | 3.3.2 / Java 17 | REST API, 관광공사 OpenAPI 연동, 안정적 서버 |
 | **데이터베이스** | PostgreSQL + **PostGIS** | PostGIS 3.4 (`postgis/postgis:16-3.4`) | 지리공간 쿼리·geofencing·GPS 궤적→Polygon 변환의 핵심 |
 | **DB 마이그레이션** | Flyway (+ Hibernate `ddl-auto: validate`) | — | 스키마 버전 관리. 스키마 정본은 `V*.sql` |
 | **인증** | Firebase Auth + Firebase Admin SDK | admin 9.3.0 | 앱이 발급한 ID 토큰을 서버가 `verifyIdToken`으로 검증 |
 | **실시간/알림** | Firebase (Firestore + FCM) | — | 실시간 위치 공유, 푸시 알림 (Phase 6) |
-| **스토리지** | Firebase Storage | — | 방문 인증 사진 업로드·저장 (Phase 3) |
+| **스토리지** | 서버 직접 저장 (로컬 디스크) | — | 방문 인증 사진 (Phase 3). Firebase Storage는 무료 요금제에서 버킷 생성이 막혀 미채택 — [STORAGE_SETUP.md](docs/STORAGE_SETUP.md) |
 | **테스트** | JUnit 5 + **Testcontainers**(PostGIS) / `flutter test` | — | 실제 PostGIS 컨테이너로 공간 쿼리까지 검증 |
 | **빌드 도구** | Gradle 8.8 | — | Spring Boot 3.3.x 호환 버전으로 고정 |
 | **CI/CD** | GitHub Actions | — | 변경 영역(`app`/`server`) 감지 후 해당 잡만 실행 |
@@ -97,7 +100,7 @@
 - 방문 인증 사진 업로드·스토리지 파이프라인
 - 푸시 알림(FCM), 인증(Auth) 연동
 - CI/CD, 배포, 환경 구성
-- `Firebase Storage` · `FCM` · `GitHub Actions`
+- `사진 저장(서버)` · `FCM` · `GitHub Actions`
 
 ---
 
@@ -228,12 +231,15 @@ cd app    && flutter test
 | `GET` | `/api/profile` | 내 프로필 조회 | 1 |
 | `PATCH` | `/api/profile` | 닉네임·프로필 이미지 수정 | 1 |
 | `PATCH` | `/api/profile/personality` | 성향 테스트 결과 저장 | 2 |
-| `GET` | `/api/spots?region={code}&page&size` | 지역 코드별 스팟 목록(페이지네이션) | 1 |
-| `GET` | `/api/spots/nearby?lat&lng&radius` | 반경 내 스팟 조회 (PostGIS `ST_DWithin`, 최대 20km) | 1 |
+| `GET` | `/api/spots?region={code}&page&size` | 지역 코드별 스팟 목록(페이지네이션). `unlocked`·`overview`는 **로그인한 사용자 기준** | 1·3 |
+| `GET` | `/api/spots/nearby?lat&lng&radius` | 반경 내 스팟 조회 (PostGIS `ST_DWithin`, 최대 20km) | 1·3 |
 | `POST` `GET` `PATCH` `DELETE` | `/api/footprints`, `/api/footprints/{id}` | 발자취 CRUD (`spotId` 또는 `userId`로 목록 조회) | 1·2 |
 | `POST` `DELETE` | `/api/footprints/{id}/likes` | 좋아요 등록·취소 (1인 1회) | 2 |
 | `POST` `GET` `PATCH` `DELETE` | `/api/matches`, `/api/matches/{id}` | 동행 요청 생성·조회·상태 변경·취소 | 1·5 |
 | `GET` | `/api/matches/candidates?userId&limit` | 성향 유사도 기반 동행 후보 추천 | 3 |
+| `POST` | `/api/visits` | 방문 인증 (서버가 PostGIS로 반경 재검증, 1인 1스팟 1회) | 3 |
+| `GET` | `/api/visits` | 내 인증 목록 — 앱이 걷힌 안개 영역을 복원할 때 사용 | 3 |
+| `GET` | `/api/conquest` | 지역별 정복률 (**시/군/구 단위**) | 3 |
 
 스팟 데이터는 `SpotCollectionRunner`(관광공사 OpenAPI 수집 배치)가 `spots.content_id` 업서트로 적재합니다.
 

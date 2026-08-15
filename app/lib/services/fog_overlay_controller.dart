@@ -17,6 +17,7 @@ class FogOverlayController {
 
   final NaverMapController _mapController;
   final List<_Landmass> _landmasses;
+  bool _disposed = false;
 
   /// 안개 색상/투명도. 앱 테마(ColorScheme seed `0xFF5B7A99`)와 어울리는 톤의
   /// 짙은 청회색 + 85% 불투명도로, 아래 지도가 은은히 비치되 스팟은 가려지도록 한다.
@@ -48,11 +49,51 @@ class FogOverlayController {
   /// [center]를 포함하는 landmass 폴리곤을 찾아 그 폴리곤에만 구멍을 낸다.
   /// 어떤 landmass에도 속하지 않으면(예: 좌표 오차로 해안선 바로 바깥) 아무 일도 하지 않는다.
   void clearCircle(String spotId, NLatLng center, {double radiusMeters = 150, int segments = 48}) {
-    final landmass = _landmasses.firstWhere(
-      (l) => l._containsPoint(center),
-      orElse: () => _nearestLandmass(center),
-    );
-    landmass.clearCircle(spotId, center, radiusMeters: radiusMeters, segments: segments);
+    final landmass = _landmassFor(center);
+    landmass._addHole(spotId, center, radiusMeters: radiusMeters, segments: segments);
+    landmass._applyHoles();
+  }
+
+  /// [spots]({스팟 id: 좌표}) 전체를 **한 번에** 걷어낸다(#49) — 지도 진입 시 이미
+  /// 인증한 스팟 목록으로 안개 상태를 복원할 때 쓴다.
+  ///
+  /// [clearCircle]을 스팟 수만큼 반복 호출하면 호출마다 해당 landmass의 구멍 전체
+  /// 목록을 다시 지도에 보내므로(`setHoles`), 스팟이 많아질수록(수백 개) 총 비용이
+  /// O(n²)로 늘어난다. 여기서는 구멍을 모두 계산해 landmass별로 모아둔 뒤,
+  /// landmass 하나당 `setHoles`를 **한 번만** 호출해 O(n)으로 끝낸다.
+  void clearCircles(Map<String, NLatLng> spots, {double radiusMeters = 150, int segments = 48}) {
+    final touched = <_Landmass>{};
+    for (final entry in spots.entries) {
+      final landmass = _landmassFor(entry.value);
+      landmass._addHole(entry.key, entry.value, radiusMeters: radiusMeters, segments: segments);
+      touched.add(landmass);
+    }
+    for (final landmass in touched) {
+      landmass._applyHoles();
+    }
+  }
+
+  /// 방문 인증 성공 직후 호출한다(#49). 반경을 0에서 [radiusMeters]까지 [steps]단계로
+  /// 넓혀가며 "즉시 사라지지 않고 퍼지듯" 걷히는 연출을 만든다.
+  ///
+  /// 지도를 벗어나는 등 도중에 [dispose]되면 남은 단계를 건너뛴다 — 이미 없어진
+  /// 오버레이에 계속 `setHoles`를 보내지 않기 위함.
+  Future<void> clearCircleAnimated(
+    String spotId,
+    NLatLng center, {
+    double radiusMeters = 150,
+    int segments = 48,
+    Duration duration = const Duration(milliseconds: 600),
+    int steps = 12,
+  }) async {
+    final landmass = _landmassFor(center);
+    final stepDelay = duration ~/ steps;
+    for (var i = 1; i <= steps; i++) {
+      if (_disposed) return;
+      landmass._addHole(spotId, center, radiusMeters: radiusMeters * i / steps, segments: segments);
+      landmass._applyHoles();
+      if (i < steps) await Future.delayed(stepDelay);
+    }
   }
 
   /// 다시 안개로 덮는다(주로 테스트/디버그용).
@@ -63,9 +104,19 @@ class FogOverlayController {
   }
 
   void dispose() {
+    _disposed = true;
     for (final landmass in _landmasses) {
       _mapController.deleteOverlay(landmass.overlay.info);
     }
+  }
+
+  /// [center]를 포함하는 landmass. 어떤 landmass에도 속하지 않으면(해안선 바로
+  /// 바깥 등) 가장 가까운 landmass로 대체한다.
+  _Landmass _landmassFor(NLatLng center) {
+    return _landmasses.firstWhere(
+      (l) => l._containsPoint(center),
+      orElse: () => _nearestLandmass(center),
+    );
   }
 
   _Landmass _nearestLandmass(NLatLng point) {
@@ -86,8 +137,14 @@ class _Landmass {
     color: FogOverlayController.fogColor,
   );
 
-  void clearCircle(String spotId, NLatLng center, {required double radiusMeters, required int segments}) {
+  /// 구멍을 계산해 저장만 한다 — 지도에는 반영하지 않는다. 여러 스팟을 모아 한 번에
+  /// [_applyHoles]하려는 호출자([FogOverlayController.clearCircles])를 위한 분리.
+  void _addHole(String spotId, NLatLng center, {required double radiusMeters, required int segments}) {
     _clearedHoles[spotId] = _circleRing(center, radiusMeters, segments);
+  }
+
+  /// [_addHole]로 쌓인 구멍 전체를 지도에 한 번에 반영한다.
+  void _applyHoles() {
     overlay.setHoles(_clearedHoles.values);
   }
 
