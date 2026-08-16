@@ -1,10 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/match.dart';
 import '../models/match_candidate.dart';
 import 'api_client.dart';
 
-/// 매칭(동행) API(#37, 5-1) 클라이언트. 후보 추천·요청 보내기만 다룬다 —
-/// 요청 목록·수락/거절은 #94에서 별도로 붙는다.
+/// 매칭(동행) API(#37, 5-1, 5-2) 클라이언트.
 class MatchService {
   MatchService(this._apiClient);
 
@@ -29,6 +29,26 @@ class MatchService {
       '/api/matches',
       data: {'addresseeId': addresseeId},
     );
+  }
+
+  /// 내 매칭 전체(#94). 보낸 것·받은 것이 섞여 오며, 각 항목의 `direction`으로 구분한다.
+  Future<List<Match>> listForUser() async {
+    final response = await _apiClient.dio.get<List<dynamic>>('/api/matches');
+    return (response.data ?? []).map((e) => Match.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  /// 받은 요청을 수락·거절한다(#94). [status]는 서버 값 그대로 소문자
+  /// (`accepted`/`rejected`)를 받는다 — 요청 대상자만 할 수 있고, 아니면 서버가 403을 준다.
+  Future<void> updateStatus({required int matchId, required String status}) async {
+    await _apiClient.dio.patch<Map<String, dynamic>>(
+      '/api/matches/$matchId/status',
+      data: {'status': status},
+    );
+  }
+
+  /// 매칭을 취소한다(#94). 요청자·대상자 둘 중 한쪽만 할 수 있다.
+  Future<void> cancel(int matchId) {
+    return _apiClient.dio.delete<void>('/api/matches/$matchId');
   }
 }
 

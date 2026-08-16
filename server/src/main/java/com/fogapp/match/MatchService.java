@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,6 +17,7 @@ import com.fogapp.common.NotFoundException;
 import com.fogapp.user.PersonalityScoreParser;
 import com.fogapp.user.User;
 import com.fogapp.user.UserRepository;
+import com.fogapp.user.UserSummary;
 
 @Service
 @Transactional(readOnly = true)
@@ -93,6 +96,34 @@ public class MatchService {
 
     public List<Match> listForUser(Long userId) {
         return matchRepository.findAllInvolvingUser(userId);
+    }
+
+    /**
+     * 매칭 목록에 상대방 정보(닉네임·프로필 이미지)와 방향(SENT/RECEIVED)을 붙인다.
+     *
+     * <p>발자취 목록({@code FootprintService.withAuthors})과 같은 이유로 상대방 조회는
+     * 목록 크기와 무관하게 한 번이다 — 매칭마다 읽으면 N+1이 난다.</p>
+     */
+    public List<MatchResponse> withCounterparts(List<Match> matches, Long viewerId) {
+        if (matches.isEmpty()) {
+            return List.of();
+        }
+        Set<Long> counterpartIds = matches.stream()
+                .map(match -> counterpartIdOf(match, viewerId))
+                .collect(Collectors.toSet());
+        Map<Long, UserSummary> summariesById = userRepository.findSummariesByIdIn(counterpartIds).stream()
+                .collect(Collectors.toMap(UserSummary::id, summary -> summary));
+        return matches.stream()
+                .map(match -> MatchResponse.from(match, viewerId, summariesById.get(counterpartIdOf(match, viewerId))))
+                .toList();
+    }
+
+    public MatchResponse withCounterpart(Match match, Long viewerId) {
+        return withCounterparts(List.of(match), viewerId).get(0);
+    }
+
+    private Long counterpartIdOf(Match match, Long viewerId) {
+        return match.getRequesterId().equals(viewerId) ? match.getAddresseeId() : match.getRequesterId();
     }
 
     /** 수락/거절은 요청을 받은 쪽(addressee)만 할 수 있다(#52). */
