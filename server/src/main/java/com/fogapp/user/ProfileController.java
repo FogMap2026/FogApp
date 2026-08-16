@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fogapp.auth.AuthUser;
 
 import jakarta.validation.Valid;
@@ -20,21 +21,24 @@ import jakarta.validation.Valid;
 public class ProfileController {
 
     private final UserService userService;
+    private final ObjectMapper objectMapper;
 
-    public ProfileController(UserService userService) {
+    public ProfileController(UserService userService, ObjectMapper objectMapper) {
         this.userService = userService;
+        this.objectMapper = objectMapper;
     }
 
     @GetMapping
     public ProfileResponse me(@AuthenticationPrincipal AuthUser me) {
-        return ProfileResponse.from(userService.get(me.userId()));
+        return ProfileResponse.from(userService.get(me.userId()), objectMapper);
     }
 
     @PatchMapping
     public ProfileResponse update(@AuthenticationPrincipal AuthUser me,
                                   @Valid @RequestBody ProfileUpdateRequest request) {
         return ProfileResponse.from(
-                userService.updateProfile(me.userId(), request.nickname(), request.profileImageUrl()));
+                userService.updateProfile(me.userId(), request.nickname(), request.profileImageUrl()),
+                objectMapper);
     }
 
     @PatchMapping("/personality")
