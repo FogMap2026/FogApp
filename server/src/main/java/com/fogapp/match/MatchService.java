@@ -94,6 +94,22 @@ public class MatchService {
                 .orElseThrow(() -> new NotFoundException("매칭", id));
     }
 
+    /**
+     * 매칭 단건 조회 — 당사자만 볼 수 있다(#52). {@link #get}과 달리 조회자를 검증한다.
+     *
+     * <p>동행 요청은 사적인 관계다. 검증 없이 내려주면 제3자가 id만 알아도 상대방 닉네임·
+     * 프로필 이미지·성향 유사도가 새어나가고, {@code direction}까지 사실과 다르게
+     * 계산돼(제3자는 requester가 아니므로 항상 "RECEIVED") 화면이 잘못된 정보를 보여줄
+     * 수 있다({@code delete}가 이미 쓰는 것과 같은 "양쪽 중 하나" 판정을 그대로 쓴다).</p>
+     */
+    public Match getForViewer(Long viewerId, Long id) {
+        Match match = get(id);
+        if (!match.getRequesterId().equals(viewerId) && !match.getAddresseeId().equals(viewerId)) {
+            throw new ForbiddenException("본인이 참여한 매칭만 조회할 수 있습니다.");
+        }
+        return match;
+    }
+
     public List<Match> listForUser(Long userId) {
         return matchRepository.findAllInvolvingUser(userId);
     }

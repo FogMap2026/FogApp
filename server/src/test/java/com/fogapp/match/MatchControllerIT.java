@@ -162,6 +162,33 @@ class MatchControllerIT {
     }
 
     @Test
+    void 제3자는_남의_매칭을_조회할_수_없다() throws Exception {
+        // 5-2 리뷰(PGH0621/songkh1201): GET /api/matches/{id}에 당사자 검사가 없으면
+        // id만 알아도 상대방 닉네임·성향 유사도가 새어나가고 direction까지 틀리게 계산된다.
+        loginAs("alice-token", "uid-alice");
+        Long bobId = ensureUser("uid-bob");
+        Long matchId = createMatchAs("alice-token", bobId);
+
+        loginAs("carol-token", "uid-carol");
+        mockMvc.perform(get("/api/matches/" + matchId)
+                        .header("Authorization", "Bearer carol-token"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void 당사자는_매칭을_단건_조회할_수_있다() throws Exception {
+        loginAs("alice-token", "uid-alice");
+        Long bobId = ensureUser("uid-bob", "밥");
+        Long matchId = createMatchAs("alice-token", bobId);
+
+        mockMvc.perform(get("/api/matches/" + matchId)
+                        .header("Authorization", "Bearer alice-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.direction").value("SENT"))
+                .andExpect(jsonPath("$.counterpartNickname").value("밥"));
+    }
+
+    @Test
     void 목록에서_보낸_요청은_direction이_SENT이고_상대방_닉네임을_포함한다() throws Exception {
         // 5-2: requesterId/addresseeId만으로는 "누가 보냈는지"를 앱이 매번 계산해야 한다 —
         // 서버가 로그인 사용자(viewer) 기준으로 미리 방향과 상대방 정보를 계산해 내려준다.

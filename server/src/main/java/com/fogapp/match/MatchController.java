@@ -43,7 +43,7 @@ public class MatchController {
 
     @GetMapping("/{id}")
     public MatchResponse get(@AuthenticationPrincipal AuthUser me, @PathVariable Long id) {
-        return matchService.withCounterpart(matchService.get(id), me.userId());
+        return matchService.withCounterpart(matchService.getForViewer(me.userId(), id), me.userId());
     }
 
     /** 내 매칭 전체(보낸 것 + 받은 것, 5-2). 각 항목에 상대방 정보와 방향을 함께 내려준다. */
