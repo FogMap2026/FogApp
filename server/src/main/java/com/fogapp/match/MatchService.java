@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,6 +17,7 @@ import com.fogapp.common.NotFoundException;
 import com.fogapp.user.PersonalityScoreParser;
 import com.fogapp.user.User;
 import com.fogapp.user.UserRepository;
+import com.fogapp.user.UserSummary;
 
 @Service
 @Transactional(readOnly = true)
@@ -91,8 +94,52 @@ public class MatchService {
                 .orElseThrow(() -> new NotFoundException("매칭", id));
     }
 
+    /**
+     * 매칭 단건 조회 — 당사자만 볼 수 있다(#52). {@link #get}과 달리 조회자를 검증한다.
+     *
+     * <p>동행 요청은 사적인 관계다. 검증 없이 내려주면 제3자가 id만 알아도 상대방 닉네임·
+     * 프로필 이미지·성향 유사도가 새어나가고, {@code direction}까지 사실과 다르게
+     * 계산돼(제3자는 requester가 아니므로 항상 "RECEIVED") 화면이 잘못된 정보를 보여줄
+     * 수 있다({@code delete}가 이미 쓰는 것과 같은 "양쪽 중 하나" 판정을 그대로 쓴다).</p>
+     */
+    public Match getForViewer(Long viewerId, Long id) {
+        Match match = get(id);
+        if (!match.getRequesterId().equals(viewerId) && !match.getAddresseeId().equals(viewerId)) {
+            throw new ForbiddenException("본인이 참여한 매칭만 조회할 수 있습니다.");
+        }
+        return match;
+    }
+
     public List<Match> listForUser(Long userId) {
         return matchRepository.findAllInvolvingUser(userId);
+    }
+
+    /**
+     * 매칭 목록에 상대방 정보(닉네임·프로필 이미지)와 방향(SENT/RECEIVED)을 붙인다.
+     *
+     * <p>발자취 목록({@code FootprintService.withAuthors})과 같은 이유로 상대방 조회는
+     * 목록 크기와 무관하게 한 번이다 — 매칭마다 읽으면 N+1이 난다.</p>
+     */
+    public List<MatchResponse> withCounterparts(List<Match> matches, Long viewerId) {
+        if (matches.isEmpty()) {
+            return List.of();
+        }
+        Set<Long> counterpartIds = matches.stream()
+                .map(match -> counterpartIdOf(match, viewerId))
+                .collect(Collectors.toSet());
+        Map<Long, UserSummary> summariesById = userRepository.findSummariesByIdIn(counterpartIds).stream()
+                .collect(Collectors.toMap(UserSummary::id, summary -> summary));
+        return matches.stream()
+                .map(match -> MatchResponse.from(match, viewerId, summariesById.get(counterpartIdOf(match, viewerId))))
+                .toList();
+    }
+
+    public MatchResponse withCounterpart(Match match, Long viewerId) {
+        return withCounterparts(List.of(match), viewerId).get(0);
+    }
+
+    private Long counterpartIdOf(Match match, Long viewerId) {
+        return match.getRequesterId().equals(viewerId) ? match.getAddresseeId() : match.getRequesterId();
     }
 
     /** 수락/거절은 요청을 받은 쪽(addressee)만 할 수 있다(#52). */

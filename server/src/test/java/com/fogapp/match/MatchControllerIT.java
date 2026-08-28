@@ -2,6 +2,7 @@ package com.fogapp.match;
 
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -68,6 +69,13 @@ class MatchControllerIT {
     private Long ensureUser(String uid) {
         return jdbcTemplate.queryForObject(
                 "INSERT INTO users (firebase_uid) VALUES (?) RETURNING id", Long.class, uid);
+    }
+
+    /** 닉네임까지 지정해 미리 만들어둔다(상대방 닉네임 노출 검증용, 5-2). */
+    private Long ensureUser(String uid, String nickname) {
+        return jdbcTemplate.queryForObject(
+                "INSERT INTO users (firebase_uid, nickname) VALUES (?, ?) RETURNING id",
+                Long.class, uid, nickname);
     }
 
     private Long createMatchAs(String token, Long addresseeId) throws Exception {
@@ -151,6 +159,63 @@ class MatchControllerIT {
         mockMvc.perform(delete("/api/matches/" + matchId)
                         .header("Authorization", "Bearer alice-token"))
                 .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void 제3자는_남의_매칭을_조회할_수_없다() throws Exception {
+        // 5-2 리뷰(PGH0621/songkh1201): GET /api/matches/{id}에 당사자 검사가 없으면
+        // id만 알아도 상대방 닉네임·성향 유사도가 새어나가고 direction까지 틀리게 계산된다.
+        loginAs("alice-token", "uid-alice");
+        Long bobId = ensureUser("uid-bob");
+        Long matchId = createMatchAs("alice-token", bobId);
+
+        loginAs("carol-token", "uid-carol");
+        mockMvc.perform(get("/api/matches/" + matchId)
+                        .header("Authorization", "Bearer carol-token"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void 당사자는_매칭을_단건_조회할_수_있다() throws Exception {
+        loginAs("alice-token", "uid-alice");
+        Long bobId = ensureUser("uid-bob", "밥");
+        Long matchId = createMatchAs("alice-token", bobId);
+
+        mockMvc.perform(get("/api/matches/" + matchId)
+                        .header("Authorization", "Bearer alice-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.direction").value("SENT"))
+                .andExpect(jsonPath("$.counterpartNickname").value("밥"));
+    }
+
+    @Test
+    void 목록에서_보낸_요청은_direction이_SENT이고_상대방_닉네임을_포함한다() throws Exception {
+        // 5-2: requesterId/addresseeId만으로는 "누가 보냈는지"를 앱이 매번 계산해야 한다 —
+        // 서버가 로그인 사용자(viewer) 기준으로 미리 방향과 상대방 정보를 계산해 내려준다.
+        loginAs("alice-token", "uid-alice");
+        Long bobId = ensureUser("uid-bob", "밥");
+        createMatchAs("alice-token", bobId);
+
+        mockMvc.perform(get("/api/matches").header("Authorization", "Bearer alice-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].direction").value("SENT"))
+                .andExpect(jsonPath("$[0].counterpartId").value(bobId))
+                .andExpect(jsonPath("$[0].counterpartNickname").value("밥"));
+    }
+
+    @Test
+    void 목록에서_받은_요청은_direction이_RECEIVED다() throws Exception {
+        Long aliceId = ensureUser("uid-alice", "앨리스");
+        Long bobId = ensureUser("uid-bob", "밥");
+        loginAs("alice-token", "uid-alice");
+        loginAs("bob-token", "uid-bob");
+        createMatchAs("alice-token", bobId);
+
+        mockMvc.perform(get("/api/matches").header("Authorization", "Bearer bob-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].direction").value("RECEIVED"))
+                .andExpect(jsonPath("$[0].counterpartId").value(aliceId))
+                .andExpect(jsonPath("$[0].counterpartNickname").value("앨리스"));
     }
 
     @Test
