@@ -15,6 +15,7 @@ import org.springframework.stereotype.Component;
  * <p><b>2단계다.</b> ① 지역별 목록 수집 → ② 소개글이 빈 스팟만 상세조회로 채움.
  * 목록 API 가 소개글을 주지 않아 나눠야 하며, 소개글은 해금 화면이 보여줄 유일한 내용이라
  * ②가 빠지면 스팟을 정복해도 빈 화면이 열린다.</p>
+ */
 @Component
 @ConditionalOnProperty(name = "tour.collect.on-startup", havingValue = "true")
 public class SpotCollectionRunner implements ApplicationRunner {

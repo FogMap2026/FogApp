@@ -23,6 +23,7 @@ import com.fasterxml.jackson.databind.JsonNode;
  * <p>서비스 키는 <b>디코딩 키</b>를 넣어야 한다. 아래 {@code .encode()} 가 한 번 인코딩하므로,
  * 포털의 Encoding 키를 그대로 넣으면 이중 인코딩되어 {@code SERVICE_KEY_IS_NOT_REGISTERED_ERROR}
  * 가 난다 — 키가 멀쩡한데 등록이 안 됐다고 나오는 경우 대부분 이것이다.</p>
+ */
 @Component
 public class TourApiClient {
 
