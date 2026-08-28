@@ -18,6 +18,16 @@ public interface SpotRepository extends JpaRepository<Spot, Long> {
     Optional<Spot> findByContentId(String contentId);
 
     /**
+     * 소개글이 아직 없는 스팟(#100). 상세조회로 채울 대상을 고른다.
+     *
+     * <p>상세는 스팟 1건당 1회 호출이라 비싸다 — 이미 채워진 것을 제외해 재실행이 남은 것만
+     * 집어가게 하고, {@code limit} 으로 한 번에 쓰는 호출량을 묶는다.</p>
+     */
+    @Query(value = "SELECT * FROM spots WHERE overview IS NULL OR overview = '' "
+            + "ORDER BY id LIMIT :limit", nativeQuery = true)
+    List<Spot> findWithoutOverview(@Param("limit") int limit);
+
+    /**
      * 중심 좌표 반경(m) 내 스팟을 가까운 순으로 조회한다.
      * geom(GiST 인덱스, idx_spots_geom)을 geography 로 캐스팅해 ST_DWithin/KNN(<->) 을 쓴다 —
      * 반경을 도(degree)가 아닌 미터로 그대로 받기 위함이며, geom 의 GiST 인덱스가 bbox 사전 필터로 쓰인다.

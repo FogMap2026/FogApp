@@ -32,7 +32,10 @@ spring:
 tour:
   api:
     service-key: ${TOUR_API_SERVICE_KEY:}
-    base-url: ${TOUR_API_BASE_URL:https://apis.data.go.kr/B551011/KorService1}
+    base-url: ${TOUR_API_BASE_URL:https://apis.data.go.kr/B551011/KorService2}
+    # 오퍼레이션 이름 끝 버전 숫자. base-url 의 KorService 버전과 반드시 짝이어야 한다
+    # (KorService2 + areaBasedList2). 한쪽만 바꾸면 404 가 난다.
+    operation-suffix: ${TOUR_API_OPERATION_SUFFIX:2}
     mobile-app: FogApp
     mobile-os: ETC
   # 수집 배치 설정. on-startup=true 로 켜면 기동 시 지정 지역을 수집한다(기본 off).
@@ -41,6 +44,9 @@ tour:
     area-codes: ${TOUR_COLLECT_AREA_CODES:1,6,39}
     num-of-rows: 100
     max-pages: 10
+    # 한 번 실행에 소개글을 채울 최대 스팟 수(#100). 상세조회는 스팟 1건당 1회라
+    # 목록 수집보다 비싸다 — 남은 것은 다음 실행이 이어서 채운다.
+    overview-max-per-run: ${TOUR_COLLECT_OVERVIEW_MAX_PER_RUN:200}
 
 # 방문 인증 (#48).
 # ⚠️ radius-meters 는 앱의 근접 감지(#45)가 쓰는 값과 반드시 같아야 한다.
