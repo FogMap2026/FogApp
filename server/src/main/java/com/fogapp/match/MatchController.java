@@ -38,17 +38,18 @@ public class MatchController {
     public ResponseEntity<MatchResponse> create(@AuthenticationPrincipal AuthUser me,
                                                   @Valid @RequestBody MatchCreateRequest request) {
         Match match = matchService.request(me.userId(), request.addresseeId());
-        return ResponseEntity.status(HttpStatus.CREATED).body(MatchResponse.from(match));
+        return ResponseEntity.status(HttpStatus.CREATED).body(matchService.withCounterpart(match, me.userId()));
     }
 
     @GetMapping("/{id}")
-    public MatchResponse get(@PathVariable Long id) {
-        return MatchResponse.from(matchService.get(id));
+    public MatchResponse get(@AuthenticationPrincipal AuthUser me, @PathVariable Long id) {
+        return matchService.withCounterpart(matchService.getForViewer(me.userId(), id), me.userId());
     }
 
+    /** 내 매칭 전체(보낸 것 + 받은 것, 5-2). 각 항목에 상대방 정보와 방향을 함께 내려준다. */
     @GetMapping
     public List<MatchResponse> listForUser(@AuthenticationPrincipal AuthUser me) {
-        return matchService.listForUser(me.userId()).stream().map(MatchResponse::from).toList();
+        return matchService.withCounterparts(matchService.listForUser(me.userId()), me.userId());
     }
 
     @GetMapping("/candidates")
@@ -61,7 +62,8 @@ public class MatchController {
     @PatchMapping("/{id}/status")
     public MatchResponse updateStatus(@AuthenticationPrincipal AuthUser me, @PathVariable Long id,
                                        @Valid @RequestBody MatchStatusUpdateRequest request) {
-        return MatchResponse.from(matchService.updateStatus(me.userId(), id, request.status()));
+        Match match = matchService.updateStatus(me.userId(), id, request.status());
+        return matchService.withCounterpart(match, me.userId());
     }
 
     @DeleteMapping("/{id}")

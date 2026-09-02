@@ -36,6 +36,29 @@ public final class TourResponseParser {
         return result;
     }
 
+    /**
+     * 공통정보 조회 응답에서 소개글만 뽑는다(#100).
+     *
+     * <p>목록 응답과 구조는 같지만 항목이 1건이라 {@code item} 이 배열이 아닌 단일 객체로 오는
+     * 경우가 흔하다 — 양쪽 다 처리한다.</p>
+     *
+     * @return 소개글. 항목이 없거나 {@code overview} 가 비어 있으면 null
+     */
+    public static String parseOverview(JsonNode root) {
+        if (root == null) {
+            return null;
+        }
+        JsonNode items = root.path("response").path("body").path("items");
+        if (!items.isObject() || !items.has("item")) {
+            return null;
+        }
+        JsonNode itemNode = items.get("item");
+        JsonNode first = itemNode.isArray()
+                ? (itemNode.isEmpty() ? null : itemNode.get(0))
+                : itemNode;
+        return first == null ? null : text(first, "overview");
+    }
+
     private static void addIfValid(List<TourSpotItem> result, JsonNode node) {
         String contentId = text(node, "contentid");
         String title = text(node, "title");

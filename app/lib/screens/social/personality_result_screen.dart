@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/personality.dart';
 import '../../services/personality_service.dart';
+import '../../widgets/personality_axis_bar.dart';
 
 /// 성향 테스트 결과 화면(#31). 유형 코드·축별 점수를 보여주고 서버 저장을 시도한다.
 class PersonalityResultScreen extends ConsumerStatefulWidget {
@@ -55,7 +56,11 @@ class _PersonalityResultScreenState extends ConsumerState<PersonalityResultScree
             ),
             const SizedBox(height: 24),
             for (final axis in PersonalityAxis.values) ...[
-              _AxisBar(axis: axis, axisResult: result.axisResults[axis]!),
+              PersonalityAxisBar(
+                axis: axis,
+                score: result.axisResults[axis]!.score,
+                pole: result.axisResults[axis]!.pole,
+              ),
               const SizedBox(height: 16),
             ],
             if (_errorMessage != null) ...[
@@ -79,35 +84,5 @@ class _PersonalityResultScreenState extends ConsumerState<PersonalityResultScree
         ),
       ),
     );
-  }
-}
-
-class _AxisBar extends StatelessWidget {
-  const _AxisBar({required this.axis, required this.axisResult});
-
-  final PersonalityAxis axis;
-  final AxisResult axisResult;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('${_axisLabel(axis)} — ${axisResult.pole} (${axisResult.score}점)'),
-        const SizedBox(height: 4),
-        LinearProgressIndicator(value: axisResult.score / 100),
-      ],
-    );
-  }
-
-  String _axisLabel(PersonalityAxis axis) {
-    switch (axis) {
-      case PersonalityAxis.spontaneity:
-        return '즉흥성 ↔ 계획성';
-      case PersonalityAxis.restVsRoam:
-        return '휴양 ↔ 관광';
-      case PersonalityAxis.extraversion:
-        return '외향 ↔ 내향';
-    }
   }
 }

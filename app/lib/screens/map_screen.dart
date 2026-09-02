@@ -17,6 +17,8 @@ import '../services/spot_geofence_controller.dart';
 import '../services/spot_marker_controller.dart';
 import '../services/spot_service.dart';
 import '../services/visit_service.dart';
+import 'match_candidates_screen.dart';
+import 'match_list_screen.dart';
 import 'profile_screen.dart';
 import 'social/personality_test_screen.dart';
 import 'spot_detail_screen.dart';
@@ -457,6 +459,24 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                       ),
                       icon: const Icon(Icons.person_outline),
                       label: const Text('내 프로필'),
+                    ),
+                    const SizedBox(height: 8),
+                    FilledButton.tonalIcon(
+                      // 같은 이유의 임시 진입점(5-1).
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const MatchCandidatesScreen()),
+                      ),
+                      icon: const Icon(Icons.people_outline),
+                      label: const Text('동행 추천'),
+                    ),
+                    const SizedBox(height: 8),
+                    FilledButton.tonalIcon(
+                      // 같은 이유의 임시 진입점(5-2).
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const MatchListScreen()),
+                      ),
+                      icon: const Icon(Icons.mark_email_unread_outlined),
+                      label: const Text('내 동행 요청'),
                     ),
                   ],
                 ),

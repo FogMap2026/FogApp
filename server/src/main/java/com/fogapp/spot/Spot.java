@@ -107,4 +107,14 @@ public class Spot {
         this.lat = lat;
         this.lng = lng;
     }
+
+    /**
+     * 상세조회로 받은 소개글을 채운다(#100).
+     *
+     * <p>수집({@code areaBasedList})은 소개글을 주지 않아 {@link #updateFromCollection} 이
+     * 이 필드를 건드리지 않는다. 재수집이 소개글을 지우지 않는 이유이기도 하다.</p>
+     */
+    public void updateOverview(String overview) {
+        this.overview = overview;
+    }
 }

@@ -78,4 +78,47 @@ class TourResponseParserTest {
 
         assertThat(TourResponseParser.parse(root)).isEmpty();
     }
+
+    // ── 소개글 파싱 (#100) ────────────────────────────────────────────────
+
+    @Test
+    void 공통정보_응답에서_소개글을_뽑는다() throws Exception {
+        JsonNode root = json("""
+                {"response":{"header":{"resultCode":"0000"},"body":{"items":{"item":[
+                  {"contentid":"126508","title":"경복궁","overview":"조선왕조 제일의 법궁이다."}
+                ]}}}}
+                """);
+
+        assertThat(TourResponseParser.parseOverview(root)).isEqualTo("조선왕조 제일의 법궁이다.");
+    }
+
+    @Test
+    void 항목이_배열이_아니어도_소개글을_뽑는다() throws Exception {
+        // 상세조회는 1건이라 item 이 단일 객체로 오는 경우가 흔하다.
+        JsonNode root = json("""
+                {"response":{"body":{"items":{"item":
+                  {"contentid":"126508","overview":"단일 객체로 온 소개글"}
+                }}}}
+                """);
+
+        assertThat(TourResponseParser.parseOverview(root)).isEqualTo("단일 객체로 온 소개글");
+    }
+
+    @Test
+    void 소개글이_비어_있으면_null이다() throws Exception {
+        // 빈 문자열을 그대로 저장하면 "채워진 것"으로 오인돼 다음 실행이 건너뛴다.
+        JsonNode root = json("""
+                {"response":{"body":{"items":{"item":[{"contentid":"1","overview":"  "}]}}}}
+                """);
+
+        assertThat(TourResponseParser.parseOverview(root)).isNull();
+    }
+
+    @Test
+    void 결과가_없으면_소개글은_null이다() throws Exception {
+        assertThat(TourResponseParser.parseOverview(json("""
+                {"response":{"body":{"items":""}}}
+                """))).isNull();
+        assertThat(TourResponseParser.parseOverview(null)).isNull();
+    }
 }

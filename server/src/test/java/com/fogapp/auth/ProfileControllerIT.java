@@ -130,6 +130,51 @@ class ProfileControllerIT {
     }
 
     @Test
+    void 성향_테스트를_안_했으면_유형은_null_점수는_빈_객체다() throws Exception {
+        // 5-3: 프로필 화면이 "테스트로 유도" 분기를 타려면 이 상태를 구분할 수 있어야 한다.
+        given(tokenVerifier.verify("erin-token"))
+                .willReturn(new VerifiedToken("uid-erin", "erin@example.com", null, null));
+
+        mockMvc.perform(get("/api/profile").header("Authorization", "Bearer erin-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.personalityType").doesNotExist())
+                .andExpect(jsonPath("$.personalityScores").isEmpty());
+    }
+
+    @Test
+    void 성향_저장_후_조회하면_유형과_축별_점수가_내려온다() throws Exception {
+        // 5-3: 원본 JSONB가 아니라 PersonalityScoreParser로 뽑은 축별 점수만 노출한다 —
+        // MatchService(#37)가 유사도 계산에 쓰는 것과 같은 파서라 표현이 어긋나지 않는다.
+        given(tokenVerifier.verify("frank-token"))
+                .willReturn(new VerifiedToken("uid-frank", "frank@example.com", null, null));
+
+        mockMvc.perform(patch("/api/profile/personality")
+                        .header("Authorization", "Bearer frank-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "personalityType": "PRI",
+                                  "personalityScores": {
+                                    "version": 1,
+                                    "axes": {
+                                      "spontaneity": {"score": 72, "pole": "P"},
+                                      "restVsRoam": {"score": 35, "pole": "R"},
+                                      "extraversion": {"score": 58, "pole": "I"}
+                                    }
+                                  }
+                                }
+                                """))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/profile").header("Authorization", "Bearer frank-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.personalityType").value("PRI"))
+                .andExpect(jsonPath("$.personalityScores.spontaneity").value(72))
+                .andExpect(jsonPath("$.personalityScores.restVsRoam").value(35))
+                .andExpect(jsonPath("$.personalityScores.extraversion").value(58));
+    }
+
+    @Test
     void 성향_유형이_비어있으면_400() throws Exception {
         given(tokenVerifier.verify("dave-token"))
                 .willReturn(new VerifiedToken("uid-dave", "dave@example.com", null, null));

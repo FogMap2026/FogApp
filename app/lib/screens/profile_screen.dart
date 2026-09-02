@@ -2,14 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/footprint.dart';
+import '../models/personality.dart';
 import '../models/profile.dart';
 import '../services/footprint_service.dart';
 import '../services/profile_service.dart';
 import '../widgets/footprint_card.dart';
+import '../widgets/personality_axis_bar.dart';
+import 'social/personality_test_screen.dart';
 
-/// 프로필 화면(#73) — 앱의 첫 프로필 화면. 지금은 "내 발자취 모아보기"만 담는다.
+/// 프로필 화면(#73, 5-3) — 앱의 첫 프로필 화면. "내 성향"과 "내 발자취 모아보기"를 담는다.
 ///
-/// 나중에 붙을 것들(성향 결과 #31, 정복률 요약 #51, 내 인증 목록 #48, 매칭 Phase 5)은
+/// 나중에 붙을 것들(정복률 요약 #51, 내 인증 목록 #48, 매칭 Phase 5)은
 /// 서버 API가 이미 있으니 화면만 늘리면 된다 — 이번 스코프에서는 넣지 않는다.
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -38,6 +41,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   void _refreshFootprints(int userId) {
     setState(() => _footprintsFuture = ref.read(footprintServiceProvider).listByUser(userId));
+  }
+
+  /// 성향 테스트(#31) 화면에 다녀온 뒤 프로필을 다시 불러온다. 저장했는지 여부를
+  /// 이 화면으로 돌려주는 경로가 없어서, 안 바뀌었어도 그냥 한 번 더 조회한다 —
+  /// 조회는 가벼운 작업이라 낭비가 크지 않다.
+  Future<void> _openPersonalityTest() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const PersonalityTestScreen()),
+    );
+    if (mounted) setState(() => _profileFuture = _loadProfile());
   }
 
   Future<void> _editFootprint(Footprint footprint, int userId) async {
@@ -127,6 +140,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               padding: const EdgeInsets.all(16),
               children: [
                 _ProfileHeader(profile: profile),
+                const SizedBox(height: 24),
+                _PersonalitySection(profile: profile, onRetakeTest: _openPersonalityTest),
                 const SizedBox(height: 24),
                 Text('내 발자취', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),
@@ -232,6 +247,64 @@ class _ProfileHeader extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// 내 성향 표시(5-3). 테스트를 안 했으면([Profile.personalityType]이 null) 유도 안내를,
+/// 했으면 유형명 + 축별 점수를 보여준다.
+class _PersonalitySection extends StatelessWidget {
+  const _PersonalitySection({required this.profile, required this.onRetakeTest});
+
+  final Profile profile;
+  final VoidCallback onRetakeTest;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final type = profile.personalityType;
+
+    if (type == null) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('아직 성향 테스트를 하지 않았어요', style: theme.textTheme.titleSmall),
+              const SizedBox(height: 4),
+              Text(
+                '테스트를 하면 나에게 맞는 여행 스타일을 알 수 있어요.',
+                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              ),
+              const SizedBox(height: 12),
+              FilledButton.tonal(onPressed: onRetakeTest, child: const Text('성향 테스트 하러 가기')),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('내 여행 성향: $type', style: theme.textTheme.titleSmall),
+            const SizedBox(height: 12),
+            for (final axis in PersonalityAxis.values)
+              if (profile.personalityScores[axis] != null) ...[
+                PersonalityAxisBar(axis: axis, score: profile.personalityScores[axis]!),
+                const SizedBox(height: 12),
+              ],
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(onPressed: onRetakeTest, child: const Text('다시 테스트하기')),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -69,3 +69,15 @@ class PersonalityResult {
     }
   }
 }
+
+/// `GET /api/profile`이 내려주는 `personalityScores`(축 이름 → 0~100 점수, 5-3)를
+/// [PersonalityAxis] 키로 바꾼다. 알 수 없는 키는 무시한다 — 서버가 축을 추가해도
+/// 클라이언트가 모르는 축은 그냥 안 보이면 될 뿐, 파싱 전체가 깨지면 안 된다.
+Map<PersonalityAxis, int> axisScoresFromJson(Map<String, dynamic> json) {
+  final result = <PersonalityAxis, int>{};
+  for (final axis in PersonalityAxis.values) {
+    final score = json[PersonalityResult._axisKey(axis)];
+    if (score is int) result[axis] = score;
+  }
+  return result;
+}
