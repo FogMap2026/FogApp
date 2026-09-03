@@ -1,6 +1,7 @@
 package com.fogapp.tour;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.List;
 
@@ -120,5 +121,58 @@ class TourResponseParserTest {
                 {"response":{"body":{"items":""}}}
                 """))).isNull();
         assertThat(TourResponseParser.parseOverview(null)).isNull();
+    }
+
+    // ── 오류 응답 (#100 후속) ─────────────────────────────────────────────
+    // 이 API 는 오류도 HTTP 200 으로 돌려준다. 조용히 0건으로 지나가면
+    // "수집할 게 없다" 와 구분되지 않아, KorService2 전환 때 원인 찾기가 오래 걸렸다.
+
+    @Test
+    void 파라미터_오류는_예외로_드러낸다() throws Exception {
+        // KorService2 로 옮기며 실제로 받은 응답. listYN 은 이 버전에 없는 파라미터다.
+        JsonNode root = json("""
+                {"responseTime":"2026-09-03T16:59:12.891","resultCode":"10",
+                 "resultMsg":"INVALID_REQUEST_PARAMETER_ERROR(listYN)"}
+                """);
+
+        assertThatThrownBy(() -> TourResponseParser.parse(root))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("resultCode=10")
+                .hasMessageContaining("listYN");
+    }
+
+    @Test
+    void header_안에_있는_오류_코드도_잡는다() throws Exception {
+        JsonNode root = json("""
+                {"response":{"header":{"resultCode":"99","resultMsg":"UNKNOWN_ERROR"}}}
+                """);
+
+        assertThatThrownBy(() -> TourResponseParser.parse(root))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("resultCode=99");
+    }
+
+    @Test
+    void 일일_한도_소진은_전용_예외로_구분한다() throws Exception {
+        // 다른 실패와 달라야 한다 — 남은 건도 전부 실패하므로 호출부가 그 실행을 멈춘다.
+        JsonNode root = json("""
+                {"response":{"header":{"resultCode":"22",
+                 "resultMsg":"LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR"}}}
+                """);
+
+        assertThatThrownBy(() -> TourResponseParser.parse(root))
+                .isInstanceOf(TourApiQuotaExceededException.class)
+                .hasMessageContaining("일일 호출 한도");
+    }
+
+    @Test
+    void 결과_없음은_오류가_아니라_빈_목록이다() throws Exception {
+        // NODATA 는 정상이다 — 그 지역에 스팟이 없을 뿐이라 예외로 만들면 배치가 멈춘다.
+        JsonNode root = json("""
+                {"response":{"header":{"resultCode":"03","resultMsg":"NODATA_ERROR"}}}
+                """);
+
+        assertThat(TourResponseParser.parse(root)).isEmpty();
+        assertThat(TourResponseParser.parseOverview(root)).isNull();
     }
 }

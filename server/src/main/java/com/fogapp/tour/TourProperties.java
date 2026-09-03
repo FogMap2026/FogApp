@@ -15,7 +15,10 @@ import lombok.Setter;
 @Setter
 public class TourProperties {
 
-    /** data.go.kr 일반 인증키(Decoding 키 사용 권장 — 클라이언트가 URL 인코딩한다). */
+    /**
+     * data.go.kr 일반 인증키. <b>Encoding·Decoding 어느 쪽이든 된다</b> —
+     * {@link TourServiceKey} 가 정규화한다.
+     */
     private String serviceKey;
 
     /**

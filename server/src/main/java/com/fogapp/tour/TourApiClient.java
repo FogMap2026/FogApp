@@ -4,6 +4,7 @@ import java.net.URI;
 import java.util.List;
 
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.util.UriComponentsBuilder;
 
@@ -20,9 +21,15 @@ import com.fasterxml.jackson.databind.JsonNode;
  * 버전과 짝이라, 둘 중 하나만 바꾸면 404 가 난다. 그래서 숫자를 문자열에 박지 않고
  * {@link TourProperties#getOperationSuffix()} 로 함께 움직이게 한다.</p>
  *
- * <p>서비스 키는 <b>디코딩 키</b>를 넣어야 한다. 아래 {@code .encode()} 가 한 번 인코딩하므로,
- * 포털의 Encoding 키를 그대로 넣으면 이중 인코딩되어 {@code SERVICE_KEY_IS_NOT_REGISTERED_ERROR}
- * 가 난다 — 키가 멀쩡한데 등록이 안 됐다고 나오는 경우 대부분 이것이다.</p>
+ * <p><b>서비스 키는 Encoding·Decoding 어느 쪽을 넣어도 된다.</b>
+ * {@link TourServiceKey} 가 정규화하고, 여기서는 {@code build(true)} 로 <b>다시 인코딩하지
+ * 않는다.</b> 예전에는 {@code .encode()} 로 일괄 인코딩해서, Encoding 키를 넣으면
+ * {@code %2B} 가 {@code %252B} 로 이중 인코딩돼 {@code SERVICE_KEY_IS_NOT_REGISTERED_ERROR}
+ * 가 났다 — 키가 멀쩡한데 등록이 안 됐다고 나와 원인을 찾기 어려운 종류였다.</p>
+ *
+ * <p>⚠️ {@code build(true)} 는 "이미 인코딩된 값"으로 취급한다는 뜻이다. 여기서 쓰는 나머지
+ * 파라미터는 숫자·ASCII 상수뿐이라 안전하지만, <b>한글이나 공백이 들어가는 파라미터를
+ * 추가할 때는 직접 인코딩해서 넘겨야 한다.</b></p>
  */
 @Component
 public class TourApiClient {
@@ -35,16 +42,25 @@ public class TourApiClient {
         this.properties = properties;
     }
 
-    /** 지역기반 관광정보 조회. 목록만 주고 소개글({@code overview})은 주지 않는다. */
+    /**
+     * 지역기반 관광정보 조회. 목록만 주고 소개글({@code overview})은 주지 않는다.
+     *
+     * <p>⚠️ <b>{@code listYN} 을 보내면 안 된다.</b> KorService1 에는 있었지만 KorService2 에서
+     * 없어졌고, 보내면 {@code resultCode: "10"} 과 함께
+     * {@code INVALID_REQUEST_PARAMETER_ERROR(listYN)} 이 온다.</p>
+     *
+     * <p>이때 <b>HTTP 는 200 이라 예외가 나지 않는다.</b> 파서가 항목을 못 찾아 빈 목록을
+     * 돌려주고, 로그에는 "신규 0, 갱신 0, 스킵 0" 만 남는다 — <b>수집할 게 없는 것과 구분되지
+     * 않는다.</b> 파라미터를 추가·변경할 때는 응답 본문의 {@code resultCode} 를 직접 확인할 것.</p>
+     */
     public List<TourSpotItem> fetchAreaBased(String areaCode, int pageNo, int numOfRows) {
         URI uri = base("areaBasedList")
-                .queryParam("listYN", "Y")
                 .queryParam("arrange", "A")
                 .queryParam("numOfRows", numOfRows)
                 .queryParam("pageNo", pageNo)
                 .queryParam("areaCode", areaCode)
-                .encode()
-                .build()
+                // 이미 인코딩된 것으로 취급한다 — 서비스 키를 다시 인코딩하면 깨진다.
+                .build(true)
                 .toUri();
 
         return TourResponseParser.parse(get(uri));
@@ -61,8 +77,7 @@ public class TourApiClient {
     public String fetchOverview(String contentId) {
         URI uri = base("detailCommon")
                 .queryParam("contentId", contentId)
-                .encode()
-                .build()
+                .build(true)
                 .toUri();
 
         return TourResponseParser.parseOverview(get(uri));
@@ -72,13 +87,19 @@ public class TourApiClient {
     private UriComponentsBuilder base(String operation) {
         return UriComponentsBuilder
                 .fromHttpUrl(properties.getBaseUrl() + "/" + operation + properties.getOperationSuffix())
-                .queryParam("serviceKey", properties.getServiceKey())
+                .queryParam("serviceKey", TourServiceKey.encoded(properties.getServiceKey()))
                 .queryParam("MobileOS", properties.getMobileOs())
                 .queryParam("MobileApp", properties.getMobileApp())
                 .queryParam("_type", "json");
     }
 
     private JsonNode get(URI uri) {
-        return restClient.get().uri(uri).retrieve().body(JsonNode.class);
+        try {
+            return restClient.get().uri(uri).retrieve().body(JsonNode.class);
+        } catch (HttpClientErrorException.TooManyRequests e) {
+            // 한도 소진은 다른 실패와 다르다 — 다음 건도 반드시 실패한다.
+            // 호출부가 "그 건만 넘기고 계속" 하지 않도록 구분해서 올린다.
+            throw new TourApiQuotaExceededException("관광공사 API 일일 호출 한도를 소진했습니다.", e);
+        }
     }
 }
