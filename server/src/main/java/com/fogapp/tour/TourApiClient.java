@@ -20,9 +20,15 @@ import com.fasterxml.jackson.databind.JsonNode;
  * 버전과 짝이라, 둘 중 하나만 바꾸면 404 가 난다. 그래서 숫자를 문자열에 박지 않고
  * {@link TourProperties#getOperationSuffix()} 로 함께 움직이게 한다.</p>
  *
- * <p>서비스 키는 <b>디코딩 키</b>를 넣어야 한다. 아래 {@code .encode()} 가 한 번 인코딩하므로,
- * 포털의 Encoding 키를 그대로 넣으면 이중 인코딩되어 {@code SERVICE_KEY_IS_NOT_REGISTERED_ERROR}
- * 가 난다 — 키가 멀쩡한데 등록이 안 됐다고 나오는 경우 대부분 이것이다.</p>
+ * <p><b>서비스 키는 Encoding·Decoding 어느 쪽을 넣어도 된다.</b>
+ * {@link TourServiceKey} 가 정규화하고, 여기서는 {@code build(true)} 로 <b>다시 인코딩하지
+ * 않는다.</b> 예전에는 {@code .encode()} 로 일괄 인코딩해서, Encoding 키를 넣으면
+ * {@code %2B} 가 {@code %252B} 로 이중 인코딩돼 {@code SERVICE_KEY_IS_NOT_REGISTERED_ERROR}
+ * 가 났다 — 키가 멀쩡한데 등록이 안 됐다고 나와 원인을 찾기 어려운 종류였다.</p>
+ *
+ * <p>⚠️ {@code build(true)} 는 "이미 인코딩된 값"으로 취급한다는 뜻이다. 여기서 쓰는 나머지
+ * 파라미터는 숫자·ASCII 상수뿐이라 안전하지만, <b>한글이나 공백이 들어가는 파라미터를
+ * 추가할 때는 직접 인코딩해서 넘겨야 한다.</b></p>
  */
 @Component
 public class TourApiClient {
@@ -43,8 +49,8 @@ public class TourApiClient {
                 .queryParam("numOfRows", numOfRows)
                 .queryParam("pageNo", pageNo)
                 .queryParam("areaCode", areaCode)
-                .encode()
-                .build()
+                // 이미 인코딩된 것으로 취급한다 — 서비스 키를 다시 인코딩하면 깨진다.
+                .build(true)
                 .toUri();
 
         return TourResponseParser.parse(get(uri));
@@ -61,8 +67,7 @@ public class TourApiClient {
     public String fetchOverview(String contentId) {
         URI uri = base("detailCommon")
                 .queryParam("contentId", contentId)
-                .encode()
-                .build()
+                .build(true)
                 .toUri();
 
         return TourResponseParser.parseOverview(get(uri));
@@ -72,7 +77,7 @@ public class TourApiClient {
     private UriComponentsBuilder base(String operation) {
         return UriComponentsBuilder
                 .fromHttpUrl(properties.getBaseUrl() + "/" + operation + properties.getOperationSuffix())
-                .queryParam("serviceKey", properties.getServiceKey())
+                .queryParam("serviceKey", TourServiceKey.encoded(properties.getServiceKey()))
                 .queryParam("MobileOS", properties.getMobileOs())
                 .queryParam("MobileApp", properties.getMobileApp())
                 .queryParam("_type", "json");

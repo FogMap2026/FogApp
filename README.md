@@ -272,7 +272,7 @@ cd app    && flutter test
 목록 수집과 소개글(`overview`) 채우기가 **한 번에 이어서** 돕니다([#100](../../issues/100)). 소개글은 스팟을 해금했을 때 보여주는 유일한 내용이라, 이걸 돌리지 않으면 정복해도 빈 화면이 열립니다.
 
 ```bash
-# .env 에 키를 넣고 (⚠️ "일반 인증키(Decoding)" 를 쓸 것)
+# .env 에 키를 넣고 (Encoding·Decoding 아무거나 — 서버가 맞춥니다)
 TOUR_API_SERVICE_KEY=...
 TOUR_COLLECT_ON_STARTUP=true
 
