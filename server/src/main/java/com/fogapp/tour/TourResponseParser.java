@@ -26,6 +26,9 @@ public final class TourResponseParser {
     /** 조건에 맞는 결과가 없다는 뜻 — 오류가 아니라 빈 목록이다. */
     private static final List<String> NO_DATA_CODES = List.of("0003", "03");
 
+    /** 일일 호출 한도 소진. HTTP 429 로 올 때도 있고 200 본문에 이 코드로 올 때도 있다. */
+    private static final List<String> QUOTA_CODES = List.of("0022", "22");
+
     private TourResponseParser() {
     }
 
@@ -96,6 +99,10 @@ public final class TourResponseParser {
             return false;
         }
         String message = firstText(root.path("resultMsg"), root.path("response").path("header").path("resultMsg"));
+        if (QUOTA_CODES.contains(code)) {
+            throw new TourApiQuotaExceededException(
+                    "관광공사 API 일일 호출 한도를 소진했습니다. (resultCode=" + code + ", " + message + ")");
+        }
         throw new IllegalStateException(
                 "TourAPI 오류 응답 (HTTP 200): resultCode=" + code + ", resultMsg=" + message);
     }

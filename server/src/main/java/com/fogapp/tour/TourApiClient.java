@@ -4,6 +4,7 @@ import java.net.URI;
 import java.util.List;
 
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.util.UriComponentsBuilder;
 
@@ -93,6 +94,12 @@ public class TourApiClient {
     }
 
     private JsonNode get(URI uri) {
-        return restClient.get().uri(uri).retrieve().body(JsonNode.class);
+        try {
+            return restClient.get().uri(uri).retrieve().body(JsonNode.class);
+        } catch (HttpClientErrorException.TooManyRequests e) {
+            // 한도 소진은 다른 실패와 다르다 — 다음 건도 반드시 실패한다.
+            // 호출부가 "그 건만 넘기고 계속" 하지 않도록 구분해서 올린다.
+            throw new TourApiQuotaExceededException("관광공사 API 일일 호출 한도를 소진했습니다.", e);
+        }
     }
 }

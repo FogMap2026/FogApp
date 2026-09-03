@@ -144,12 +144,25 @@ class TourResponseParserTest {
     @Test
     void header_안에_있는_오류_코드도_잡는다() throws Exception {
         JsonNode root = json("""
-                {"response":{"header":{"resultCode":"22","resultMsg":"LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR"}}}
+                {"response":{"header":{"resultCode":"99","resultMsg":"UNKNOWN_ERROR"}}}
                 """);
 
         assertThatThrownBy(() -> TourResponseParser.parse(root))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("resultCode=22");
+                .hasMessageContaining("resultCode=99");
+    }
+
+    @Test
+    void 일일_한도_소진은_전용_예외로_구분한다() throws Exception {
+        // 다른 실패와 달라야 한다 — 남은 건도 전부 실패하므로 호출부가 그 실행을 멈춘다.
+        JsonNode root = json("""
+                {"response":{"header":{"resultCode":"22",
+                 "resultMsg":"LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR"}}}
+                """);
+
+        assertThatThrownBy(() -> TourResponseParser.parse(root))
+                .isInstanceOf(TourApiQuotaExceededException.class)
+                .hasMessageContaining("일일 호출 한도");
     }
 
     @Test

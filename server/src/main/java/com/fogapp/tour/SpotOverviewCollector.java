@@ -60,6 +60,7 @@ public class SpotOverviewCollector {
 
         int filled = 0;
         int failed = 0;
+        boolean quotaExceeded = false;
         for (Spot spot : targets) {
             try {
                 String overview = tourApiClient.fetchOverview(spot.getContentId());
@@ -67,6 +68,12 @@ public class SpotOverviewCollector {
                     overviewWriter.save(spot.getId(), overview);
                     filled++;
                 }
+            } catch (TourApiQuotaExceededException e) {
+                // 한도 소진은 그 건만의 문제가 아니다 — 남은 건도 전부 실패한다.
+                // 계속 두드려도 채워지는 건 없고 경고만 수백 줄 쌓이므로 즉시 멈춘다.
+                // 한도는 매일 초기화되니 나머지는 다음 날 실행이 이어서 채운다.
+                quotaExceeded = true;
+                break;
             } catch (Exception e) {
                 // 한 건이 실패했다고 나머지를 포기하지 않는다. 다음 실행이 이 스팟을 다시 집어간다
                 // (여전히 overview 가 비어 있으므로).
@@ -77,6 +84,11 @@ public class SpotOverviewCollector {
         }
 
         log.info("소개글 수집: 대상 {}, 채움 {}, 실패 {}", targets.size(), filled, failed);
+        if (quotaExceeded) {
+            log.warn("관광공사 API 일일 호출 한도를 소진해 {}건을 남기고 중단했습니다. "
+                    + "한도는 매일 초기화되므로 내일 다시 실행하면 이어서 채웁니다.",
+                    targets.size() - filled - failed);
+        }
         return filled;
     }
 
