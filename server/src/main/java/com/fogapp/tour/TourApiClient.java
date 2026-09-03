@@ -41,10 +41,19 @@ public class TourApiClient {
         this.properties = properties;
     }
 
-    /** 지역기반 관광정보 조회. 목록만 주고 소개글({@code overview})은 주지 않는다. */
+    /**
+     * 지역기반 관광정보 조회. 목록만 주고 소개글({@code overview})은 주지 않는다.
+     *
+     * <p>⚠️ <b>{@code listYN} 을 보내면 안 된다.</b> KorService1 에는 있었지만 KorService2 에서
+     * 없어졌고, 보내면 {@code resultCode: "10"} 과 함께
+     * {@code INVALID_REQUEST_PARAMETER_ERROR(listYN)} 이 온다.</p>
+     *
+     * <p>이때 <b>HTTP 는 200 이라 예외가 나지 않는다.</b> 파서가 항목을 못 찾아 빈 목록을
+     * 돌려주고, 로그에는 "신규 0, 갱신 0, 스킵 0" 만 남는다 — <b>수집할 게 없는 것과 구분되지
+     * 않는다.</b> 파라미터를 추가·변경할 때는 응답 본문의 {@code resultCode} 를 직접 확인할 것.</p>
+     */
     public List<TourSpotItem> fetchAreaBased(String areaCode, int pageNo, int numOfRows) {
         URI uri = base("areaBasedList")
-                .queryParam("listYN", "Y")
                 .queryParam("arrange", "A")
                 .queryParam("numOfRows", numOfRows)
                 .queryParam("pageNo", pageNo)
