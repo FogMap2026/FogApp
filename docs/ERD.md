@@ -9,6 +9,10 @@
 | [V2__spot_geom_autofill.sql](../server/src/main/resources/db/migration/V2__spot_geom_autofill.sql) | `spots.geom` 자동 채움 트리거 + 좌표 이상치 처리 | [#6](https://github.com/FogMap2026/FogApp/issues/6) |
 | [V3__footprint_likes.sql](../server/src/main/resources/db/migration/V3__footprint_likes.sql) | `footprint_likes` 테이블 (발자취 좋아요·공감) | [#23](https://github.com/FogMap2026/FogApp/issues/23) |
 
+> 🆕 **`footprints`는 곧 바뀝니다.** 발자취가 스팟 리뷰에서 **길목마다 남기는 글귀**로 재설계되면서
+> `lat`·`lng`·`geom`(GiST 인덱스)이 추가되고, `users`에 발자취 잔여 횟수(`footprint_quota`)가 붙습니다.
+> 설계 근거와 값은 [footprint-redesign.md](footprint-redesign.md) 참고 — **구현 시 이 문서와 함께 갱신할 것.**
+
 ## 관계도
 
 ```mermaid
@@ -68,7 +72,7 @@ erDiagram
     footprints {
         bigint      id PK
         bigint      user_id FK
-        bigint      spot_id FK
+        bigint      spot_id FK "길목 발자취는 NULL"
         text        content
         text        photo_url
         int         like_count
