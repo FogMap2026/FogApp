@@ -39,6 +39,11 @@ class SpotOverviewCollectorTest {
         sut = new SpotOverviewCollector(tourApiClient, spotRepository, overviewWriter);
     }
 
+    /**
+     * ⚠️ 이 헬퍼는 {@code when(...)} 인자 안에서 부르면 안 된다. 안에서 다시 스터빙을 하므로
+     * 바깥 스터빙이 진행 중이면 Mockito 가 {@code UnfinishedStubbingException} 을 던진다.
+     * 반드시 먼저 만들어 변수에 담은 뒤 스터빙에 넘길 것.
+     */
     private Spot spot(long id, String contentId) {
         Spot spot = mock(Spot.class);
         when(spot.getId()).thenReturn(id);
@@ -48,7 +53,8 @@ class SpotOverviewCollectorTest {
 
     @Test
     void 소개글이_있으면_저장한다() {
-        when(spotRepository.findWithoutOverview(anyInt())).thenReturn(List.of(spot(1L, "126508")));
+        Spot target = spot(1L, "126508");
+        when(spotRepository.findWithoutOverview(anyInt())).thenReturn(List.of(target));
         when(tourApiClient.fetchOverview("126508")).thenReturn("불국사는 ...");
 
         assertThat(sut.fillMissing(200)).isEqualTo(1);
@@ -59,7 +65,8 @@ class SpotOverviewCollectorTest {
     void 소개글이_없으면_빈_문자열로_기록해_다음_실행에서_제외되게_한다() {
         // 핵심. NULL 로 두면 매 실행 같은 스팟을 다시 집어가 호출만 태우고,
         // 그런 스팟이 쌓이면 창을 가득 채워 배치가 조용히 멈춘다.
-        when(spotRepository.findWithoutOverview(anyInt())).thenReturn(List.of(spot(2L, "3465927")));
+        Spot target = spot(2L, "3465927");
+        when(spotRepository.findWithoutOverview(anyInt())).thenReturn(List.of(target));
         when(tourApiClient.fetchOverview("3465927")).thenReturn(null);
 
         assertThat(sut.fillMissing(200)).isZero();   // 채운 건 아니다
@@ -69,7 +76,8 @@ class SpotOverviewCollectorTest {
     @Test
     void 빈_문자열_응답도_소개글_없음으로_본다() {
         // 관광공사는 항목은 주면서 overview 만 "" 로 주는 경우가 있다(호텔·숙박).
-        when(spotRepository.findWithoutOverview(anyInt())).thenReturn(List.of(spot(3L, "3465024")));
+        Spot target = spot(3L, "3465024");
+        when(spotRepository.findWithoutOverview(anyInt())).thenReturn(List.of(target));
         when(tourApiClient.fetchOverview("3465024")).thenReturn("   ");
 
         assertThat(sut.fillMissing(200)).isZero();
@@ -79,7 +87,8 @@ class SpotOverviewCollectorTest {
     @Test
     void 조회에_실패하면_기록하지_않는다_다음_실행이_재시도한다() {
         // 실패는 "소개글이 없다" 와 다르다 — NULL 로 남겨 다시 집어가게 해야 한다.
-        when(spotRepository.findWithoutOverview(anyInt())).thenReturn(List.of(spot(4L, "999")));
+        Spot target = spot(4L, "999");
+        when(spotRepository.findWithoutOverview(anyInt())).thenReturn(List.of(target));
         when(tourApiClient.fetchOverview("999")).thenThrow(new IllegalStateException("일시 오류"));
 
         assertThat(sut.fillMissing(200)).isZero();
