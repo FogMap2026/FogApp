@@ -32,8 +32,9 @@ public class FootprintService {
     }
 
     @Transactional
-    public Footprint create(Long userId, Long spotId, String content, String photoUrl) {
-        return footprintRepository.save(new Footprint(userId, spotId, content, photoUrl));
+    public Footprint create(Long userId, Long spotId, String content, String photoUrl,
+                            Double lat, Double lng) {
+        return footprintRepository.save(new Footprint(userId, spotId, content, photoUrl, lat, lng));
     }
 
     public Footprint get(Long id) {
