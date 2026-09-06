@@ -14,6 +14,9 @@ import com.fogapp.user.UserSummary;
  * <p>{@code authorNickname} 은 null 일 수 있다 — 닉네임을 정하지 않은 사용자가 있다.
  * 화면에서 대체 문구("여행자" 등)를 쓸 것.</p>
  *
+ * <p>{@code lat}·{@code lng} 는 글귀를 남긴 자리다(#115). 지도가 이 값으로 도형을 그린다 —
+ * 없으면(예전 글·좌표 이상치) 지도에 뜨지 않고 스팟 상세 목록에만 남는다.</p>
+ *
  * <p>{@code likedByMe} 는 <b>조회한 사용자 기준</b>이다(#72) — 같은 발자취라도 보는 사람마다
  * 다르다. 좋아요 버튼을 채운 하트로 보여줄지 빈 하트로 보여줄지는 이 값으로 정한다.</p>
  */
@@ -23,6 +26,8 @@ public record FootprintResponse(
         String authorNickname,
         String authorProfileImageUrl,
         Long spotId,
+        Double lat,
+        Double lng,
         String content,
         String photoUrl,
         int likeCount,
@@ -48,6 +53,8 @@ public record FootprintResponse(
                 author == null ? null : author.nickname(),
                 author == null ? null : author.profileImageUrl(),
                 footprint.getSpotId(),
+                footprint.getLat(),
+                footprint.getLng(),
                 footprint.getContent(),
                 footprint.getPhotoUrl(),
                 footprint.getLikeCount(),

@@ -124,6 +124,92 @@ class FootprintControllerIT {
                 .andExpect(jsonPath("$.length()").value(0));
     }
 
+    /** 좌표를 붙여 발자취를 만든다(#115). */
+    private void createAt(String token, String content, double lat, double lng) throws Exception {
+        mockMvc.perform(post("/api/footprints")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"" + content + "\",\"lat\":" + lat + ",\"lng\":" + lng + "}"))
+                .andExpect(status().isCreated());
+    }
+
+    // ── 반경 조회 (#115) ──────────────────────────────────────────────────
+
+    @Test
+    void 반경_안의_발자취만_가까운_순으로_돌려준다() throws Exception {
+        loginAs("alice-token", "uid-alice");
+        createAt("alice-token", "여기 계단 힘들다", 37.5665, 126.9780);   // 중심
+        createAt("alice-token", "부산에서", 35.1796, 129.0756);           // 반경 밖
+
+        mockMvc.perform(get("/api/footprints/nearby?lat=37.5665&lng=126.9780&radius=50")
+                        .header("Authorization", "Bearer alice-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].content").value("여기 계단 힘들다"))
+                .andExpect(jsonPath("$[0].lat").value(37.5665))
+                .andExpect(jsonPath("$.length()").value(1));
+    }
+
+    @Test
+    void 좌표가_없는_발자취는_반경_조회에_안_뜬다() throws Exception {
+        // 예전 글이나 좌표 이상치는 geom 이 NULL 이라 자연히 빠진다 —
+        // 스팟 상세 목록에는 계속 남는다.
+        loginAs("bob-token", "uid-bob");
+        mockMvc.perform(post("/api/footprints")
+                        .header("Authorization", "Bearer bob-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"spotId\":" + spotId + ",\"content\":\"좌표 없는 글\"}"))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/footprints/nearby?lat=37.5665&lng=126.9780&radius=1000")
+                        .header("Authorization", "Bearer bob-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.content == '좌표 없는 글')]").isEmpty());
+    }
+
+    @Test
+    void 반경_상한을_넘으면_400이다() throws Exception {
+        // 상한이 없으면 radius=999999 한 번으로 전국 발자취를 긁어갈 수 있다.
+        loginAs("alice-token", "uid-alice");
+
+        mockMvc.perform(get("/api/footprints/nearby?lat=37.5&lng=127.0&radius=999999")
+                        .header("Authorization", "Bearer alice-token"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void nearby_경로가_단건_조회에_먹히지_않는다() throws Exception {
+        // GET /{id} 와 GET /nearby 가 같은 자리에 있다. "nearby" 가 id 로 해석되면
+        // 400 이 나면서 반경 조회가 통째로 죽는다.
+        loginAs("alice-token", "uid-alice");
+
+        mockMvc.perform(get("/api/footprints/nearby?lat=37.5&lng=127.0&radius=50")
+                        .header("Authorization", "Bearer alice-token"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void 좌표_범위를_벗어나면_작성이_400이다() throws Exception {
+        // 범위 밖 좌표는 PostGIS geography 캐스팅에서 예외가 되어 500 이 된다 — 먼저 거른다.
+        loginAs("alice-token", "uid-alice");
+
+        mockMvc.perform(post("/api/footprints")
+                        .header("Authorization", "Bearer alice-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"이상치\",\"lat\":999,\"lng\":999}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void 위도만_보내면_400이다() throws Exception {
+        loginAs("alice-token", "uid-alice");
+
+        mockMvc.perform(post("/api/footprints")
+                        .header("Authorization", "Bearer alice-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"반쪽 좌표\",\"lat\":37.5}"))
+                .andExpect(status().isBadRequest());
+    }
+
     @Test
     void 발자취_작성자는_로그인한_본인으로_기록된다() throws Exception {
         loginAs("alice-token", "uid-alice");

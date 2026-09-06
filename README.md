@@ -235,6 +235,7 @@ cd app    && flutter test
 | `GET` | `/api/spots?region={code}&page&size` | 지역 코드별 스팟 목록(페이지네이션). `unlocked`·`overview`는 **로그인한 사용자 기준** | 1·3 |
 | `GET` | `/api/spots/nearby?lat&lng&radius` | 반경 내 스팟 조회 (PostGIS `ST_DWithin`, 최대 20km) | 1·3 |
 | `POST` `GET` `PATCH` `DELETE` | `/api/footprints`, `/api/footprints/{id}` | 발자취 CRUD (`spotId` 또는 `userId`로 목록 조회) | 1·2 |
+| `GET` | `/api/footprints/nearby?lat&lng&radius` | **내 주변 발자취** (가까운 순, 최대 1km·200건) | 5.5 |
 | `POST` `DELETE` | `/api/footprints/{id}/likes` | 좋아요 등록·취소 (1인 1회) | 2 |
 | `POST` `GET` `PATCH` `DELETE` | `/api/matches`, `/api/matches/{id}` | 동행 요청 생성·조회·상태 변경·취소 | 1·5 |
 | `GET` | `/api/matches/candidates?userId&limit` | 성향 유사도 기반 동행 후보 추천 | 3 |

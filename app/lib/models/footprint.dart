@@ -15,6 +15,8 @@ class Footprint {
     this.photoUrl,
     this.authorNickname,
     this.authorProfileImageUrl,
+    this.lat,
+    this.lng,
   });
 
   factory Footprint.fromJson(Map<String, dynamic> json) => Footprint(
@@ -22,7 +24,9 @@ class Footprint {
         userId: json['userId'] as int,
         authorNickname: json['authorNickname'] as String?,
         authorProfileImageUrl: json['authorProfileImageUrl'] as String?,
-        spotId: json['spotId'] as int,
+        spotId: json['spotId'] as int?,
+        lat: (json['lat'] as num?)?.toDouble(),
+        lng: (json['lng'] as num?)?.toDouble(),
         content: json['content'] as String,
         photoUrl: json['photoUrl'] as String?,
         likeCount: json['likeCount'] as int,
@@ -37,7 +41,12 @@ class Footprint {
   final String? authorNickname;
 
   final String? authorProfileImageUrl;
-  final int spotId;
+  /// 스팟에서 쓴 글이면 스팟 id, 길목 글귀면 null.
+  final int? spotId;
+
+  /// 글귀를 남긴 자리(#115). 없으면 지도에 뜨지 않는다 — 예전 글이거나 좌표 이상치다.
+  final double? lat;
+  final double? lng;
   final String content;
   final String? photoUrl;
   final int likeCount;
