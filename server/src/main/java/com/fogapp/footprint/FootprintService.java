@@ -7,8 +7,10 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.fogapp.common.ForbiddenException;
 import com.fogapp.common.NotFoundException;
@@ -18,6 +20,21 @@ import com.fogapp.user.UserSummary;
 @Service
 @Transactional(readOnly = true)
 public class FootprintService {
+
+    /**
+     * 반경 조회 상한(m). 이동 중 50m·스팟 안 150m 가 설계값이라 넉넉히 잡아도 이 정도면 충분하다.
+     *
+     * <p>상한이 없으면 {@code radius=999999} 한 번으로 전국 발자취를 긁어갈 수 있다.</p>
+     */
+    static final double MAX_RADIUS_METERS = 1_000;
+
+    /**
+     * 반경 조회 최대 건수.
+     *
+     * <p>반경이 좁아도 한 지점에 글이 몰리면 수천 건이 나올 수 있다. 지도에 그릴 수 있는 양을
+     * 넘어서면 응답과 렌더가 함께 무너지므로 여기서 자른다 — 가까운 순이라 잘리는 것은 먼 것이다.</p>
+     */
+    static final int MAX_NEARBY = 200;
 
     private final FootprintRepository footprintRepository;
     private final FootprintLikeRepository footprintLikeRepository;
@@ -34,7 +51,47 @@ public class FootprintService {
     @Transactional
     public Footprint create(Long userId, Long spotId, String content, String photoUrl,
                             Double lat, Double lng) {
+        requireValidCoordinates(lat, lng);
         return footprintRepository.save(new Footprint(userId, spotId, content, photoUrl, lat, lng));
+    }
+
+    /**
+     * 내 주변 발자취를 가까운 순으로(#115). 걷다가 지도에서 발견하는 흐름이 이걸 쓴다.
+     *
+     * @param radiusMeters 이동 중 50m, 해금 스팟 안에서는 150m — 앱이 정한다
+     */
+    public List<FootprintResponse> findNearby(Long viewerId, double lat, double lng, double radiusMeters) {
+        requireValidCoordinates(lat, lng);
+        if (radiusMeters <= 0 || radiusMeters > MAX_RADIUS_METERS) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "radius는 0 초과 " + (long) MAX_RADIUS_METERS + "m 이하여야 합니다.");
+        }
+
+        return withAuthors(
+                footprintRepository.findWithinRadius(lat, lng, radiusMeters, MAX_NEARBY), viewerId);
+    }
+
+    /**
+     * 좌표를 검증한다.
+     *
+     * <p>범위를 벗어난 값은 PostGIS {@code geography} 캐스팅에서 예외가 되어 500 이 된다 —
+     * {@code VisitService.verify} 와 같은 이유로 먼저 400 으로 거른다.</p>
+     *
+     * <p>⚠️ <b>"내 주변 10m" 는 여기서 검증할 수 없다.</b> 서버는 사용자의 진짜 위치를 모르고
+     * 요청에 담긴 좌표가 전부다. 인증(#48)은 스팟이라는 고정 기준점이 있어 재검증되지만
+     * 발자취는 기준점이 없다. 10m 는 앱이 강제하는 UX 규칙이고(#118), 좌표 위조는 막지 못한다 —
+     * 횟수 제한(#116)이 피해를 제한할 뿐이다. 알고 넘어가는 한계다.</p>
+     */
+    private static void requireValidCoordinates(Double lat, Double lng) {
+        if (lat == null && lng == null) {
+            return; // 좌표 없는 글도 허용한다 — 지도에 안 뜰 뿐이다
+        }
+        if (lat == null || lng == null) {
+            throw new IllegalArgumentException("좌표는 위도·경도를 함께 보내야 합니다.");
+        }
+        if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+            throw new IllegalArgumentException("좌표 범위가 올바르지 않습니다. (lat=" + lat + ", lng=" + lng + ")");
+        }
     }
 
     public Footprint get(Long id) {
