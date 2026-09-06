@@ -40,7 +40,8 @@ public class FootprintController {
     public ResponseEntity<FootprintResponse> create(@AuthenticationPrincipal AuthUser me,
                                                       @Valid @RequestBody FootprintCreateRequest request) {
         Footprint footprint = footprintService.create(
-                me.userId(), request.spotId(), request.content(), request.photoUrl());
+                me.userId(), request.spotId(), request.content(), request.photoUrl(),
+                request.lat(), request.lng());
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(footprintService.withAuthor(footprint, me.userId()));
     }
