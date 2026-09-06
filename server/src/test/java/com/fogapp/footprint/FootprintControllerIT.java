@@ -27,6 +27,7 @@ import org.testcontainers.utility.DockerImageName;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fogapp.auth.TokenVerifier;
 import com.fogapp.auth.VerifiedToken;
+import com.fogapp.user.User;
 
 /**
  * 발자취 작성·수정·삭제·좋아요가 인증된 본인 명의로만 되는지 검증한다(#52).
@@ -62,6 +63,12 @@ class FootprintControllerIT {
         spotId = jdbcTemplate.queryForObject(
                 "INSERT INTO spots (content_id, title) VALUES (?, ?) RETURNING id",
                 Long.class, "content-" + System.nanoTime(), "테스트 스팟");
+
+        // 발자취 횟수는 사용자당 관리되는데(#116), @SpringBootTest 는 메서드 간 롤백이 없어
+        // 같은 uid("uid-alice" 등)가 테스트를 넘나들며 횟수를 계속 소진한다. 그러면 앞선
+        // 테스트가 몇 개를 썼느냐에 따라 뒤 테스트가 429 로 깨진다 — 실제로 7건이 그렇게 깨졌다.
+        // 매번 기본값으로 되돌려 각 테스트가 같은 조건에서 시작하게 한다.
+        jdbcTemplate.update("UPDATE users SET footprint_quota = ?", User.DEFAULT_FOOTPRINT_QUOTA);
     }
 
     private void loginAs(String token, String uid) {
