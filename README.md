@@ -144,6 +144,7 @@ FogApp/
 | [docs/ERD.md](docs/ERD.md) | DB 스키마와 설계 근거 |
 | [docs/ENV_GUIDE.md](docs/ENV_GUIDE.md) | 환경 변수·시크릿 관리 |
 | [docs/FIREBASE_AUTH_SETUP.md](docs/FIREBASE_AUTH_SETUP.md) | Firebase 콘솔 설정 체크리스트 |
+| [docs/footprint-redesign.md](docs/footprint-redesign.md) | **발자취 재설계** — 리뷰에서 "길에 남기는 글귀"로 (구현 기준) |
 | [docs/personality-test-design.md](docs/personality-test-design.md) | 여행 성향 축·설문·점수 모델 |
 | [docs/PM_SETUP.md](docs/PM_SETUP.md) | 저장소 관리자 설정(PM 전용) |
 
@@ -249,6 +250,8 @@ cd app    && flutter test
 
 **MVP가 동작합니다.** 스팟에 도달해 사진을 찍으면 안개가 걷히고, 스팟 정보가 해금되며, 지역 정복률이 올라갑니다.
 발자취를 남기고 다른 사람의 기록에 좋아요를 누르는 것, 성향이 맞는 동행을 추천받아 요청·수락하는 것까지 됩니다.
+
+> 📌 **발자취는 재설계가 확정됐습니다.** 스팟 리뷰에서 **길목마다 남기는 짧은 글귀**(엘든링 메시지 방식)로 바뀝니다 — [docs/footprint-redesign.md](docs/footprint-redesign.md).
 
 | Phase | 상태 |
 |-------|------|
