@@ -27,6 +27,7 @@ import org.testcontainers.utility.DockerImageName;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fogapp.auth.TokenVerifier;
 import com.fogapp.auth.VerifiedToken;
+import com.fogapp.user.User;
 
 /**
  * 발자취 작성·수정·삭제·좋아요가 인증된 본인 명의로만 되는지 검증한다(#52).
@@ -62,6 +63,12 @@ class FootprintControllerIT {
         spotId = jdbcTemplate.queryForObject(
                 "INSERT INTO spots (content_id, title) VALUES (?, ?) RETURNING id",
                 Long.class, "content-" + System.nanoTime(), "테스트 스팟");
+
+        // 발자취 횟수는 사용자당 관리되는데(#116), @SpringBootTest 는 메서드 간 롤백이 없어
+        // 같은 uid("uid-alice" 등)가 테스트를 넘나들며 횟수를 계속 소진한다. 그러면 앞선
+        // 테스트가 몇 개를 썼느냐에 따라 뒤 테스트가 429 로 깨진다 — 실제로 7건이 그렇게 깨졌다.
+        // 매번 기본값으로 되돌려 각 테스트가 같은 조건에서 시작하게 한다.
+        jdbcTemplate.update("UPDATE users SET footprint_quota = ?", User.DEFAULT_FOOTPRINT_QUOTA);
     }
 
     private void loginAs(String token, String uid) {
@@ -208,6 +215,34 @@ class FootprintControllerIT {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"content\":\"반쪽 좌표\",\"lat\":37.5}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    // ── 작성 횟수 제한 (#116) ────────────────────────────────────────────
+
+    @Test
+    void 횟수를_다_쓰면_429다() throws Exception {
+        // 기본 3회. 무제한이면 한 자리에서 수십 개를 쏟아부어 길목이 도배된다.
+        loginAs("erin-token", "uid-erin");
+        for (int i = 0; i < 3; i++) {
+            createAt("erin-token", "글" + i, 37.5665, 126.9780);
+        }
+
+        mockMvc.perform(post("/api/footprints")
+                        .header("Authorization", "Bearer erin-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"네 번째\",\"lat\":37.5665,\"lng\":126.9780}"))
+                .andExpect(status().isTooManyRequests());
+    }
+
+    @Test
+    void 남은_횟수가_프로필에_보인다() throws Exception {
+        // 앱이 버튼을 비활성화하고 이유를 안내하려면 이 값이 필요하다.
+        loginAs("frank-token", "uid-frank");
+        createAt("frank-token", "하나 썼다", 37.5665, 126.9780);
+
+        mockMvc.perform(get("/api/profile").header("Authorization", "Bearer frank-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.footprintQuota").value(2));
     }
 
     @Test

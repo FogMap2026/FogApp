@@ -14,6 +14,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.fogapp.common.ForbiddenException;
 import com.fogapp.common.NotFoundException;
+import com.fogapp.user.User;
 import com.fogapp.user.UserRepository;
 import com.fogapp.user.UserSummary;
 
@@ -48,10 +49,25 @@ public class FootprintService {
         this.userRepository = userRepository;
     }
 
+    /**
+     * 발자취를 남긴다. <b>남은 횟수를 하나 쓴다</b>(#116).
+     *
+     * <p>횟수가 없으면 429 로 막는다. 회복은 스팟 정복뿐이다 —
+     * {@code VisitService.verify} 가 성공하면 기본값으로 리셋된다.</p>
+     */
     @Transactional
     public Footprint create(Long userId, Long spotId, String content, String photoUrl,
                             Double lat, Double lng) {
         requireValidCoordinates(lat, lng);
+
+        User author = userRepository.findById(userId)
+                .orElseThrow(() -> new NotFoundException("사용자", userId));
+        if (author.getFootprintQuota() <= 0) {
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
+                    "남은 발자취 횟수가 없습니다. 스팟을 정복하면 다시 채워집니다.");
+        }
+        author.consumeFootprintQuota();
+
         return footprintRepository.save(new Footprint(userId, spotId, content, photoUrl, lat, lng));
     }
 
