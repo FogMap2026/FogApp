@@ -21,9 +21,14 @@ import com.fogapp.spot.SpotRepository;
  * 비용이 다르다. 그래서 두 가지로 막는다.</p>
  *
  * <ul>
- *   <li>이미 소개글이 있는 스팟은 조회하지 않는다 — 재실행해도 남은 것만 채운다</li>
+ *   <li>이미 <b>조회한</b> 스팟은 다시 부르지 않는다 — 재실행해도 남은 것만 채운다</li>
  *   <li>한 번 실행에 {@code maxPerRun} 건까지만 — 여러 번 나눠 돌리면 결국 다 채워진다</li>
  * </ul>
+ *
+ * <p><b>"조회했다"의 표식은 빈 문자열이다.</b> 관광공사에 소개글이 없는 스팟이 실제로 있어
+ * (호텔·숙박이 대표적이고, 끝난 축제처럼 항목 자체가 사라지기도 한다) 그런 스팟을 NULL 로
+ * 두면 매 실행 대상에 다시 들어와 채워지지도 않으면서 호출만 태운다. 쌓이면 결국 창을
+ * 가득 채워 <b>배치가 조용히 멈춘다.</b></p>
  */
 @Service
 public class SpotOverviewCollector {
@@ -59,6 +64,7 @@ public class SpotOverviewCollector {
         }
 
         int filled = 0;
+        int noData = 0;
         int failed = 0;
         boolean quotaExceeded = false;
         for (Spot spot : targets) {
@@ -67,6 +73,15 @@ public class SpotOverviewCollector {
                 if (StringUtils.hasText(overview)) {
                     overviewWriter.save(spot.getId(), overview);
                     filled++;
+                } else {
+                    // 관광공사에 소개글이 없는 스팟이 실제로 있다 — 호텔·숙박(contentTypeId 32)이
+                    // 대표적이고, 끝난 축제처럼 항목 자체가 사라진 경우도 있다.
+                    //
+                    // 빈 문자열로 기록해 "조회했고 없더라"를 남긴다. NULL 로 두면 다음 실행이
+                    // 같은 스팟을 다시 집어가 채워지지도 않으면서 호출만 태우고, 그런 스팟이
+                    // 쌓이면 결국 창을 가득 채워 배치가 조용히 멈춘다.
+                    overviewWriter.save(spot.getId(), "");
+                    noData++;
                 }
             } catch (TourApiQuotaExceededException e) {
                 // 한도 소진은 그 건만의 문제가 아니다 — 남은 건도 전부 실패한다.
@@ -75,15 +90,17 @@ public class SpotOverviewCollector {
                 quotaExceeded = true;
                 break;
             } catch (Exception e) {
-                // 한 건이 실패했다고 나머지를 포기하지 않는다. 다음 실행이 이 스팟을 다시 집어간다
-                // (여전히 overview 가 비어 있으므로).
+                // 한 건이 실패했다고 나머지를 포기하지 않는다. 실패한 스팟은 overview 가
+                // NULL 로 남으므로 다음 실행이 다시 집어간다 — 재시도가 의도인 경우다.
+                // (소개글이 원래 없는 경우와 달리 여기서는 빈 문자열을 쓰지 않는다.)
                 failed++;
                 log.warn("스팟 {}(content_id={}) 소개글 조회 실패: {}",
                         spot.getId(), spot.getContentId(), e.toString());
             }
         }
 
-        log.info("소개글 수집: 대상 {}, 채움 {}, 실패 {}", targets.size(), filled, failed);
+        log.info("소개글 수집: 대상 {}, 채움 {}, 소개글없음 {}, 실패 {}",
+                targets.size(), filled, noData, failed);
         if (quotaExceeded) {
             log.warn("관광공사 API 일일 호출 한도를 소진해 {}건을 남기고 중단했습니다. "
                     + "한도는 매일 초기화되므로 내일 다시 실행하면 이어서 채웁니다.",
