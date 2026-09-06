@@ -210,6 +210,34 @@ class FootprintControllerIT {
                 .andExpect(status().isBadRequest());
     }
 
+    // ── 작성 횟수 제한 (#116) ────────────────────────────────────────────
+
+    @Test
+    void 횟수를_다_쓰면_429다() throws Exception {
+        // 기본 3회. 무제한이면 한 자리에서 수십 개를 쏟아부어 길목이 도배된다.
+        loginAs("erin-token", "uid-erin");
+        for (int i = 0; i < 3; i++) {
+            createAt("erin-token", "글" + i, 37.5665, 126.9780);
+        }
+
+        mockMvc.perform(post("/api/footprints")
+                        .header("Authorization", "Bearer erin-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"네 번째\",\"lat\":37.5665,\"lng\":126.9780}"))
+                .andExpect(status().isTooManyRequests());
+    }
+
+    @Test
+    void 남은_횟수가_프로필에_보인다() throws Exception {
+        // 앱이 버튼을 비활성화하고 이유를 안내하려면 이 값이 필요하다.
+        loginAs("frank-token", "uid-frank");
+        createAt("frank-token", "하나 썼다", 37.5665, 126.9780);
+
+        mockMvc.perform(get("/api/profile").header("Authorization", "Bearer frank-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.footprintQuota").value(2));
+    }
+
     @Test
     void 발자취_작성자는_로그인한_본인으로_기록된다() throws Exception {
         loginAs("alice-token", "uid-alice");

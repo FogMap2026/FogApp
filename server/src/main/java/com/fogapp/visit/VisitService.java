@@ -10,6 +10,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.fogapp.common.NotFoundException;
 import com.fogapp.spot.SpotRepository;
+import com.fogapp.user.User;
+import com.fogapp.user.UserRepository;
 
 /**
  * 방문 인증(#48). 탐험 루프의 기록 계층 — 여기서 생긴 visits 행이
@@ -24,17 +26,20 @@ public class VisitService {
     private final VisitProperties properties;
     private final VisitPhotoUrlValidator photoUrlValidator;
     private final VisitPhotoStorage photoStorage;
+    private final UserRepository userRepository;
 
     public VisitService(VisitRepository visitRepository,
                         SpotRepository spotRepository,
                         VisitProperties properties,
                         VisitPhotoUrlValidator photoUrlValidator,
-                        VisitPhotoStorage photoStorage) {
+                        VisitPhotoStorage photoStorage,
+                        UserRepository userRepository) {
         this.visitRepository = visitRepository;
         this.spotRepository = spotRepository;
         this.properties = properties;
         this.photoUrlValidator = photoUrlValidator;
         this.photoStorage = photoStorage;
+        this.userRepository = userRepository;
     }
 
     /**
@@ -68,7 +73,15 @@ public class VisitService {
                     "스팟 반경 " + (long) properties.getRadiusMeters() + "m 밖에서는 인증할 수 없습니다.");
         }
 
-        return visitRepository.save(new Visit(userId, spotId, photoUrl, lat, lng));
+        Visit visit = visitRepository.save(new Visit(userId, spotId, photoUrl, lat, lng));
+
+        // 정복하면 발자취 횟수가 회복된다(#116) — "글을 더 남기고 싶으면 더 걸어라".
+        //
+        // 인증과 같은 트랜잭션이어야 한다. 갈라지면 "인증은 됐는데 횟수는 그대로" 가
+        // 생기고, 사용자는 이유를 알 수 없다.
+        userRepository.findById(userId).ifPresent(User::resetFootprintQuota);
+
+        return visit;
     }
 
     /**
