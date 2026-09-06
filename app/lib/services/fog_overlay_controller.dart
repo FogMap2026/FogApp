@@ -144,13 +144,23 @@ class _Landmass {
   }
 
   /// [_addHole]로 쌓인 구멍 전체를 지도에 한 번에 반영한다.
+  ///
+  /// ⚠️ **`.toList()`를 빼지 말 것.** `setHoles`의 시그니처는 `Iterable`을 받지만,
+  /// 플러그인 내부 직렬화(`NPayload.convertToMessageable`)는 `List`만 처리하고 그 밖의
+  /// `Iterable`은 `ArgumentError`로 던진다. `Map.values`는 지연 뷰
+  /// (`_CompactValuesIterable`)라 여기에 걸린다.
+  ///
+  /// 그런데 `setHoles` → `_set`이 `void ... async`라 **그 예외가 앱을 죽이지도, 화면에
+  /// 드러나지도 않는다.** 안개가 그냥 안 걷히기만 한다 — 실기기 로그를 보기 전까지
+  /// 원인을 알 수 없었다.
   void _applyHoles() {
-    overlay.setHoles(_clearedHoles.values);
+    overlay.setHoles(_clearedHoles.values.toList());
   }
 
   void reFog(String spotId) {
     if (_clearedHoles.remove(spotId) != null) {
-      overlay.setHoles(_clearedHoles.values);
+      // 위와 같은 이유로 .toList()가 필요하다.
+      overlay.setHoles(_clearedHoles.values.toList());
     }
   }
 
