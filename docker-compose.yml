@@ -14,8 +14,12 @@ services:
       POSTGRES_DB: ${DB_NAME:-fogapp}
       POSTGRES_USER: ${DB_USERNAME:-fogapp}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-fogapp}
+    # ⚠️ 127.0.0.1 을 빼지 말 것. 호스트 IP 를 생략하면 도커가 0.0.0.0 에 묶어,
+    #    같은 네트워크(학교·카페 와이파이)의 누구나 이 Postgres 에 접속을 시도할 수 있다.
+    #    이 포트는 로컬 개발 편의용이다 — server 컨테이너는 이 매핑이 아니라 컴포즈
+    #    네트워크로 db 에 붙으므로(아래 DB_HOST: db), 루프백으로 잠가도 깨지는 것이 없다.
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
     volumes:
       - fogapp_pgdata:/var/lib/postgresql/data
     healthcheck:
