@@ -8,16 +8,26 @@ on:
   # 비어 있어 "통과"로 오해하기 쉬운데, 실은 실행조차 안 된 상태다(#89 에서 발견).
   # 아래 Detect changes 가 변경 없는 잡을 건너뛰므로 실행 비용은 거의 늘지 않는다.
   pull_request:
+  # 손으로 돌릴 수 있게 열어 둔다. 없으면 "코드는 그대로인데 결과물만 다시 필요한"
+  # 경우에 방법이 없다 — 대표적으로 배포 주소가 바뀌어 APK 를 다시 구울 때다.
+  # APK 는 secrets.API_BASE_URL 을 빌드 타임에 굽기 때문에(아래 apk 잡), 시크릿만
+  # 바꾸고 재실행하면 될 것 같지만 그렇지 않다. 과거 실행을 rerun 하면 paths-filter 가
+  # "지금"의 dev 를 다시 비교해 app=false 로 판정하고 잡을 통째로 건너뛴다.
+  workflow_dispatch:
 
 jobs:
   # 변경된 영역 감지 — 관련 없는 잡은 건너뛴다.
+  #
+  # ⚠️ 수동 실행(workflow_dispatch)일 때는 필터를 무시하고 전부 true 로 둔다.
+  #    수동 실행의 목적이 "변경과 무관하게 결과물을 다시 만드는 것"이라, 필터를
+  #    그대로 태우면 아무 잡도 돌지 않아 실행 자체가 무의미해진다.
   changes:
     name: Detect changes
     runs-on: ubuntu-latest
     outputs:
-      app: ${{ steps.filter.outputs.app }}
-      server: ${{ steps.filter.outputs.server }}
-      container: ${{ steps.filter.outputs.container }}
+      app: ${{ steps.filter.outputs.app == 'true' || github.event_name == 'workflow_dispatch' }}
+      server: ${{ steps.filter.outputs.server == 'true' || github.event_name == 'workflow_dispatch' }}
+      container: ${{ steps.filter.outputs.container == 'true' || github.event_name == 'workflow_dispatch' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -99,7 +109,11 @@ jobs:
 
       # 두 값은 코드가 --dart-define 으로 받게 돼 있다(app/lib/main.dart, api_client.dart).
       # 시크릿이 비어 있어도 빌드는 되지만, NAVER_MAP_CLIENT_ID 가 없으면 지도가 뜨지 않는다.
-      # API_BASE_URL 은 실기기에서 PC LAN IP 로 지정해야 서버에 닿는다(기본값은 에뮬레이터용).
+      #
+      # API_BASE_URL 은 저장소 시크릿에 배포 주소를 넣어 둔다. 값이 빌드 타임에 APK 안으로
+      # 구워지므로, 주소가 바뀌면 시크릿을 고친 뒤 이 워크플로를 수동 실행해 다시 구워야 한다.
+      #   gh workflow run ci.yml --repo FogMap2026/FogApp --ref dev
+      # (기본값 10.0.2.2 는 안드로이드 에뮬레이터에서 호스트를 가리키는 주소다.)
       - name: Build debug APK
         run: |
           flutter build apk --debug \
