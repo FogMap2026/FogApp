@@ -167,12 +167,10 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      # 시뮬레이터 대상으로 빌드한다 — 서명이 아예 필요 없다.
+      # 시뮬레이터 대상으로 빌드한다 — 서명이 아예 필요 없고, 아래 실행 검증이 이 결과를 쓴다.
       #
-      # `flutter build ios --no-codesign` 은 쓰지 않는다. 그건 실기기용 패키징이라
-      # 컴파일이 끝난 뒤 마지막 단계에서 Development Team 을 요구하고, Apple Developer
-      # 계정이 없으면 실패한다(실제로 그렇게 실패했다). 시뮬레이터 빌드는 그 단계가 없어
-      # "iOS 에서 컴파일되는가" 만 확인하려는 우리 목적에 정확히 맞는다.
+      # (예전 주석에 `--no-codesign` 은 Development Team 을 요구해 실패한다고 적혀 있었는데,
+      #  지금은 그렇지 않다. 아래 ios-ipa 잡에서 실제로 성공한다.)
       #
       # ios/ 스캐폴딩은 저장소에 커밋돼 있으므로 flutter create 로 덮지 않는다.
       #
@@ -246,21 +244,22 @@ jobs:
           path: app/ios-launch.png
           retention-days: 14
 
-  # 서명 없는 .ipa 를 만들 수 있는지 알아보는 실험 잡이다(7-6).
+  # 서명 없는 .ipa 를 만든다(7-6). Apple Developer 계정($99/년) 없이 팀원이 실기기에
+  # 넣어볼 수 있는 유일한 길이다 — 각자 Windows PC 에서 Sideloadly/AltStore 로 무료
+  # Apple ID 서명해 설치한다.
   #
-  # 성공하면 Apple Developer 계정($99/년) 없이도 팀원이 실기기에 넣어볼 길이 생긴다 —
-  # 각자 Windows PC 에서 Sideloadly/AltStore 로 무료 Apple ID 서명해 설치하는 방식이다.
-  # (그 방식의 제약: 7일마다 재설치, 폰당 3개, 푸시 알림 불가)
+  # ⚠️ 그 방식의 제약을 알고 쓸 것: 7일마다 재설치, 폰당 3개, 푸시 알림 불가.
+  #    시연 전날 다시 넣어야 한다.
   #
-  # ⚠️ 될지 확실하지 않다. 예전에 `flutter build ios --no-codesign` 이 Development Team 을
-  #    요구하며 실패한 기록이 있다. 그래서 xcodebuild 우회를 2차로 시도하고, 잡 전체를
-  #    continue-on-error 로 둔다 — 실패해도 CI 는 초록이고, 결과만 확인한다.
+  # ⚠️ 이 .ipa 는 그대로는 설치되지 않는다. 서명이 없어서, 받는 쪽에서 서명해야 한다.
+  #    심사위원처럼 링크만 주고 설치하게 하려면 유료 계정이 필요하다(TestFlight/Ad Hoc).
+  #
+  # 서명 비활성 xcodebuild 를 2차로 남겨둔다 — 1차가 Xcode 버전에 따라 깨질 수 있다.
   ios-ipa:
-    name: iOS Unsigned IPA (실험)
+    name: iOS Unsigned IPA
     needs: changes
     if: ${{ needs.changes.outputs.app == 'true' }}
     runs-on: macos-latest
-    continue-on-error: true
     defaults:
       run:
         working-directory: app
