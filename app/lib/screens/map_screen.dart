@@ -11,12 +11,15 @@ import '../models/spot.dart';
 import '../services/conquest_service.dart';
 import '../services/fog_location_tracker.dart';
 import '../services/fog_overlay_controller.dart';
+import '../services/footprint_location_gate.dart';
 import '../services/location_permission_gate.dart';
+import '../services/profile_service.dart';
 import '../services/region_lookup_service.dart';
 import '../services/spot_geofence_controller.dart';
 import '../services/spot_marker_controller.dart';
 import '../services/spot_service.dart';
 import '../services/visit_service.dart';
+import 'footprint_nearby_create_screen.dart';
 import 'match_candidates_screen.dart';
 import 'match_list_screen.dart';
 import 'profile_screen.dart';
@@ -78,12 +81,30 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   /// 사용자에게 더 유용한 정보라고 판단했다.
   GeofenceEnterEvent? _proximityBanner;
 
+  /// 남은 발자취 작성 횟수(#116, #118). null이면 아직 못 받아온 것 —
+  /// 그동안은 버튼을 낙관적으로 활성 상태로 둔다(실제 소진 여부는 작성 시 429로도 걸러진다).
+  int? _footprintQuota;
+  /// GPS 측정+정확도 확인이 진행 중일 때 버튼 연타를 막는다.
+  bool _footprintLocationChecking = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     // 위치 권한 요청은 onMapReady에서 한 번만 수행한다(중복 요청 시 Android가
     // "Can request only one set of permissions at a time"로 두 번째 요청을 무시함).
+    _loadFootprintQuota();
+  }
+
+  /// 프로필에서 잔여 발자취 횟수만 읽어온다(#118). 실패해도 버튼을 막지 않는다 —
+  /// 표시가 갱신되지 않을 뿐, 실제 소진 여부는 작성 시 서버가 429로 가른다.
+  Future<void> _loadFootprintQuota() async {
+    try {
+      final profile = await ref.read(profileServiceProvider).me();
+      if (mounted) setState(() => _footprintQuota = profile.footprintQuota);
+    } catch (_) {
+      // 조용히 넘어간다 — 위 주석 참고.
+    }
   }
 
   @override
@@ -179,6 +200,44 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
 
   void _dismissProximityBanner() {
     if (mounted) setState(() => _proximityBanner = null);
+  }
+
+  /// 지도의 "발자취 남기기" 버튼(#118). GPS로 현재 위치를 새로 측정해 정확도가
+  /// 10m 이내일 때만 그 좌표로 작성 화면을 연다 — 이유는 [FootprintLocationGate] 참고.
+  Future<void> _openFootprintCreate() async {
+    if (_footprintLocationChecking) return;
+    setState(() => _footprintLocationChecking = true);
+
+    final check = await FootprintLocationGate.check();
+    if (!mounted) return;
+    setState(() => _footprintLocationChecking = false);
+
+    switch (check) {
+      case FootprintLocationReady(:final lat, :final lng):
+        final written = await Navigator.of(context).push<bool>(
+          MaterialPageRoute(builder: (_) => FootprintNearbyCreateScreen(lat: lat, lng: lng)),
+        );
+        if (written == true) {
+          if (mounted) {
+            ScaffoldMessenger.of(context)
+                .showSnackBar(const SnackBar(content: Text('발자취를 남겼어요.')));
+          }
+          unawaited(_loadFootprintQuota());
+        }
+      case FootprintLocationUnavailable():
+        _showFootprintLocationMessage('위치 확인이 필요해요. 위치 권한과 GPS를 켜주세요.');
+      case FootprintLocationInaccurate(:final accuracyMeters):
+        _showFootprintLocationMessage(
+          '위치가 정확하지 않아요(오차 ${accuracyMeters.round()}m). 실외로 이동하거나 잠시 후 다시 시도해주세요.',
+        );
+      case FootprintLocationFailed():
+        _showFootprintLocationMessage('위치를 확인하지 못했어요. 다시 시도해주세요.');
+    }
+  }
+
+  void _showFootprintLocationMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   /// 스팟 마커를 탭하면 상세 화면(#50)을 연다. 해금 전이면 잠긴 상태로,
@@ -478,6 +537,32 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                       icon: const Icon(Icons.mark_email_unread_outlined),
                       label: const Text('내 동행 요청'),
                     ),
+                    const SizedBox(height: 8),
+                    FilledButton.tonalIcon(
+                      // 발자취 남기기(#118). 임시 진입점이 아니라 상시 노출 버튼이다 —
+                      // 위 항목들과 달리 하단 네비게이션이 생겨도 계속 여기 있을 기능이다.
+                      onPressed: (_footprintQuota == 0 || _footprintLocationChecking)
+                          ? null
+                          : _openFootprintCreate,
+                      icon: _footprintLocationChecking
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.edit_location_alt_outlined),
+                      label: Text(
+                        _footprintQuota == null ? '발자취 남기기' : '발자취 남기기 ($_footprintQuota)',
+                      ),
+                    ),
+                    if (_footprintQuota == 0)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4, left: 4),
+                        child: Text(
+                          '스팟을 정복하면 다시 채워집니다',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
                   ],
                 ),
               ),
