@@ -10,10 +10,15 @@ class FootprintService {
   final ApiClient _apiClient;
 
   /// 발자취를 남긴다. 작성자는 서버가 인증 토큰에서 얻으므로 요청에 담지 않는다.
-  Future<Footprint> create({required int spotId, required String content}) async {
+  ///
+  /// [spotId]는 스팟 상세에서 쓸 때만 넘긴다(#70) — 길목 글귀(#114)는 스팟이 없으니
+  /// null로 둔다. [lat]·[lng]는 길목 글귀의 좌표(#115)로, 스팟 글은 넘기지 않아도 된다.
+  ///
+  /// 남은 발자취 횟수가 없으면 서버가 429를 돌려준다(#116) — 호출부가 처리해야 한다.
+  Future<Footprint> create({int? spotId, required String content, double? lat, double? lng}) async {
     final response = await _apiClient.dio.post<Map<String, dynamic>>(
       '/api/footprints',
-      data: {'spotId': spotId, 'content': content},
+      data: {'spotId': spotId, 'content': content, 'lat': lat, 'lng': lng},
     );
     return Footprint.fromJson(response.data!);
   }
