@@ -9,6 +9,7 @@ import 'package:geolocator/geolocator.dart';
 import '../models/conquest.dart';
 import '../models/footprint.dart';
 import '../models/spot.dart';
+import '../services/background_tracking_setting.dart';
 import '../services/character_overlay.dart';
 import '../services/conquest_service.dart';
 import '../services/fog_location_tracker.dart';
@@ -19,6 +20,7 @@ import '../services/footprint_service.dart';
 import '../services/location_permission_gate.dart';
 import '../services/location_service.dart';
 import '../services/profile_service.dart';
+import '../services/proximity_notifier.dart';
 import '../services/region_lookup_service.dart';
 import '../services/spot_geofence_controller.dart';
 import '../services/spot_marker_controller.dart';
@@ -170,14 +172,31 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   /// 여기서 미리 잡아둔다.
   late final LocationService _locationService;
 
+  /// 백그라운드 근접 알림(#135).
+  late final ProximityNotifier _proximityNotifier;
+
+  /// 앱이 화면에 떠 있는지. 근접을 배너로 알릴지 알림으로 보낼지를 가른다(#135).
+  bool _appInForeground = true;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _locationService = ref.read(locationServiceProvider);
+    _proximityNotifier = ref.read(proximityNotifierProvider);
+    _restoreBackgroundTracking();
     // 위치 권한 요청은 onMapReady에서 한 번만 수행한다(중복 요청 시 Android가
     // "Can request only one set of permissions at a time"로 두 번째 요청을 무시함).
     _loadFootprintQuota();
+  }
+
+  /// 저장된 백그라운드 추적 설정을 서비스에 반영한다(#135). 기본값은 꺼짐이라,
+  /// 켠 적 없는 사용자에게는 아무 변화가 없다.
+  Future<void> _restoreBackgroundTracking() async {
+    final mode = await BackgroundTrackingSetting.load();
+    if (mode == LocationTrackingMode.foregroundOnly) return;
+    await _locationService.setMode(mode);
+    await _proximityNotifier.init();
   }
 
   /// 프로필에서 잔여 발자취 횟수만 읽어온다(#118). 실패해도 버튼을 막지 않는다 —
@@ -215,17 +234,19 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     final controller = _controller;
     if (controller == null) return;
     if (state == AppLifecycleState.resumed) {
+      _appInForeground = true;
+      unawaited(_locationService.setAppInForeground(true));
       if (_permission == LocationPermission.always ||
           _permission == LocationPermission.whileInUse) {
         controller.setLocationTrackingMode(NLocationTrackingMode.follow);
         _startGeofenceTracking();
       }
     } else if (state == AppLifecycleState.paused) {
+      _appInForeground = false;
       controller.setLocationTrackingMode(NLocationTrackingMode.none);
-      _geofencePositionSubscription?.cancel();
-      _geofencePositionSubscription = null;
-      // 구독만 끊으면 GPS는 계속 돈다 — 소스를 함께 멈춰야 실제로 절전된다(#135).
-      _locationService.stop();
+      // 위치 구독은 끊지 않는다 — 백그라운드 추적을 켠 사용자에게는 여기서 끊으면
+      // 기능 자체가 없어진다. GPS 를 끌지 말지는 설정을 아는 서비스가 정한다(#135).
+      unawaited(_locationService.setAppInForeground(false));
     }
   }
 
@@ -342,6 +363,19 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     if (_visitedSpotIds.contains(spotId)) return; // 이미 인증한 스팟은 알리지 않는다.
     if (_notifiedSpotIds.contains(spotId)) return; // 세션당 1회.
     _notifiedSpotIds.add(spotId);
+
+    // 화면이 꺼져 있으면 배너를 띄워도 볼 수 없다 — 알림 표시줄로 보낸다(#135).
+    // 반대로 앱을 보고 있는데 알림으로 보내면 흐름이 끊기므로, 그때는 배너 그대로(#46).
+    if (!_appInForeground) {
+      unawaited(
+        _proximityNotifier.notifySpotNearby(
+          spotId: spotId,
+          spotTitle: event.spot.title,
+          distanceMeters: event.distanceMeters,
+        ),
+      );
+      return;
+    }
     if (mounted) setState(() => _proximityBanner = event);
   }
 

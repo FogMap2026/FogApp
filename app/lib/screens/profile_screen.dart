@@ -6,6 +6,7 @@ import '../models/personality.dart';
 import '../models/profile.dart';
 import '../services/footprint_service.dart';
 import '../services/profile_service.dart';
+import '../widgets/background_tracking_tile.dart';
 import '../widgets/footprint_card.dart';
 import '../widgets/personality_axis_bar.dart';
 import 'social/personality_test_screen.dart';
@@ -142,6 +143,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 _ProfileHeader(profile: profile),
                 const SizedBox(height: 24),
                 _PersonalitySection(profile: profile, onRetakeTest: _openPersonalityTest),
+                const SizedBox(height: 24),
+                const BackgroundTrackingTile(),
                 const SizedBox(height: 24),
                 Text('내 발자취', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),

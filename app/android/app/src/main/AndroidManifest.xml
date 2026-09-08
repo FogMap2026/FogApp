@@ -1,6 +1,22 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+
+    <!-- 백그라운드 근접 감지(#135). 화면을 꺼도 스팟 반경 진입을 알리기 위한 것으로,
+         사용자가 설정에서 끌 수 있고 기본값은 꺼짐이다.
+
+         ⚠️ ACCESS_BACKGROUND_LOCATION 은 사용자가 "항상 허용"을 직접 골라야 하며,
+         앱에서 곧바로 요청할 수 없다(Android 11+ 는 설정 화면으로 유도해야 한다).
+         원스토어 등록 시 위치정보 수집 항목에 이 내용이 반영돼야 한다(#158). -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
+
+    <!-- 백그라운드에서 위치를 받으려면 포그라운드 서비스가 필요하고, 그 서비스는
+         알림 표시줄에 상시 알림을 띄운다(끌 수 없다 — Android 정책). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
+
+    <!-- Android 13+ 는 알림 표시에 런타임 권한이 필요하다. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="FogApp"
         android:name="${applicationName}"

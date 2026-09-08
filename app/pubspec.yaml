@@ -22,6 +22,13 @@ dependencies:
   geocoding: ^4.0.0
   flutter_compass: ^0.8.1
 
+  # 백그라운드 근접 알림 (#135). FCM(firebase_messaging)은 서버가 보내는 푸시(6-4)용이고,
+  # 이건 기기 안에서 자체적으로 띄우는 로컬 알림이라 별개다.
+  flutter_local_notifications: ^22.3.0
+
+  # 백그라운드 추적 on/off 설정 보관 (#135) — 서버에 둘 이유가 없는 기기별 설정이다.
+  shared_preferences: ^2.5.5
+
   # 카메라 / 사진 인증
   camera: ^0.11.0
   image_picker: ^1.1.2
