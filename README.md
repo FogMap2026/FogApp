@@ -49,7 +49,7 @@
 | **데이터베이스** | PostgreSQL + **PostGIS** | PostGIS 3.4 (`postgis/postgis:16-3.4`) | 지리공간 쿼리·geofencing·GPS 궤적→Polygon 변환의 핵심 |
 | **DB 마이그레이션** | Flyway (+ Hibernate `ddl-auto: validate`) | — | 스키마 버전 관리. 스키마 정본은 `V*.sql` |
 | **인증** | Firebase Auth + Firebase Admin SDK | admin 9.3.0 | 앱이 발급한 ID 토큰을 서버가 `verifyIdToken`으로 검증 |
-| **실시간/알림** | Firebase (Firestore + FCM) | — | 실시간 위치 공유, 푸시 알림 (Phase 6) |
+| **실시간/알림** | 자체 서버 API(PostgreSQL) + FCM | — | 주변 여행자 표시(6-3)는 **30분 텀이라 실시간성이 필요 없어 Firestore를 쓰지 않고** 자체 서버로 처리하기로 재설계됨 — [#133](../../issues/133). `cloud_firestore` 의존성은 미사용 상태. 푸시 알림(FCM)은 Phase 6(6-4) |
 | **스토리지** | 서버 직접 저장 (로컬 디스크) | — | 방문 인증 사진 (Phase 3). Firebase Storage는 무료 요금제에서 버킷 생성이 막혀 미채택 — [STORAGE_SETUP.md](docs/STORAGE_SETUP.md) |
 | **테스트** | JUnit 5 + **Testcontainers**(PostGIS) / `flutter test` | — | 실제 PostGIS 컨테이너로 공간 쿼리까지 검증 |
 | **빌드 도구** | Gradle 8.8 | — | Spring Boot 3.3.x 호환 버전으로 고정 |
@@ -95,7 +95,7 @@
 - 여행 성향 테스트 및 매칭 알고리즘
 - 발자취 기록·조회, 좋아요·공감 상호작용
 - 실시간 위치 공유(30분 갱신) 로직
-- `Firestore` · `매칭 알고리즘` · `실시간 동기화`
+- `매칭 알고리즘` · `자체 서버 API 기반 익명 위치 표시`
 
 ### 5️⃣ DevOps & Data — 인프라 · 사진 · 알림 · 송건희 [@songkh1201](https://github.com/songkh1201)
 - 방문 인증 사진 업로드·스토리지 파이프라인
@@ -250,6 +250,8 @@ cd app    && flutter test
 | `POST` `DELETE` | `/api/footprints/{id}/likes` | 좋아요 등록·취소 (1인 1회) | 2 |
 | `POST` `GET` `PATCH` `DELETE` | `/api/matches`, `/api/matches/{id}` | 동행 요청 생성·조회·상태 변경·취소 | 1·5 |
 | `GET` | `/api/matches/candidates?userId&limit` | 성향 유사도 기반 동행 후보 추천 | 3 |
+| `POST` | `/api/visits/photo` | 방문 인증 사진 업로드 | 3 |
+| `GET` | `/api/visits/photos/{firebaseUid}/{spotId}/{fileName}` | 업로드된 인증 사진 서빙 | 3 |
 | `POST` | `/api/visits` | 방문 인증 (서버가 PostGIS로 반경 재검증, 1인 1스팟 1회) | 3 |
 | `GET` | `/api/visits` | 내 인증 목록 — 앱이 걷힌 안개 영역을 복원할 때 사용 | 3 |
 | `GET` | `/api/conquest` | 지역별 정복률 (**시/군/구 단위**) | 3 |
