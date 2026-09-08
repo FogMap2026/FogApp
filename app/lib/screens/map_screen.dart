@@ -9,6 +9,7 @@ import 'package:geolocator/geolocator.dart';
 import '../models/conquest.dart';
 import '../models/footprint.dart';
 import '../models/spot.dart';
+import '../services/character_overlay.dart';
 import '../services/conquest_service.dart';
 import '../services/fog_location_tracker.dart';
 import '../services/fog_overlay_controller.dart';
@@ -529,6 +530,15 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
         icon: footprintIcon,
         onTapped: _onFootprintTapped,
       );
+    }
+    // 내 위치를 기본 점 대신 캐릭터로 그린다(#131). 실패해도 SDK 기본 표시가 남으므로
+    // 지도 사용에는 지장이 없다 — 발자취 아이콘과 같은 원칙.
+    if (!mounted) return;
+    try {
+      final characterIcon = await CharacterOverlay.createIcon(context);
+      CharacterOverlay.attach(controller, characterIcon);
+    } catch (e) {
+      debugPrint('[MapScreen] 캐릭터 아이콘 생성 실패: $e');
     }
     _cameraSubscription = controller.nowCameraPositionStream.listen(_onCameraChanged);
     if (mounted) setState(() => _mapReady = true);
