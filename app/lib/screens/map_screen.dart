@@ -179,11 +179,13 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       _myLng = position.longitude;
       if (!hadLocation && mounted) setState(() {});
       _geofence?.updatePosition(lat: position.latitude, lng: position.longitude);
-      unawaited(_footprintMarkers?.updatePosition(
-        lat: position.latitude,
-        lng: position.longitude,
-        insideUnlockedSpot: _isInsideUnlockedSpot(position.latitude, position.longitude),
-      ));
+      unawaited(
+        _footprintMarkers?.updatePosition(
+          lat: position.latitude,
+          lng: position.longitude,
+          insideUnlockedSpot: _isInsideUnlockedSpot(position.latitude, position.longitude),
+        ),
+      );
     });
   }
 
