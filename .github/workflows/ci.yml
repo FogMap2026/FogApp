@@ -138,6 +138,91 @@ jobs:
           path: app/build/app/outputs/flutter-apk/app-debug.apk
           retention-days: 14
 
+  # 스토어에 올릴 릴리스 APK(7-6, 원스토어). 위 apk 잡의 디버그 빌드와는 목적이 다르다 —
+  # 저건 팀 내부 확인용이고 이건 제출물이다. 둘 다 필요해서 잡을 나눴다.
+  #
+  # ⚠️ 서명 키가 없으면 이 잡은 통째로 건너뛴다. 디버그 키로 서명된 "릴리스" APK 를
+  #    만들어 두면 스토어가 거부하는데, 파일 이름만 보고 올릴 수 있게 되기 때문이다.
+  #    시크릿 4개(KEYSTORE_BASE64·KEYSTORE_PASSWORD·KEY_ALIAS·KEY_PASSWORD)가 있어야 돈다.
+  #
+  # 키스토어는 base64 로 시크릿에 넣고 여기서 복원한다 — 바이너리는 시크릿에 그대로 못 넣는다.
+  release-apk:
+    name: Release APK
+    needs: changes
+    if: ${{ needs.changes.outputs.app == 'true' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.9"
+          channel: stable
+
+      # 시크릿이 없는 PR(포크 등)에서는 조용히 끝낸다. 아래 스텝들이 이 값을 본다.
+      - name: Check signing secrets
+        id: signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::서명 키 시크릿이 없어 릴리스 APK 를 만들지 않습니다."
+          fi
+
+      - name: Restore keystore
+        if: steps.signing.outputs.available == 'true'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload-keystore.p12"
+
+      - name: Install dependencies
+        if: steps.signing.outputs.available == 'true'
+        run: flutter pub get
+
+      - name: Build release APK
+        if: steps.signing.outputs.available == 'true'
+        env:
+          KEYSTORE_PATH: ${{ runner.temp }}/upload-keystore.p12
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          flutter build apk --release \
+            --dart-define=NAVER_MAP_CLIENT_ID=${{ secrets.NAVER_MAP_CLIENT_ID }} \
+            --dart-define=API_BASE_URL=${{ secrets.API_BASE_URL }}
+
+      # 디버그 키로 서명된 것이 릴리스 산출물로 나가면 스토어에서야 알게 된다.
+      # 서명 주체를 확인해 debug 이면 실패시킨다.
+      - name: Verify it is not debug-signed
+        if: steps.signing.outputs.available == 'true'
+        run: |
+          APK=build/app/outputs/flutter-apk/app-release.apk
+          SIGNER=$(keytool -printcert -jarfile "$APK" | grep -m1 "Owner:")
+          echo "$SIGNER"
+          if echo "$SIGNER" | grep -qi "Android Debug"; then
+            echo "::error::디버그 키로 서명됐습니다 — 스토어에 올릴 수 없습니다."
+            exit 1
+          fi
+
+      - name: Upload release APK
+        if: steps.signing.outputs.available == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: fogapp-release-apk
+          path: app/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 14
+
   server:
     name: Spring Boot Server
     needs: changes
