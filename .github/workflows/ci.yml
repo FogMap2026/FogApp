@@ -63,7 +63,7 @@ jobs:
         run: flutter create .
 
       # flutter create 가 만든 템플릿 기본 테스트는 우리 구조와 달라 제거.
-      # (앱 테스트는 #3에서 추가)
+      # (우리 테스트는 app/test/ 에 있고, 아래 Test 스텝이 그걸 돌린다)
       - name: Remove template test
         run: rm -f test/widget_test.dart
 
@@ -72,6 +72,17 @@ jobs:
 
       - name: Analyze
         run: flutter analyze
+
+      # ⚠️ 이 스텝을 지우지 말 것(#139).
+      #
+      # 오랫동안 analyze 만 돌고 test 가 빠져 있었다. app/test/ 에 테스트가 8개 있는데
+      # CI 는 한 번도 실행한 적이 없어서, 앱 PR 의 초록불은 "정적 분석을 통과했다" 는
+      # 뜻이었지 "테스트가 통과했다" 는 뜻이 아니었다.
+      #
+      # 서버 잡은 gradle build 가 test 를 포함해 계속 돌고 있었기 때문에 초록불의 의미가
+      # 서버와 앱에서 서로 달랐고, 그래서 오래 눈에 띄지 않았다.
+      - name: Test
+        run: flutter test
 
   # 설치 가능한 Android APK 를 만들어 아티팩트로 올린다.
   #
