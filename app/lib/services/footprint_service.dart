@@ -23,6 +23,24 @@ class FootprintService {
     return Footprint.fromJson(response.data!);
   }
 
+  /// 내 주변 발자취(#115, #117). 가까운 순으로 내려온다.
+  ///
+  /// [radiusMeters]는 호출부가 정한다 — 이동 중엔 50m, 해금된 스팟의 안개 걷힘 반경
+  /// 안에서는 150m(docs/footprint-redesign.md 3-2·3-3). 서버가 최대 반경·건수를 강제한다.
+  Future<List<Footprint>> fetchNearby({
+    required double lat,
+    required double lng,
+    double radiusMeters = 50,
+  }) async {
+    final response = await _apiClient.dio.get<List<dynamic>>(
+      '/api/footprints/nearby',
+      queryParameters: {'lat': lat, 'lng': lng, 'radius': radiusMeters},
+    );
+    return (response.data ?? [])
+        .map((e) => Footprint.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
   /// 스팟의 발자취 목록(#71). 최신순으로 내려온다. 페이지네이션은 서버에 아직 없다.
   Future<List<Footprint>> listBySpot(int spotId) async {
     final response = await _apiClient.dio.get<List<dynamic>>(
