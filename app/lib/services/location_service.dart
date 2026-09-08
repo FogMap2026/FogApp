@@ -59,6 +59,12 @@ class LocationService {
   /// `foregroundNotificationConfig` 가 있어야 Android 가 포그라운드 서비스로 띄운다 —
   /// 없으면 화면이 꺼진 뒤 잠시 후 OS 가 위치 갱신을 끊는다. 이때 뜨는 **상시 알림은
   /// 사용자가 끌 수 없다**(Android 정책). 그래서 이 모드 자체를 끄는 스위치가 필요하다.
+  ///
+  /// ⚠️ **Android 전용이다.** iOS 는 출품 범위에서 빠져 있어([#137](../../pull/137))
+  /// [AppleSettings] 분기를 두지 않았다. iOS 를 되살린다면 여기서 플랫폼을 갈라
+  /// `AppleSettings(allowBackgroundLocationUpdates: true, ...)` 를 함께 줘야 하고,
+  /// `Info.plist` 의 `UIBackgroundModes`·`NSLocationAlwaysAndWhenInUseUsageDescription`
+  /// 도 같이 필요하다(#135 To-do 3번).
   static final backgroundLocationSettings = AndroidSettings(
     accuracy: LocationAccuracy.medium,
     distanceFilter: 50,
