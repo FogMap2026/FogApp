@@ -13,7 +13,13 @@ import 'spot_service.dart';
 /// 스팟이 매우 밀집한 지역에서 마커 수가 많아지면 클러스터링이 필요할 수 있다 —
 /// 지금은 반경([_radiusMeters])으로 요청량을 제한하는 선에서 대응한다.
 class SpotMarkerController {
-  SpotMarkerController(this._mapController, this._spotService, {this.onSpotsLoaded, this.onSpotTapped});
+  SpotMarkerController(
+    this._mapController,
+    this._spotService, {
+    this.onSpotsLoaded,
+    this.onLoadFailed,
+    this.onSpotTapped,
+  });
 
   final NaverMapController _mapController;
   final SpotService _spotService;
@@ -21,6 +27,13 @@ class SpotMarkerController {
   /// 스팟 목록을 새로 불러올 때마다 호출된다. geofencing(#45)이 별도 API 호출 없이
   /// 이 목록을 후보로 재사용할 수 있도록 노출하는 용도.
   final void Function(List<Spot> spots)? onSpotsLoaded;
+
+  /// 스팟 조회가 실패했을 때 호출된다(#146).
+  ///
+  /// 실패를 삼켜 지도를 계속 쓸 수 있게 하는 것은 그대로 두되, **화면이 그 사실을
+  /// 알 수는 있어야 한다.** 이게 없으면 서버가 죽었을 때 [onSpotsLoaded]가 영영
+  /// 불리지 않아, 화면은 "아직 로딩 중"과 "서버가 죽음"을 구분하지 못한다.
+  final void Function(Object error)? onLoadFailed;
 
   /// 마커를 탭했을 때 호출된다(#70 발자취 작성 진입점).
   final void Function(Spot spot)? onSpotTapped;
@@ -54,7 +67,10 @@ class SpotMarkerController {
       onSpotsLoaded?.call(spots);
       await _syncMarkers(spots);
     } catch (e) {
+      // 실패를 삼켜 지도 자체는 계속 쓸 수 있게 두되(#117·#130과 같은 원칙),
+      // 화면에는 알린다 — 아무에게도 안 알리는 것이 #146이었다.
       debugPrint('[SpotMarker] 스팟 로드 실패: $e');
+      onLoadFailed?.call(e);
     } finally {
       _loading = false;
     }
