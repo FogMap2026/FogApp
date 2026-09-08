@@ -7,11 +7,14 @@ import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../models/conquest.dart';
+import '../models/footprint.dart';
 import '../models/spot.dart';
 import '../services/conquest_service.dart';
 import '../services/fog_location_tracker.dart';
 import '../services/fog_overlay_controller.dart';
 import '../services/footprint_location_gate.dart';
+import '../services/footprint_marker_controller.dart';
+import '../services/footprint_service.dart';
 import '../services/location_permission_gate.dart';
 import '../services/profile_service.dart';
 import '../services/region_lookup_service.dart';
@@ -19,6 +22,7 @@ import '../services/spot_geofence_controller.dart';
 import '../services/spot_marker_controller.dart';
 import '../services/spot_service.dart';
 import '../services/visit_service.dart';
+import '../widgets/footprint_popup.dart';
 import 'footprint_nearby_create_screen.dart';
 import 'match_candidates_screen.dart';
 import 'match_list_screen.dart';
@@ -50,6 +54,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   StreamSubscription<OnCameraChangedParams>? _cameraSubscription;
   FogOverlayController? _fogOverlay;
   SpotMarkerController? _spotMarkers;
+  FootprintMarkerController? _footprintMarkers;
   SpotGeofenceController? _geofence;
   StreamSubscription<Position>? _geofencePositionSubscription;
   StreamSubscription<GeofenceEnterEvent>? _geofenceEnterSubscription;
@@ -116,6 +121,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     _geofenceExitSubscription?.cancel();
     _fogOverlay?.dispose();
     _spotMarkers?.dispose();
+    _footprintMarkers?.dispose();
     _geofence?.dispose();
     super.dispose();
   }
@@ -170,7 +176,34 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       _myLng = position.longitude;
       if (!hadLocation && mounted) setState(() {});
       _geofence?.updatePosition(lat: position.latitude, lng: position.longitude);
+      // geofence를 먼저 갱신해야 _insideUnlockedSpot이 이번 위치를 반영한다.
+      unawaited(_refreshFootprintMarkers());
     });
+  }
+
+  /// 지금 해금된(= 이미 인증한) 스팟 반경 안에 있는지(#117).
+  ///
+  /// 이 값이 발자취 조회 반경을 50m와 150m 사이에서 가른다. geofence 판정 반경은
+  /// 100m라 안개가 걷힌 150m보다 좁으므로, 걷힌 땅 가장자리에서는 아직 50m로 본다 —
+  /// 반대(안개 속인데 글이 보이는 것)보다 이쪽이 안전한 방향이라 그대로 둔다.
+  bool get _insideUnlockedSpot {
+    final inside = _geofence?.insideSpotIds;
+    if (inside == null || inside.isEmpty) return false;
+    return inside.any(_visitedSpotIds.contains);
+  }
+
+  /// 내 위치 주변 발자취를 다시 그린다(#117). 실제로 다시 부를지는
+  /// [FootprintNearbyPolicy]가 정하므로 위치 갱신마다 불러도 안전하다.
+  Future<void> _refreshFootprintMarkers({bool force = false}) async {
+    final controller = _footprintMarkers;
+    final lat = _myLat;
+    final lng = _myLng;
+    if (controller == null || lat == null || lng == null) return;
+    if (force) {
+      await controller.forceRefresh(lat: lat, lng: lng, insideUnlockedSpot: _insideUnlockedSpot);
+    } else {
+      await controller.refresh(lat: lat, lng: lng, insideUnlockedSpot: _insideUnlockedSpot);
+    }
   }
 
   /// 카메라를 마지막으로 받은 내 위치로 이동한다. SDK 기본 위치 버튼
@@ -223,6 +256,9 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                 .showSnackBar(const SnackBar(content: Text('발자취를 남겼어요.')));
           }
           unawaited(_loadFootprintQuota());
+          // 방금 남긴 글이 바로 보여야 한다 — 제자리에서 썼으므로 거리 조건에 걸리지
+          // 않도록 강제로 다시 그린다.
+          unawaited(_refreshFootprintMarkers(force: true));
         }
       case FootprintLocationUnavailable():
         _showFootprintLocationMessage('위치 확인이 필요해요. 위치 권한과 GPS를 켜주세요.');
@@ -238,6 +274,25 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   void _showFootprintLocationMessage(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// 발자취 조회의 로딩·실패 표시(#117). 둘 다 아니면 null이라 아무것도 그리지 않는다.
+  ///
+  /// 발자취는 보조 레이어라 실패해도 지도 사용을 막지 않는다 — 정복률(#51)과 같은
+  /// 원칙으로, 조용한 칩 하나로만 알린다.
+  _FootprintStatus? get _footprintStatus {
+    final controller = _footprintMarkers;
+    if (controller == null) return null;
+    if (controller.loading) return _FootprintStatus.loading;
+    if (controller.lastError != null) return _FootprintStatus.failed;
+    return null;
+  }
+
+  /// 발자취 도형을 탭하면 글귀 팝업을 띄운다(#117). 화면 전환이 아니라 바텀시트라
+  /// 지도가 뒤에 그대로 남는다 — 걸으며 읽는 흐름을 끊지 않기 위함이다.
+  void _onFootprintTapped(Footprint footprint) {
+    if (!mounted) return;
+    unawaited(showFootprintPopup(context, footprint));
   }
 
   /// 스팟 마커를 탭하면 상세 화면(#50)을 연다. 해금 전이면 잠긴 상태로,
@@ -333,12 +388,24 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       },
       onSpotTapped: _onSpotTapped,
     );
+    _footprintMarkers = FootprintMarkerController(
+      controller,
+      ref.read(footprintServiceProvider),
+      onFootprintTapped: _onFootprintTapped,
+      // 로딩·실패 표시(#117)를 위해 상태가 바뀔 때만 다시 그린다.
+      onStateChanged: () {
+        if (mounted) setState(() {});
+      },
+    );
     _cameraSubscription = controller.nowCameraPositionStream.listen(_onCameraChanged);
     if (mounted) setState(() => _mapReady = true);
     // flutter_naver_map 이 experimental 로 표시한 API 지만, 초기 카메라 위치를 얻을
     // 다른 경로가 없다. SDK 가 정식 API 를 제공하면 교체할 것.
     // ignore: experimental_member_use
-    final initialTarget = controller.nowCameraPosition.target;
+    final initialPosition = controller.nowCameraPosition;
+    final initialTarget = initialPosition.target;
+    // 발자취 렌더는 줌을 알기 전에는 멈춰 있다 — 초기 줌을 한 번 알려줘야 시작한다.
+    unawaited(_onZoomChanged(initialPosition.zoom));
     unawaited(_lookupRegion(initialTarget));
     unawaited(_spotMarkers?.loadAround(initialTarget));
     unawaited(_refreshConquest());
@@ -372,6 +439,17 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     if (!params.isIdle) return;
     unawaited(_lookupRegion(params.position.target));
     unawaited(_spotMarkers?.loadAround(params.position.target));
+    // 줌 임계를 넘나들 때만 실제로 지우거나 다시 그린다(#117).
+    unawaited(_onZoomChanged(params.position.zoom));
+  }
+
+  Future<void> _onZoomChanged(double zoom) async {
+    final controller = _footprintMarkers;
+    if (controller == null) return;
+    await controller.updateZoom(zoom);
+    // 임계 위로 다시 올라온 경우 그 자리에서 바로 채운다 — 다음 위치 갱신을
+    // 기다리면 멈춰 선 사용자에게는 영영 안 그려진다.
+    await _refreshFootprintMarkers();
   }
 
   Future<void> _lookupRegion(NLatLng target) async {
@@ -485,6 +563,11 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                         onDismiss: _dismissProximityBanner,
                         onVerify: () => _openVisitVerify(_proximityBanner!.spot),
                       ),
+                    ),
+                  if (_footprintStatus != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: _FootprintStatusChip(status: _footprintStatus!),
                     ),
                 ],
               ),
@@ -631,6 +714,55 @@ class _TopInfoBar extends StatelessWidget {
               backgroundColor: theme.colorScheme.secondaryContainer,
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 발자취 조회 상태(#117). 로딩·실패만 표시하고, 정상일 때는 아무것도 그리지 않는다.
+enum _FootprintStatus { loading, failed }
+
+/// 발자취 조회 상태를 알리는 작은 칩(#117).
+///
+/// 배너가 아니라 칩인 이유: 발자취는 보조 레이어라 실패가 탐험을 막지 않는데,
+/// 위치 권한 배너와 같은 크기로 띄우면 지도가 경고로 덮인다.
+class _FootprintStatusChip extends StatelessWidget {
+  const _FootprintStatusChip({required this.status});
+
+  final _FootprintStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final failed = status == _FootprintStatus.failed;
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Material(
+        color: theme.colorScheme.surface.withValues(alpha: 0.92),
+        elevation: 1,
+        borderRadius: BorderRadius.circular(999),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (failed)
+                Icon(Icons.cloud_off_outlined, size: 14, color: theme.colorScheme.onSurfaceVariant)
+              else
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              const SizedBox(width: 6),
+              Text(
+                failed ? '주변 발자취를 불러오지 못했어요' : '주변 발자취를 찾는 중…',
+                style: theme.textTheme.bodySmall,
+              ),
+            ],
+          ),
         ),
       ),
     );

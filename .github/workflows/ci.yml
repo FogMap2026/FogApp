@@ -73,6 +73,13 @@ jobs:
       - name: Analyze
         run: flutter analyze
 
+      # 이 잡은 오랫동안 analyze 만 돌렸다. app/test/ 에 테스트가 쌓이는 동안
+      # CI 는 그것을 한 번도 실행하지 않았다 — 초록불이 "테스트가 통과했다"는 뜻이
+      # 아니었던 것이다. 서버 잡은 `gradle build` 가 test 를 포함해 계속 돌고 있었어서
+      # 앱만 비어 있는 줄 몰랐다.
+      - name: Test
+        run: flutter test
+
   # 설치 가능한 Android APK 를 만들어 아티팩트로 올린다.
   #
   # 팀원이 Flutter·Android SDK 를 설치하지 않고도 실기기에서 결과물을 확인할 수 있게 하려는

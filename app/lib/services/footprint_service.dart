@@ -34,6 +34,25 @@ class FootprintService {
         .toList();
   }
 
+  /// 내 주변 발자취(#115, #117). 걷다가 지도에서 발견하는 흐름이 쓴다.
+  ///
+  /// [radiusMeters]는 앱이 정한다 — 이동 중 50m, 해금된 스팟 안에서는 150m
+  /// ([FootprintNearbyPolicy] 참고). 서버가 1,000m 상한과 최대 200건을 강제하므로
+  /// 그보다 큰 값을 넘기면 400이 돌아온다.
+  Future<List<Footprint>> listNearby({
+    required double lat,
+    required double lng,
+    required double radiusMeters,
+  }) async {
+    final response = await _apiClient.dio.get<List<dynamic>>(
+      '/api/footprints/nearby',
+      queryParameters: {'lat': lat, 'lng': lng, 'radius': radiusMeters},
+    );
+    return (response.data ?? [])
+        .map((e) => Footprint.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
   /// 좋아요(#72). 서버가 멱등 처리하므로 이미 누른 상태에서 다시 호출해도 에러 없이 무시된다.
   Future<void> like(int footprintId) {
     return _apiClient.dio.post<void>('/api/footprints/$footprintId/likes');

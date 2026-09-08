@@ -36,4 +36,52 @@ void main() {
 
     expect(footprint.photoUrl, '/api/visits/photos/uid/42/1.jpg');
   });
+
+  test('길목 글귀는 spotId 없이 좌표만 온다 (#115)', () {
+    final footprint = Footprint.fromJson({
+      'id': 9,
+      'userId': 7,
+      'spotId': null,
+      'lat': 37.5665,
+      'lng': 126.978,
+      'content': '여기서 왼쪽 골목이 예뻐요',
+      'likeCount': 0,
+      'createdAt': '2026-09-05T10:00:00+09:00',
+    });
+
+    expect(footprint.spotId, isNull);
+    expect(footprint.lat, 37.5665);
+    expect(footprint.lng, 126.978);
+  });
+
+  test('좌표 없는 예전 글은 lat·lng가 null이다 — 지도에 그릴 수 없다 (#117)', () {
+    final footprint = Footprint.fromJson({
+      'id': 3,
+      'userId': 7,
+      'spotId': 42,
+      'content': '좌표가 생기기 전에 쓴 글',
+      'likeCount': 0,
+      'createdAt': '2026-08-12T10:00:00+09:00',
+    });
+
+    expect(footprint.lat, isNull);
+    expect(footprint.lng, isNull);
+  });
+
+  test('정수로 온 좌표도 double로 읽는다', () {
+    // 서버가 JSON 으로 37.0 을 37 로 직렬화하면 num→double 변환이 없으면 깨진다.
+    final footprint = Footprint.fromJson({
+      'id': 4,
+      'userId': 7,
+      'spotId': null,
+      'lat': 37,
+      'lng': 127,
+      'content': '정수 좌표',
+      'likeCount': 0,
+      'createdAt': '2026-09-05T10:00:00+09:00',
+    });
+
+    expect(footprint.lat, 37.0);
+    expect(footprint.lng, 127.0);
+  });
 }
