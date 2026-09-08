@@ -281,24 +281,61 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
 
     switch (check) {
       case FootprintLocationReady(:final lat, :final lng):
-        final written = await Navigator.of(context).push<bool>(
-          MaterialPageRoute(builder: (_) => FootprintNearbyCreateScreen(lat: lat, lng: lng)),
-        );
-        if (written == true) {
-          if (mounted) {
-            ScaffoldMessenger.of(context)
-                .showSnackBar(const SnackBar(content: Text('발자취를 남겼어요.')));
-          }
-          unawaited(_loadFootprintQuota());
-        }
+        await _writeFootprintAt(lat, lng);
       case FootprintLocationUnavailable():
         _showFootprintLocationMessage('위치 확인이 필요해요. 위치 권한과 GPS를 켜주세요.');
-      case FootprintLocationInaccurate(:final accuracyMeters):
-        _showFootprintLocationMessage(
-          '위치가 정확하지 않아요(오차 ${accuracyMeters.round()}m). 실외로 이동하거나 잠시 후 다시 시도해주세요.',
-        );
+      case FootprintLocationInaccurate(:final accuracyMeters, :final lat, :final lng):
+        // 막다른 길로 두지 않는다. 10m는 보안 규칙이 아니라 "여기라고 말할 수
+        // 있는 범위"를 지키는 UX 규칙이고(docs/footprint-redesign.md 3-1·5-2,
+        // 서버는 좌표 범위와 횟수만 본다), 실내 GPS는 보통 20~50m라 그대로
+        // 막으면 실내에서는 글을 영영 남길 수 없다.
+        //
+        // 대신 오차를 숫자로 보여주고 사용자가 정하게 한다 — 정확도 신호를
+        // 버리지 않으면서 길은 열어둔다.
+        if (await _confirmInaccurateFootprint(accuracyMeters)) {
+          await _writeFootprintAt(lat, lng);
+        }
       case FootprintLocationFailed():
         _showFootprintLocationMessage('위치를 확인하지 못했어요. 다시 시도해주세요.');
+    }
+  }
+
+  /// 오차가 큰 위치에 그대로 남길지 묻는다(#118). 취소가 기본 동작이다.
+  Future<bool> _confirmInaccurateFootprint(double accuracyMeters) async {
+    final proceed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('위치가 정확하지 않아요'),
+        content: Text(
+          '지금 위치의 오차가 약 ${accuracyMeters.round()}m입니다.\n'
+          '이대로 남기면 글귀가 실제 있는 자리에서 그만큼 떨어져 보일 수 있어요.\n\n'
+          '실외로 나가면 더 정확해집니다.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('여기에 남기기'),
+          ),
+        ],
+      ),
+    );
+    return proceed ?? false;
+  }
+
+  Future<void> _writeFootprintAt(double lat, double lng) async {
+    final written = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => FootprintNearbyCreateScreen(lat: lat, lng: lng)),
+    );
+    if (written == true) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('발자취를 남겼어요.')));
+      }
+      unawaited(_loadFootprintQuota());
     }
   }
 

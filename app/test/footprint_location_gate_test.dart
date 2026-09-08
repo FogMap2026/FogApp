@@ -23,4 +23,16 @@ void main() {
     expect(result, isA<FootprintLocationInaccurate>());
     expect((result as FootprintLocationInaccurate).accuracyMeters, 15);
   });
+
+  test('부정확해도 좌표를 함께 돌려준다 — 사용자가 동의하면 그대로 쓴다', () {
+    // 10m 는 보안 규칙이 아니라 UX 규칙이라(footprint-redesign 3-1·5-2) 막다른
+    // 길이면 안 된다. 실내 GPS 는 보통 20~50m 이고, 좌표를 안 돌려주면 실내에서는
+    // 글을 아예 남길 수 없다.
+    final result = classifyFootprintLocation(lat: 37.5665, lng: 126.9780, accuracyMeters: 35);
+
+    final inaccurate = result as FootprintLocationInaccurate;
+    expect(inaccurate.lat, 37.5665);
+    expect(inaccurate.lng, 126.9780);
+    expect(inaccurate.accuracyMeters, 35);
+  });
 }
