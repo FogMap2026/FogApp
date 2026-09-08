@@ -63,6 +63,10 @@ android {
         if (hasReleaseSigning) {
             create("release") {
                 storeFile = file(releaseStoreFile!!)
+                // 키스토어는 PKCS12 다 — JKS 는 keytool 이 "outdated, 향후 제거" 경고를 낸다.
+                // AGP 가 확장자·매직 바이트로 알아서 인식하기도 하지만 버전마다 다를 수 있어
+                // 명시한다. 틀리면 빌드가 죽는데, 원인 메시지가 불친절하다.
+                storeType = "PKCS12"
                 storePassword = releaseStorePassword
                 keyAlias = releaseKeyAlias
                 keyPassword = releaseKeyPassword

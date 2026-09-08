@@ -146,10 +146,15 @@ jobs:
   #    시크릿 4개(KEYSTORE_BASE64·KEYSTORE_PASSWORD·KEY_ALIAS·KEY_PASSWORD)가 있어야 돈다.
   #
   # 키스토어는 base64 로 시크릿에 넣고 여기서 복원한다 — 바이너리는 시크릿에 그대로 못 넣는다.
+  # ⚠️ 모든 앱 PR 에서 돌리지 않는다. 제출물은 "주소가 확정된 뒤 한 번" 구우면 되는데,
+  #    PR 마다 돌리면 리뷰 회전이 그만큼 느려진다(#137 에서 iOS 잡을 지운 이유와 같다).
+  #    수동 실행과 dev·main push 에서만 돈다.
   release-apk:
     name: Release APK
     needs: changes
-    if: ${{ needs.changes.outputs.app == 'true' }}
+    if: >-
+      ${{ needs.changes.outputs.app == 'true' &&
+          (github.event_name == 'workflow_dispatch' || github.event_name == 'push') }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -179,6 +184,25 @@ jobs:
             echo "available=false" >> "$GITHUB_OUTPUT"
             echo "::notice::서명 키 시크릿이 없어 릴리스 APK 를 만들지 않습니다."
           fi
+
+      # ⚠️ 이 검사를 지우지 말 것.
+      #
+      # API_BASE_URL 이 비어 있으면 --dart-define=API_BASE_URL= 로 "키는 정의되고 값만
+      # 빈 문자열" 이 된다. String.fromEnvironment 는 키가 없을 때만 defaultValue 를 쓰므로,
+      # 빈 문자열이 그대로 들어가 Dio(BaseOptions(baseUrl: "")) 가 되고 모든 요청이 실패한다.
+      #
+      # 그런데 빌드는 성공하고, 서명 검사도 통과하고, 아티팩트도 올라간다. 앱을 켜야만 안다.
+      # 서버 주소가 바뀌는 시기에 시크릿 갱신 전 워크플로를 돌리면 그 APK 가 스토어로 간다.
+      - name: Require API_BASE_URL
+        if: steps.signing.outputs.available == 'true'
+        env:
+          API_BASE_URL: ${{ secrets.API_BASE_URL }}
+        run: |
+          if [ -z "$API_BASE_URL" ]; then
+            echo "::error::API_BASE_URL 시크릿이 비어 있습니다 — 서버에 못 붙는 APK 가 됩니다."
+            exit 1
+          fi
+          echo "API_BASE_URL 설정됨"
 
       - name: Restore keystore
         if: steps.signing.outputs.available == 'true'
@@ -237,6 +261,26 @@ jobs:
             exit 1
           fi
           echo "릴리스 키로 서명됐습니다."
+
+      # 서명이 맞아도 "엉뚱한 서버를 가리키는 APK" 는 여전히 나올 수 있다. API_BASE_URL 은
+      # 컴파일된 Dart 스냅샷(libapp.so) 안에 문자열로 남으므로 직접 열어 대조한다.
+      #
+      # 위 Require API_BASE_URL 이 "비어 있음" 을 막는다면, 이건 "값이 실제로 구워졌는지" 를
+      # 확인한다. 시크릿을 고쳤는데 캐시된 빌드가 나가는 경우까지 잡힌다.
+      - name: Verify baked server URL
+        if: steps.signing.outputs.available == 'true'
+        env:
+          API_BASE_URL: ${{ secrets.API_BASE_URL }}
+        run: |
+          APK=build/app/outputs/flutter-apk/app-release.apk
+          rm -rf "$RUNNER_TEMP/apkx" && mkdir -p "$RUNNER_TEMP/apkx"
+          unzip -q -o "$APK" 'lib/*/libapp.so' -d "$RUNNER_TEMP/apkx"
+          if grep -rqF "$API_BASE_URL" "$RUNNER_TEMP/apkx"; then
+            echo "APK 안에서 API_BASE_URL 을 확인했습니다."
+          else
+            echo "::error::APK 안에 기대한 API_BASE_URL 이 없습니다 — 엉뚱한 주소로 구워졌습니다."
+            exit 1
+          fi
 
       - name: Upload release APK
         if: steps.signing.outputs.available == 'true'
