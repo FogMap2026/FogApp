@@ -49,17 +49,37 @@ Sideloadly에 Apple ID와 비밀번호를 입력하게 됩니다. 도구가 애�
 
 ## 2. `.ipa` 받기
 
-CI가 매번 서명 없는 `.ipa`를 만들어 둡니다.
+**PC 브라우저에서 이 주소를 여세요.** (약 20MB)
+
+```
+https://desktop-i6a90dk.taild500a1.ts.net/fogapp.ipa
+```
+
+압축을 풀 필요 없이 그대로 3장으로 넘어가면 됩니다.
+
+> ⚠️ **폰이 아니라 PC로 받으세요.** 아이폰에서 받아봐야 서명이 안 돼 있어 설치할 수 없습니다.
+> 서명은 PC의 Sideloadly가 합니다.
+
+<details>
+<summary>링크가 안 열릴 때 — GitHub에서 직접 받기</summary>
+
+이 주소는 인프라 담당자의 PC에서 서비스됩니다. PC가 꺼져 있으면 안 열립니다.
 
 1. GitHub → **Actions** 탭
 2. `dev` 브랜치의 최신 **CI** 실행 열기
-3. 페이지 맨 아래 **Artifacts** → **`fogapp-unsigned-ipa`** 클릭 → zip 다운로드
-4. 압축을 풀면 **`FogApp-unsigned.ipa`** (약 20MB)
+3. 페이지 맨 아래 **Artifacts** → **`fogapp-unsigned-ipa`** → zip 다운로드
+4. 압축을 풀면 **`FogApp-unsigned.ipa`**
 
-> 💡 최신 앱 코드로 다시 굽고 싶으면 인프라 담당에게 요청하세요. 코드 변경 없이도 다시 구울 수 있습니다.
+> 아티팩트가 안 보이면 그 실행에서 iOS 잡이 건너뛰어진 것입니다 — 앱 코드가 안 바뀐 커밋이면
+> 그렇게 됩니다. 인프라 담당에게 요청하면 코드 변경 없이 다시 구울 수 있습니다.
 > ```
 > gh workflow run ci.yml --repo FogMap2026/FogApp --ref dev
 > ```
+
+</details>
+
+> 💡 **안드로이드는 훨씬 간단합니다** — 폰 브라우저에서 `https://desktop-i6a90dk.taild500a1.ts.net/fogapp.apk`
+> 를 열면 바로 설치됩니다. 서명도 PC도 필요 없습니다.
 
 ---
 
