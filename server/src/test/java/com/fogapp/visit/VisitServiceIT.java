@@ -185,4 +185,23 @@ class VisitServiceIT {
                 .extracting(Visit::getSpotId)
                 .containsExactlyInAnyOrder(a.getId(), b.getId());
     }
+
+    @Test
+    void 인증에_성공하면_발자취_횟수가_회복된다() {
+        // #116: "글을 더 남기고 싶으면 더 걸어라" — 도배 방지와 탐험 유도를 한 장치로 푼다.
+        // 인증과 같은 트랜잭션이라야 "인증은 됐는데 횟수는 그대로" 가 생기지 않는다.
+        User user = newUser();
+        Spot spot = newSpot(SPOT_LAT, SPOT_LNG);
+
+        user.consumeFootprintQuota();
+        user.consumeFootprintQuota();
+        userRepository.saveAndFlush(user);
+        assertThat(userRepository.findById(user.getId()).orElseThrow().getFootprintQuota()).isEqualTo(1);
+
+        visitService.verify(user.getId(), user.getFirebaseUid(), spot.getId(),
+                photoUrl(user, spot.getId()), SPOT_LAT, SPOT_LNG);
+
+        assertThat(userRepository.findById(user.getId()).orElseThrow().getFootprintQuota())
+                .isEqualTo(User.DEFAULT_FOOTPRINT_QUOTA);
+    }
 }

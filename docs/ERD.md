@@ -8,6 +8,16 @@
 | [V1__init_schema.sql](../server/src/main/resources/db/migration/V1__init_schema.sql) | 초기 스키마 — `users` · `spots` · `visits` · `footprints` · `matches` + PostGIS 확장 | [#1](https://github.com/FogMap2026/FogApp/issues/1) |
 | [V2__spot_geom_autofill.sql](../server/src/main/resources/db/migration/V2__spot_geom_autofill.sql) | `spots.geom` 자동 채움 트리거 + 좌표 이상치 처리 | [#6](https://github.com/FogMap2026/FogApp/issues/6) |
 | [V3__footprint_likes.sql](../server/src/main/resources/db/migration/V3__footprint_likes.sql) | `footprint_likes` 테이블 (발자취 좋아요·공감) | [#23](https://github.com/FogMap2026/FogApp/issues/23) |
+| [V5__footprint_geo.sql](../server/src/main/resources/db/migration/V5__footprint_geo.sql) | `footprints` 좌표·`geom`·GiST 인덱스 + 트리거, 기존 행 보정 | [#114](https://github.com/FogMap2026/FogApp/issues/114) |
+
+> ✅ **`footprints`에 좌표가 추가됐습니다**([#114](https://github.com/FogMap2026/FogApp/issues/114), V5).
+> 발자취가 스팟 리뷰에서 **길목마다 남기는 글귀**로 재설계되면서 `lat`·`lng`·`geom`(GiST 인덱스)이
+> 붙었습니다. `geom`은 `spots`(V2)·`visits`(V4)와 같이 **DB 트리거가 채웁니다.**
+>
+> 기존 행은 **연결된 스팟 좌표로 소급해 채웠습니다** — 그대로 두면 지도에서 통째로 사라집니다.
+>
+> 🆕 아직 남은 것: `users.footprint_quota`(발자취 잔여 횟수, [#116](https://github.com/FogMap2026/FogApp/issues/116)).
+> 설계 근거와 값은 [footprint-redesign.md](footprint-redesign.md) 참고.
 
 ## 관계도
 
@@ -68,10 +78,13 @@ erDiagram
     footprints {
         bigint      id PK
         bigint      user_id FK
-        bigint      spot_id FK
+        bigint      spot_id FK "길목 발자취는 NULL"
         text        content
         text        photo_url
         int         like_count
+        double      lat
+        double      lng
+        geometry    geom "트리거가 채움(V5)"
         timestamptz created_at
         timestamptz updated_at
     }

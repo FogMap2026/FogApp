@@ -8,6 +8,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 /**
  * 내 프로필 응답(#4, 5-3).
  *
+ * <p>{@code footprintQuota} 는 남은 발자취 작성 횟수다(#116). 앱이 버튼을 비활성화하고
+ * "스팟을 정복하면 채워집니다" 를 안내하려면 이 값이 필요하다.</p>
+ *
  * <p>{@code personalityType}·{@code personalityScores}는 성향 테스트를 아직 안 했으면
  * 각각 null·빈 Map이다 — 화면에서 "테스트 유도" 분기에 쓸 것.</p>
  *
@@ -22,6 +25,7 @@ public record ProfileResponse(
         String profileImageUrl,
         String personalityType,
         Map<String, Integer> personalityScores,
+        int footprintQuota,
         OffsetDateTime createdAt
 ) {
     public static ProfileResponse from(User user, ObjectMapper objectMapper) {
@@ -32,6 +36,7 @@ public record ProfileResponse(
                 user.getProfileImageUrl(),
                 user.getPersonalityType(),
                 PersonalityScoreParser.parseAxisScores(objectMapper, user.getPersonalityScores()),
+                user.getFootprintQuota(),
                 user.getCreatedAt());
     }
 }

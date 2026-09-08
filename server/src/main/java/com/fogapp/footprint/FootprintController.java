@@ -40,7 +40,8 @@ public class FootprintController {
     public ResponseEntity<FootprintResponse> create(@AuthenticationPrincipal AuthUser me,
                                                       @Valid @RequestBody FootprintCreateRequest request) {
         Footprint footprint = footprintService.create(
-                me.userId(), request.spotId(), request.content(), request.photoUrl());
+                me.userId(), request.spotId(), request.content(), request.photoUrl(),
+                request.lat(), request.lng());
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(footprintService.withAuthor(footprint, me.userId()));
     }
@@ -64,6 +65,23 @@ public class FootprintController {
             throw new IllegalArgumentException("spotId 또는 userId 중 하나는 필수입니다.");
         }
         return footprintService.withAuthors(footprints, me.userId());
+    }
+
+    /**
+     * 내 주변 발자취(#115). 걷다가 지도에서 발견하는 흐름이 쓴다.
+     *
+     * <p>예) {@code GET /api/footprints/nearby?lat=37.57&lng=126.98&radius=50}</p>
+     *
+     * <p>{@code radius} 는 앱이 정한다 — 이동 중 50m, 해금된 스팟 안에서는 150m(안개 걷힘 반경과
+     * 같은 값). 상한과 최대 건수는 서버가 강제한다.</p>
+     */
+    @GetMapping("/nearby")
+    public List<FootprintResponse> nearby(
+            @AuthenticationPrincipal AuthUser me,
+            @RequestParam double lat,
+            @RequestParam double lng,
+            @RequestParam(defaultValue = "50") double radius) {
+        return footprintService.findNearby(me.userId(), lat, lng, radius);
     }
 
     @PatchMapping("/{id}")

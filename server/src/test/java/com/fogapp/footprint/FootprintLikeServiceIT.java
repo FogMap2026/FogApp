@@ -46,7 +46,7 @@ class FootprintLikeServiceIT {
         Long spotId = jdbcTemplate.queryForObject(
                 "INSERT INTO spots (content_id, title) VALUES (?, ?) RETURNING id",
                 Long.class, "content-" + System.nanoTime(), "테스트 스팟");
-        footprintId = footprintRepository.save(new Footprint(userA, spotId, "발자취", null)).getId();
+        footprintId = footprintRepository.save(new Footprint(userA, spotId, "발자취", null, 37.5665, 126.9780)).getId();
     }
 
     private Long createUser() {

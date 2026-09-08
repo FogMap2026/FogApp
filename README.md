@@ -144,6 +144,7 @@ FogApp/
 | [docs/ERD.md](docs/ERD.md) | DB 스키마와 설계 근거 |
 | [docs/ENV_GUIDE.md](docs/ENV_GUIDE.md) | 환경 변수·시크릿 관리 |
 | [docs/FIREBASE_AUTH_SETUP.md](docs/FIREBASE_AUTH_SETUP.md) | Firebase 콘솔 설정 체크리스트 |
+| [docs/footprint-redesign.md](docs/footprint-redesign.md) | **발자취 재설계** — 리뷰에서 "길에 남기는 글귀"로 (구현 기준) |
 | [docs/personality-test-design.md](docs/personality-test-design.md) | 여행 성향 축·설문·점수 모델 |
 | [docs/PM_SETUP.md](docs/PM_SETUP.md) | 저장소 관리자 설정(PM 전용) |
 
@@ -234,6 +235,7 @@ cd app    && flutter test
 | `GET` | `/api/spots?region={code}&page&size` | 지역 코드별 스팟 목록(페이지네이션). `unlocked`·`overview`는 **로그인한 사용자 기준** | 1·3 |
 | `GET` | `/api/spots/nearby?lat&lng&radius` | 반경 내 스팟 조회 (PostGIS `ST_DWithin`, 최대 20km) | 1·3 |
 | `POST` `GET` `PATCH` `DELETE` | `/api/footprints`, `/api/footprints/{id}` | 발자취 CRUD (`spotId` 또는 `userId`로 목록 조회) | 1·2 |
+| `GET` | `/api/footprints/nearby?lat&lng&radius` | **내 주변 발자취** (가까운 순, 최대 1km·200건) | 5.5 |
 | `POST` `DELETE` | `/api/footprints/{id}/likes` | 좋아요 등록·취소 (1인 1회) | 2 |
 | `POST` `GET` `PATCH` `DELETE` | `/api/matches`, `/api/matches/{id}` | 동행 요청 생성·조회·상태 변경·취소 | 1·5 |
 | `GET` | `/api/matches/candidates?userId&limit` | 성향 유사도 기반 동행 후보 추천 | 3 |
@@ -249,6 +251,8 @@ cd app    && flutter test
 
 **MVP가 동작합니다.** 스팟에 도달해 사진을 찍으면 안개가 걷히고, 스팟 정보가 해금되며, 지역 정복률이 올라갑니다.
 발자취를 남기고 다른 사람의 기록에 좋아요를 누르는 것, 성향이 맞는 동행을 추천받아 요청·수락하는 것까지 됩니다.
+
+> 📌 **발자취는 재설계가 확정됐습니다.** 스팟 리뷰에서 **길목마다 남기는 짧은 글귀**(엘든링 메시지 방식)로 바뀝니다 — [docs/footprint-redesign.md](docs/footprint-redesign.md).
 
 | Phase | 상태 |
 |-------|------|

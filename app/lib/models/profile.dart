@@ -11,6 +11,7 @@ class Profile {
     this.nickname,
     this.profileImageUrl,
     this.personalityType,
+    this.footprintQuota = 0,
     this.personalityScores = const {},
   });
 
@@ -20,6 +21,7 @@ class Profile {
         nickname: json['nickname'] as String?,
         profileImageUrl: json['profileImageUrl'] as String?,
         personalityType: json['personalityType'] as String?,
+        footprintQuota: json['footprintQuota'] as int? ?? 0,
         personalityScores: axisScoresFromJson(
           (json['personalityScores'] as Map<String, dynamic>?) ?? const {},
         ),
@@ -30,5 +32,9 @@ class Profile {
   final String? nickname;
   final String? profileImageUrl;
   final String? personalityType;
+
+  /// 남은 발자취 작성 횟수(#116). 0이면 버튼을 비활성화하고 **이유를 함께** 보여줄 것 —
+  /// "스팟을 정복하면 다시 채워집니다". 버튼만 흐리면 고장으로 오해한다.
+  final int footprintQuota;
   final Map<PersonalityAxis, int> personalityScores;
 }
