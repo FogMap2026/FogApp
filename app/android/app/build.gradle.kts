@@ -45,6 +45,10 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // flutter_local_notifications(#135)가 요구합니다. 없으면 빌드가
+        // `checkDebugAarMetadata`에서 "requires core library desugaring to be enabled"로 실패합니다.
+        // minSdk 23에서도 최신 java.time API를 쓸 수 있게 해주는 설정입니다.
+        isCoreLibraryDesugaringEnabled = true
     }
 
     defaultConfig {
@@ -91,6 +95,12 @@ android {
             }
         }
     }
+}
+
+dependencies {
+    // 위 isCoreLibraryDesugaringEnabled 와 짝입니다 — 둘 중 하나만 있으면 빌드가 실패합니다.
+    // flutter_local_notifications 22.x 가 2.1.4 이상을 요구합니다.
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 }
 
 kotlin {
