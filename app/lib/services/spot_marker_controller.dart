@@ -32,7 +32,16 @@ class SpotMarkerController {
 
   bool _loading = false;
 
-  /// [center] 주변 스팟을 다시 불러와 마커를 교체한다.
+  /// 지금 지도에 떠 있는 스팟 마커와, 그릴 때 쓴 해금 여부.
+  ///
+  /// 예전에는 불러올 때마다 `clearOverlays(type: marker)`로 전부 지우고 다시 그렸지만,
+  /// 발자취도 같은 marker 레이어를 쓰게 되면서(#117) 그러면 **발자취 마커까지 함께
+  /// 지워진다.** 이제 사라진 스팟만 골라 지운다 — 화면을 조금 움직였을 때 대부분의
+  /// 마커가 그대로 남으므로 다시 그리는 비용도 줄어든다.
+  final Map<int, NMarker> _markersBySpotId = {};
+  final Map<int, bool> _unlockedBySpotId = {};
+
+  /// [center] 주변 스팟을 다시 불러와 마커를 갱신한다.
   Future<void> loadAround(NLatLng center) async {
     if (_loading) return;
     _loading = true;
@@ -43,15 +52,37 @@ class SpotMarkerController {
         radiusMeters: _radiusMeters,
       );
       onSpotsLoaded?.call(spots);
-      final markers = spots.map(_toMarker).toSet();
-      await _mapController.clearOverlays(type: NOverlayType.marker);
-      if (markers.isNotEmpty) {
-        await _mapController.addOverlayAll(markers);
-      }
+      await _syncMarkers(spots);
     } catch (e) {
       debugPrint('[SpotMarker] 스팟 로드 실패: $e');
     } finally {
       _loading = false;
+    }
+  }
+
+  /// 반경을 벗어난 스팟의 마커는 지우고, 새로 들어온 스팟만 그린다.
+  /// 해금 여부가 바뀐 스팟(방문 인증 직후)은 톤이 달라져야 하므로 다시 그린다.
+  Future<void> _syncMarkers(List<Spot> spots) async {
+    final next = {for (final spot in spots) spot.id: spot};
+
+    for (final id in _markersBySpotId.keys.toList()) {
+      final spot = next[id];
+      if (spot != null && spot.unlocked == _unlockedBySpotId[id]) continue;
+      final marker = _markersBySpotId.remove(id);
+      _unlockedBySpotId.remove(id);
+      if (marker != null) await _mapController.deleteOverlay(marker.info);
+    }
+
+    final added = <NMarker>{};
+    for (final entry in next.entries) {
+      if (_markersBySpotId.containsKey(entry.key)) continue;
+      final marker = _toMarker(entry.value);
+      _markersBySpotId[entry.key] = marker;
+      _unlockedBySpotId[entry.key] = entry.value.unlocked;
+      added.add(marker);
+    }
+    if (added.isNotEmpty) {
+      await _mapController.addOverlayAll(added);
     }
   }
 
@@ -71,6 +102,11 @@ class SpotMarkerController {
   }
 
   void dispose() {
-    _mapController.clearOverlays(type: NOverlayType.marker);
+    // 발자취 마커(#117)도 같은 레이어에 있으므로 타입 단위로 지우지 않는다.
+    for (final marker in _markersBySpotId.values) {
+      _mapController.deleteOverlay(marker.info);
+    }
+    _markersBySpotId.clear();
+    _unlockedBySpotId.clear();
   }
 }

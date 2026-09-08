@@ -367,11 +367,26 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       },
       onSpotTapped: _onSpotTapped,
     );
-    _footprintMarkers = FootprintMarkerController(
-      controller,
-      ref.read(footprintServiceProvider),
-      onTapped: _onFootprintTapped,
-    );
+    // 발자취 아이콘은 위젯을 이미지로 구워 만든다 — 마커마다 만들지 않고 한 번만 만들어
+    // 공유한다. 앞선 await 이후라 context를 쓰기 전에 mounted를 확인한다.
+    if (!mounted) return;
+    NOverlayImage? footprintIcon;
+    try {
+      footprintIcon = await FootprintMarkerController.createIcon(context);
+    } catch (e) {
+      // 아이콘을 못 구우면 발자취만 안 뜬다 — 지도·스팟·안개는 그대로 동작해야 하므로
+      // 여기서 멈추지 않는다.
+      debugPrint('[MapScreen] 발자취 아이콘 생성 실패: $e');
+    }
+    if (!mounted) return;
+    if (footprintIcon != null) {
+      _footprintMarkers = FootprintMarkerController(
+        controller,
+        ref.read(footprintServiceProvider),
+        icon: footprintIcon,
+        onTapped: _onFootprintTapped,
+      );
+    }
     _cameraSubscription = controller.nowCameraPositionStream.listen(_onCameraChanged);
     if (mounted) setState(() => _mapReady = true);
     // flutter_naver_map 이 experimental 로 표시한 API 지만, 초기 카메라 위치를 얻을
