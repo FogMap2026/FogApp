@@ -41,8 +41,10 @@ void main() {
 
   group('mapNoticeFor — 서버 연결 실패 (#146)', () {
     test('조회에 실패하면 서버 안내를 띄운다', () {
-      expect(notice(loadFailed: true, spotsEverLoaded: false, spotCount: 0),
-          MapNotice.serverError);
+      expect(
+        notice(loadFailed: true, spotsEverLoaded: false, spotCount: 0),
+        MapNotice.serverError,
+      );
     });
 
     test('실패는 빈 지역보다 우선한다 — 서버가 죽었는데 "스팟이 없다"고 하면 거짓말이다', () {
@@ -55,8 +57,10 @@ void main() {
     });
 
     test('닫으면 띄우지 않는다', () {
-      expect(notice(loadFailed: true, spotCount: 0, serverErrorDismissed: true),
-          MapNotice.none);
+      expect(
+        notice(loadFailed: true, spotCount: 0, serverErrorDismissed: true),
+        MapNotice.none,
+      );
     });
 
     test('서버 안내를 닫아둔 상태여도, 실패가 아니면 빈 지역 안내는 정상적으로 뜬다', () {
