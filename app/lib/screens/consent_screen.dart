@@ -110,7 +110,8 @@ class _ConsentScreenState extends ConsumerState<ConsentScreen> {
                   const _CollectionItem(
                     title: '위치정보',
                     detail:
-                        '방문 인증·발자취 작성 시점의 좌표 — 안개 해제·정복률 계산에 사용. '
+                        '주변 스팟·발자취 조회를 위해 현재 위치가 서버로 전송됩니다. '
+                        '방문 인증·발자취 작성 시점의 좌표는 안개 해제·정복률 계산에 사용됩니다. '
                         '앱 실행 중에만 수집하고, 백그라운드에서는 수집하지 않습니다.',
                   ),
                   const _CollectionItem(
@@ -123,8 +124,8 @@ class _ConsentScreenState extends ConsumerState<ConsentScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    '보유 기간: 회원 탈퇴 시 지체 없이 파기합니다. 발자취는 직접 삭제할 수 있고, '
-                    '삭제하면 즉시 파기됩니다.',
+                    '보유 기간: 발자취는 직접 삭제할 수 있고, 삭제하면 즉시 파기됩니다. 앱 내 회원 탈퇴 '
+                    '기능은 아직 없어, 계정·개인정보 삭제는 처리방침의 연락처로 요청해 처리합니다.',
                     style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                   ),
                   const SizedBox(height: 4),
