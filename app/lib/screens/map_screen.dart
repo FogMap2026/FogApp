@@ -348,9 +348,19 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
         //
         // 대신 오차를 숫자로 보여주고 사용자가 정하게 한다 — 정확도 신호를
         // 버리지 않으면서 길은 열어둔다.
-        if (await _confirmInaccurateFootprint(accuracyMeters)) {
-          await _writeFootprintAt(lat, lng);
-        }
+        if (!await _confirmInaccurateFootprint(accuracyMeters)) return;
+        // 다이얼로그가 떠 있는 동안 화면이 사라질 수 있다(로그아웃 → AuthGate 재빌드 등).
+        // _writeFootprintAt 은 자기 함수 안에서는 await 앞에 context 를 써서
+        // use_build_context_synchronously 가 잡지 못한다 — 여기서 직접 확인한다.
+        if (!mounted) return;
+        await _writeFootprintAt(lat, lng);
+      case FootprintLocationTooInaccurate(:final accuracyMeters):
+        // 동의를 받아도 쓰지 않는다. 오차를 숫자로 보여주는 것만으로는 판단을 맡길 수
+        // 없는 범위다 — 사용자는 "35m 면 뭐" 하고 누르지 2km 를 상상하지 않는다.
+        _showFootprintLocationMessage(
+          '위치 오차가 너무 큽니다(약 ${accuracyMeters.round()}m). '
+          '실외로 이동해 잠시 후 다시 시도해주세요.',
+        );
       case FootprintLocationFailed():
         _showFootprintLocationMessage('위치를 확인하지 못했어요. 다시 시도해주세요.');
     }
