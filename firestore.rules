@@ -1,0 +1,32 @@
+// FogApp Firestore 보안 규칙 — 실시간 위치 공유(Phase 6, #133).
+//
+// locations/{firebaseUid} 문서 하나가 사용자 한 명의 현재 위치를 담는다.
+//   { lat, lng, heading, updatedAt, visibleTo: [firebaseUid, ...] }
+//
+// - lat·lng·heading·updatedAt은 앱이 직접 쓴다(본인 문서만).
+// - visibleTo는 서버(MatchService, Firebase Admin SDK)만 갱신한다 — 매칭이
+//   accepted가 될 때 서로의 uid를 추가하고, 취소·거절되면 제거한다
+//   (server/src/main/java/com/fogapp/location/ 참고). Admin SDK는 이 규칙을
+//   우회하므로 클라이언트가 visibleTo를 직접 쓸 방법은 없다.
+//
+// 판정 기준: "본인만 쓰기, visibleTo에 내가 있는 사람만 읽기."
+// 이 규칙이 없으면 Firestore 기본값은 전면 허용 또는 전면 차단이라, 전자면
+// 아무나 남의 위치를 읽을 수 있다.
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /locations/{firebaseUid} {
+      // 본인 문서만 쓸 수 있다. visibleTo를 클라이언트가 직접 못 바꾸게 막지는
+      // 않지만(규칙만으로는 필드별 쓰기 권한 분리가 번거롭다), Admin SDK 갱신과
+      // 충돌해도 서버가 다음 매칭 상태 변경 때 다시 정확한 값으로 되돌린다.
+      allow write: if request.auth != null && request.auth.uid == firebaseUid;
+
+      // 본인이거나, 이 문서의 visibleTo 배열에 내 uid가 있을 때만 읽는다.
+      allow read: if request.auth != null &&
+                     (request.auth.uid == firebaseUid ||
+                      request.auth.uid in resource.data.get('visibleTo', []));
+    }
+  }
+}

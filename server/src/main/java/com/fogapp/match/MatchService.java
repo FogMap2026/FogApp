@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
@@ -14,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fogapp.common.ForbiddenException;
 import com.fogapp.common.NotFoundException;
+import com.fogapp.location.MatchLocationVisibilitySync;
 import com.fogapp.user.PersonalityScoreParser;
 import com.fogapp.user.User;
 import com.fogapp.user.UserRepository;
@@ -26,11 +28,14 @@ public class MatchService {
     private final MatchRepository matchRepository;
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
+    private final MatchLocationVisibilitySync locationVisibilitySync;
 
-    public MatchService(MatchRepository matchRepository, UserRepository userRepository, ObjectMapper objectMapper) {
+    public MatchService(MatchRepository matchRepository, UserRepository userRepository, ObjectMapper objectMapper,
+                         MatchLocationVisibilitySync locationVisibilitySync) {
         this.matchRepository = matchRepository;
         this.userRepository = userRepository;
         this.objectMapper = objectMapper;
+        this.locationVisibilitySync = locationVisibilitySync;
     }
 
     @Transactional
@@ -142,7 +147,13 @@ public class MatchService {
         return match.getRequesterId().equals(viewerId) ? match.getAddresseeId() : match.getRequesterId();
     }
 
-    /** 수락/거절은 요청을 받은 쪽(addressee)만 할 수 있다(#52). */
+    /**
+     * 수락/거절은 요청을 받은 쪽(addressee)만 할 수 있다(#52).
+     *
+     * <p>수락되면 위치 공유 대상으로 등록하고(#133), 거절되면(혹은 이미 등록돼 있었다면)
+     * 해제한다. Firestore 반영이 실패해도 매칭 상태 변경 자체는 성공한다 — 위치 공유는
+     * 부가 기능이다({@link MatchLocationVisibilitySync} 참고).</p>
+     */
     @Transactional
     public Match updateStatus(Long callerId, Long id, String status) {
         Match match = get(id);
@@ -150,16 +161,50 @@ public class MatchService {
             throw new ForbiddenException("매칭 상태 변경은 요청 대상자만 할 수 있습니다.");
         }
         match.updateStatus(status);
+        syncLocationVisibility(match, status);
         return match;
     }
 
-    /** 요청자·대상자 둘 중 한쪽이면 매칭을 취소(삭제)할 수 있다(#52). */
+    /**
+     * 요청자·대상자 둘 중 한쪽이면 매칭을 취소(삭제)할 수 있다(#52).
+     *
+     * <p>삭제 전에 위치 공유부터 해제한다(#133) — pending 상태에서 취소된 경우처럼
+     * 애초에 공유된 적이 없어도 안전하게 호출된다.</p>
+     */
     @Transactional
     public void delete(Long callerId, Long id) {
         Match match = get(id);
         if (!match.getRequesterId().equals(callerId) && !match.getAddresseeId().equals(callerId)) {
             throw new ForbiddenException("본인이 관련된 매칭만 취소할 수 있습니다.");
         }
+        revokeLocationVisibility(match);
         matchRepository.deleteById(id);
+    }
+
+    private void syncLocationVisibility(Match match, String status) {
+        if (Match.STATUS_ACCEPTED.equals(status)) {
+            withBothFirebaseUids(match, locationVisibilitySync::grant);
+        } else if (Match.STATUS_REJECTED.equals(status)) {
+            withBothFirebaseUids(match, locationVisibilitySync::revoke);
+        }
+    }
+
+    private void revokeLocationVisibility(Match match) {
+        withBothFirebaseUids(match, locationVisibilitySync::revoke);
+    }
+
+    /**
+     * 요청자·대상자의 Firebase uid를 함께 조회해 넘긴다. 위치 공유는 uid(Firebase) 기준이고
+     * 매칭은 내부 PK(Long) 기준이라, 경계를 넘는 지점을 이 메서드 하나로 모아둔다.
+     */
+    private void withBothFirebaseUids(Match match, BiConsumer<String, String> action) {
+        String requesterUid = userRepository.findById(match.getRequesterId())
+                .map(User::getFirebaseUid).orElse(null);
+        String addresseeUid = userRepository.findById(match.getAddresseeId())
+                .map(User::getFirebaseUid).orElse(null);
+        if (requesterUid == null || addresseeUid == null) {
+            return; // 사용자가 삭제된 비정상 상태 — 위치 공유는 조용히 건너뛴다.
+        }
+        action.accept(requesterUid, addresseeUid);
     }
 }

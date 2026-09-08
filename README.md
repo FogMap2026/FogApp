@@ -146,6 +146,7 @@ FogApp/
 | [docs/FIREBASE_AUTH_SETUP.md](docs/FIREBASE_AUTH_SETUP.md) | Firebase 콘솔 설정 체크리스트 |
 | [docs/ONESTORE_RELEASE.md](docs/ONESTORE_RELEASE.md) | **원스토어 출시** — 출품 요건·계정·서명·체크리스트 |
 | [docs/footprint-redesign.md](docs/footprint-redesign.md) | **발자취 재설계** — 리뷰에서 "길에 남기는 글귀"로 (구현 기준) |
+| [firestore.rules](firestore.rules) | **실시간 위치 공유 Firestore 규칙** — 매칭이 수락된 상대에게만 위치 공개 (Phase 6) |
 | [docs/personality-test-design.md](docs/personality-test-design.md) | 여행 성향 축·설문·점수 모델 |
 | [docs/PM_SETUP.md](docs/PM_SETUP.md) | 저장소 관리자 설정(PM 전용) |
 
