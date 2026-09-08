@@ -484,7 +484,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
 
   void _onMapReady(NaverMapController controller) async {
     _controller = controller;
-    controller.setMyLocationTracker(FogLocationTracker());
+    final locationTracker = FogLocationTracker();
+    controller.setMyLocationTracker(locationTracker);
     _fogOverlay = await FogOverlayController.attach(controller);
     _geofence = SpotGeofenceController();
     _geofenceEnterSubscription = _geofence!.onEnter.listen(_onGeofenceEnter);
@@ -536,7 +537,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     if (!mounted) return;
     try {
       final characterIcon = await CharacterOverlay.createIcon(context);
-      CharacterOverlay.attach(controller, characterIcon);
+      CharacterOverlay.attach(controller, locationTracker, characterIcon);
     } catch (e) {
       debugPrint('[MapScreen] 캐릭터 아이콘 생성 실패: $e');
     }

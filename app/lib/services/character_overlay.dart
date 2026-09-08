@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 
+import 'fog_location_tracker.dart';
+
 /// 내 위치를 기본 점 대신 **캐릭터**로 그린다(#131 6-1).
 ///
 /// SDK 의 위치 오버레이([NLocationOverlay])는 지도마다 하나뿐이고 직접 만들지 않는다 —
@@ -31,7 +33,21 @@ class CharacterOverlay {
   }
 
   /// 지도의 위치 오버레이 아이콘을 캐릭터로 바꾼다.
-  static void attach(NaverMapController controller, NOverlayImage icon) {
+  ///
+  /// **트래커에 등록하는 것이 핵심이다.** 오버레이에 한 번 세팅하는 것만으로는 유지되지
+  /// 않는다 — [NMyLocationTracker.onChangeTrackingMode] 의 기본 구현이 트래킹 모드가
+  /// 바뀔 때마다 아이콘을 기본값으로 되돌린다(PR #161 리뷰). 실제로 권한을 허용하면
+  /// 곧바로 `setLocationTrackingMode(follow)` 가 불려서, 등록하지 않으면 방금 세팅한
+  /// 캐릭터가 그 자리에서 파란 점으로 덮인다.
+  ///
+  /// 오버레이에도 곧바로 반영하는 것은, 모드가 끝내 바뀌지 않는 경우(위치 권한 거부 등)
+  /// 에도 화면이 일관되게 보이도록 하기 위함이다.
+  static void attach(
+    NaverMapController controller,
+    FogLocationTracker tracker,
+    NOverlayImage icon,
+  ) {
+    tracker.setCharacterIcon(icon, iconSize);
     controller.getLocationOverlay()
       ..setIcon(icon)
       ..setIconSize(iconSize);
