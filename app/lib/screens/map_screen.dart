@@ -7,11 +7,14 @@ import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../models/conquest.dart';
+import '../models/footprint.dart';
 import '../models/spot.dart';
 import '../services/conquest_service.dart';
 import '../services/fog_location_tracker.dart';
 import '../services/fog_overlay_controller.dart';
 import '../services/footprint_location_gate.dart';
+import '../services/footprint_marker_controller.dart';
+import '../services/footprint_service.dart';
 import '../services/location_permission_gate.dart';
 import '../services/profile_service.dart';
 import '../services/region_lookup_service.dart';
@@ -19,6 +22,7 @@ import '../services/spot_geofence_controller.dart';
 import '../services/spot_marker_controller.dart';
 import '../services/spot_service.dart';
 import '../services/visit_service.dart';
+import '../widgets/footprint_card.dart';
 import 'footprint_nearby_create_screen.dart';
 import 'match_candidates_screen.dart';
 import 'match_list_screen.dart';
@@ -50,6 +54,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   StreamSubscription<OnCameraChangedParams>? _cameraSubscription;
   FogOverlayController? _fogOverlay;
   SpotMarkerController? _spotMarkers;
+  FootprintMarkerController? _footprintMarkers;
   SpotGeofenceController? _geofence;
   StreamSubscription<Position>? _geofencePositionSubscription;
   StreamSubscription<GeofenceEnterEvent>? _geofenceEnterSubscription;
@@ -72,6 +77,9 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
 
   /// 이미 인증한 스팟 id 목록(#46) — 이 스팟들은 반경에 들어와도 알리지 않는다.
   Set<int> _visitedSpotIds = const {};
+  /// 이미 인증한 스팟의 좌표(#117) — 해금된 스팟 반경(150m) 안에 있는지 판정해
+  /// 발자취 조회 반경을 넓히는 데 쓴다.
+  Map<int, NLatLng> _visitedSpotCoords = const {};
   /// 이번 앱 실행 세션에서 이미 알림을 띄운 스팟(#46) — 같은 스팟에 재진입해도
   /// 세션당 1회만 알린다. geofencing의 히스테리시스는 경계 떨림만 막을 뿐,
   /// 반경을 벗어났다가 다시 들어오는 재진입까지는 막지 않기 때문에 별도로 둔다.
@@ -116,6 +124,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     _geofenceExitSubscription?.cancel();
     _fogOverlay?.dispose();
     _spotMarkers?.dispose();
+    _footprintMarkers?.dispose();
     _geofence?.dispose();
     super.dispose();
   }
@@ -170,7 +179,24 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       _myLng = position.longitude;
       if (!hadLocation && mounted) setState(() {});
       _geofence?.updatePosition(lat: position.latitude, lng: position.longitude);
+      unawaited(_footprintMarkers?.updatePosition(
+        lat: position.latitude,
+        lng: position.longitude,
+        insideUnlockedSpot: _isInsideUnlockedSpot(position.latitude, position.longitude),
+      ));
     });
+  }
+
+  /// 해금된(방문 인증한) 스팟의 안개 걷힘 반경(150m) 안에 있는지(#117) — 발자취
+  /// 조회 반경을 50m에서 150m로 넓힐지 판단하는 데 쓴다(문서 3-3).
+  static const _unlockedSpotRadiusMeters = 150.0;
+
+  bool _isInsideUnlockedSpot(double lat, double lng) {
+    for (final coord in _visitedSpotCoords.values) {
+      final distance = Geolocator.distanceBetween(lat, lng, coord.latitude, coord.longitude);
+      if (distance <= _unlockedSpotRadiusMeters) return true;
+    }
+    return false;
   }
 
   /// 카메라를 마지막으로 받은 내 위치로 이동한다. SDK 기본 위치 버튼
@@ -262,7 +288,10 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     );
     if (verified == true) {
       // 방금 인증한 스팟은 바로 반영해, 재조회 전이라도 다시 알리지 않는다.
-      setState(() => _visitedSpotIds = {..._visitedSpotIds, spot.id});
+      setState(() {
+        _visitedSpotIds = {..._visitedSpotIds, spot.id};
+        _visitedSpotCoords = {..._visitedSpotCoords, spot.id: NLatLng(spot.lat, spot.lng)};
+      });
       unawaited(_refreshConquest());
       // 안개 걷힘 연출(#49) — 스팟 좌표 기준 반경을 퍼지듯 넓혀가며 걷어낸다.
       unawaited(_fogOverlay?.clearCircleAnimated(spot.id.toString(), NLatLng(spot.lat, spot.lng)));
@@ -307,7 +336,10 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     try {
       final visits = await ref.read(visitServiceProvider).myVisits();
       if (!mounted) return;
-      setState(() => _visitedSpotIds = visits.map((v) => v.spotId).toSet());
+      setState(() {
+        _visitedSpotIds = visits.map((v) => v.spotId).toSet();
+        _visitedSpotCoords = {for (final v in visits) v.spotId: NLatLng(v.lat, v.lng)};
+      });
       // 애니메이션 없이 즉시 걷어낸다 — 이미 걷힌 영역을 매번 앱을 켤 때마다 다시
       // "퍼지는" 연출로 보여줄 이유는 없다(#49 to-do: 재진입 시 유지).
       _fogOverlay?.clearCircles({for (final v in visits) v.spotId.toString(): NLatLng(v.lat, v.lng)});
@@ -333,12 +365,19 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       },
       onSpotTapped: _onSpotTapped,
     );
+    _footprintMarkers = FootprintMarkerController(
+      controller,
+      ref.read(footprintServiceProvider),
+      onTapped: _onFootprintTapped,
+    );
     _cameraSubscription = controller.nowCameraPositionStream.listen(_onCameraChanged);
     if (mounted) setState(() => _mapReady = true);
     // flutter_naver_map 이 experimental 로 표시한 API 지만, 초기 카메라 위치를 얻을
     // 다른 경로가 없다. SDK 가 정식 API 를 제공하면 교체할 것.
     // ignore: experimental_member_use
-    final initialTarget = controller.nowCameraPosition.target;
+    final initialPosition = controller.nowCameraPosition;
+    final initialTarget = initialPosition.target;
+    _footprintMarkers?.setZoom(initialPosition.zoom);
     unawaited(_lookupRegion(initialTarget));
     unawaited(_spotMarkers?.loadAround(initialTarget));
     unawaited(_refreshConquest());
@@ -369,9 +408,31 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   }
 
   void _onCameraChanged(OnCameraChangedParams params) {
+    // 줌 임계값에 따른 발자취 표시/숨김(#117)은 카메라가 멈추기 전에도 즉시
+    // 반영한다 — 핀치 줌 도중에도 "확대하면 보인다"가 바로 느껴져야 한다.
+    _footprintMarkers?.setZoom(params.position.zoom);
     if (!params.isIdle) return;
     unawaited(_lookupRegion(params.position.target));
     unawaited(_spotMarkers?.loadAround(params.position.target));
+  }
+
+  /// 발자취 도형 탭(#117). 지도를 벗어나지 않도록 화면 전환 대신 바텀시트로 띄운다
+  /// (docs/footprint-redesign.md 4-2 "팝업이지 화면 전환이 아니다"). 좋아요·작성자·시각은
+  /// [FootprintCard]가 그대로 그린다 — 목록/스팟 상세와 같은 카드를 재사용한다.
+  void _onFootprintTapped(Footprint footprint) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          top: 16,
+          bottom: MediaQuery.viewInsetsOf(context).bottom + 16,
+        ),
+        child: FootprintCard(footprint: footprint),
+      ),
+    );
   }
 
   Future<void> _lookupRegion(NLatLng target) async {
