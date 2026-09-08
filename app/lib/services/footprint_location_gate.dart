@@ -29,9 +29,20 @@ class FootprintLocationUnavailable extends FootprintLocationCheck {
 
 /// 위치는 얻었지만 정확도가 [maxFootprintAccuracyMeters]를 넘는다 —
 /// 실내·건물 사이 등에서 흔하다.
+///
+/// **좌표를 함께 담아 돌려준다.** 10m는 보안 규칙이 아니라 "여기라고 말할 수
+/// 있는 범위"를 지키기 위한 UX 규칙이라(docs/footprint-redesign.md 3-1·5-2),
+/// 막다른 길로 두면 실내에서는 글을 아예 남길 수 없다. 호출부가 오차를
+/// 사용자에게 알리고 동의를 받은 뒤 이 좌표를 쓸 수 있게 한다.
 class FootprintLocationInaccurate extends FootprintLocationCheck {
-  const FootprintLocationInaccurate(this.accuracyMeters);
+  const FootprintLocationInaccurate({
+    required this.accuracyMeters,
+    required this.lat,
+    required this.lng,
+  });
   final double accuracyMeters;
+  final double lat;
+  final double lng;
 }
 
 /// GPS 측정 자체가 실패했다(타임아웃 등).
@@ -47,7 +58,11 @@ FootprintLocationCheck classifyFootprintLocation({
   required double accuracyMeters,
 }) {
   if (accuracyMeters > maxFootprintAccuracyMeters) {
-    return FootprintLocationInaccurate(accuracyMeters);
+    return FootprintLocationInaccurate(
+      accuracyMeters: accuracyMeters,
+      lat: lat,
+      lng: lng,
+    );
   }
   return FootprintLocationReady(lat: lat, lng: lng);
 }
