@@ -541,7 +541,8 @@ environment:
 > 그건 실기기에서만 확인됩니다.
 
 **실기기가 필요하면** — `iOS Unsigned IPA` 잡이 서명 없는 `.ipa`(20MB)를 만듭니다.
-각자 Windows PC 에서 Sideloadly/AltStore 로 무료 Apple ID 서명해 설치합니다.
+각자 Windows PC 에서 Sideloadly 로 무료 Apple ID 서명해 설치합니다 — **절차는
+[docs/IOS_INSTALL.md](docs/IOS_INSTALL.md)** 에 있습니다.
 **제약이 큽니다: 7일마다 재설치, 폰당 3개, 푸시 알림 불가.** 시연 전날 다시 넣어야 합니다.
 그리고 **이 `.ipa` 는 그대로는 설치되지 않습니다** — 받는 쪽에서 서명해야 합니다.
 
