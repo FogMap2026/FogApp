@@ -8,7 +8,9 @@
 | [V1__init_schema.sql](../server/src/main/resources/db/migration/V1__init_schema.sql) | 초기 스키마 — `users` · `spots` · `visits` · `footprints` · `matches` + PostGIS 확장 | [#1](https://github.com/FogMap2026/FogApp/issues/1) |
 | [V2__spot_geom_autofill.sql](../server/src/main/resources/db/migration/V2__spot_geom_autofill.sql) | `spots.geom` 자동 채움 트리거 + 좌표 이상치 처리 | [#6](https://github.com/FogMap2026/FogApp/issues/6) |
 | [V3__footprint_likes.sql](../server/src/main/resources/db/migration/V3__footprint_likes.sql) | `footprint_likes` 테이블 (발자취 좋아요·공감) | [#23](https://github.com/FogMap2026/FogApp/issues/23) |
+| [V4__visit_geom_autofill.sql](../server/src/main/resources/db/migration/V4__visit_geom_autofill.sql) | `visits.geom` 자동 채움 트리거 (V1에서 컬럼만 있고 채우는 주체가 없었다) | [#48](https://github.com/FogMap2026/FogApp/issues/48) |
 | [V5__footprint_geo.sql](../server/src/main/resources/db/migration/V5__footprint_geo.sql) | `footprints` 좌표·`geom`·GiST 인덱스 + 트리거, 기존 행 보정 | [#114](https://github.com/FogMap2026/FogApp/issues/114) |
+| [V6__footprint_quota.sql](../server/src/main/resources/db/migration/V6__footprint_quota.sql) | `users.footprint_quota` (발자취 잔여 횟수, 기본 3 · 스팟 정복 시 리셋) | [#116](https://github.com/FogMap2026/FogApp/issues/116) |
 
 > ✅ **`footprints`에 좌표가 추가됐습니다**([#114](https://github.com/FogMap2026/FogApp/issues/114), V5).
 > 발자취가 스팟 리뷰에서 **길목마다 남기는 글귀**로 재설계되면서 `lat`·`lng`·`geom`(GiST 인덱스)이
@@ -16,8 +18,13 @@
 >
 > 기존 행은 **연결된 스팟 좌표로 소급해 채웠습니다** — 그대로 두면 지도에서 통째로 사라집니다.
 >
-> 🆕 아직 남은 것: `users.footprint_quota`(발자취 잔여 횟수, [#116](https://github.com/FogMap2026/FogApp/issues/116)).
-> 설계 근거와 값은 [footprint-redesign.md](footprint-redesign.md) 참고.
+> ✅ **`users.footprint_quota` 도 들어갔습니다**([#116](https://github.com/FogMap2026/FogApp/issues/116), V6).
+> 발자취 작성 횟수를 제한하고 **스팟을 정복하면 리셋**합니다 — 도배 방지와 탐험 유도를 한 장치로 해결합니다.
+> 기본값 3 이고, 기존 사용자에게도 소급 적용됐습니다. 설계 근거와 값은 [footprint-redesign.md](footprint-redesign.md) 참고.
+>
+> ⚠️ **반경 조회가 아직 GiST 인덱스를 못 탑니다** — `geom`(geometry)에 인덱스를 걸고 쿼리는
+> `geom::geography` 로 물어봐 타입이 어긋납니다(48.4ms → 4.6ms). `spots`·`footprints` 둘 다
+> 해당하며 [#125](https://github.com/FogMap2026/FogApp/issues/125)(`V7__geography_indexes.sql`)에서 함께 고칩니다.
 
 ## 관계도
 
@@ -40,6 +47,7 @@ erDiagram
         text        profile_image_url
         varchar     personality_type  "성향 유형 3글자 코드(예: PRI)"
         jsonb       personality_scores "축별 점수 JSON — personality-test-design.md 4.3"
+        int         footprint_quota   "발자취 잔여 횟수, 기본 3 — 스팟 정복 시 리셋(V6)"
         timestamptz created_at
         timestamptz updated_at
     }
@@ -135,7 +143,7 @@ erDiagram
 
 ## 검증
 
-로컬 PostGIS(`docker compose up -d`)에 V1~V3 마이그레이션을 적용해
+로컬 PostGIS(`docker compose up -d`)에 V1~V6 마이그레이션을 적용해
 테이블·`geometry(Point,4326)`·GiST 인덱스 생성과 `ST_DWithin` 반경 쿼리·FK 동작을 확인했다.
 
 CI와 서버 통합 테스트(`*IT.java`)는 **Testcontainers**로 PostGIS 컨테이너를 띄워
