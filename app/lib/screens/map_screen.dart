@@ -31,19 +31,46 @@ import 'social/personality_test_screen.dart';
 import 'spot_detail_screen.dart';
 import 'visit_verify_screen.dart';
 
-/// 빈 지도 안내를 띄울지 판정한다(#144).
+/// 지도에 띄울 안내(#144, #146). 한 번에 하나만 뜬다.
+enum MapNotice {
+  /// 아무것도 띄우지 않는다.
+  none,
+
+  /// 서버에 닿지 못했다 — 스팟이 있는지 없는지 **알 수 없는** 상태.
+  serverError,
+
+  /// 조회는 됐는데 이 근처에 스팟이 0건이다.
+  emptyArea,
+}
+
+/// 지금 어떤 안내를 띄울지 판정한다(#144, #146).
 ///
-/// **조회 전과 "조회했는데 0건"은 다른 상태다.** [spotsEverLoaded]를 보지 않으면
-/// 첫 조회가 끝나기 전에 "탐험할 곳이 없다"고 잘못 알리게 된다 — 스팟이 있는
-/// 지역에서도 앱을 켤 때마다 잠깐씩 안내가 번쩍인다.
-bool shouldShowEmptyAreaNotice({
+/// 반환값이 하나뿐인 것이 핵심이다. 불리언 두 개로 두면 **두 배너가 동시에 뜨는**
+/// 상태를 만들 수 있는데, 여기서는 타입이 그걸 막는다.
+///
+/// ## 왜 실패가 "빈 지역"보다 먼저인가
+///
+/// 서버에 못 닿았으면 **이 근처에 스팟이 있는지 없는지 자체를 모른다.** 그런데도
+/// "이 지역엔 탐험할 곳이 없어요"라고 하면 **틀린 정보다** — 보는 사람은 "데이터가
+/// 없는 앱"으로 판단하는데, 실제로는 서버가 꺼진 것뿐이다(#146).
+///
+/// ## 조회 전과 "조회했는데 0건"도 다른 상태다
+///
+/// [spotsEverLoaded]를 보지 않으면 첫 조회가 끝나기 전에 "탐험할 곳이 없다"고 잘못
+/// 알리게 된다 — 스팟이 있는 지역에서도 앱을 켤 때마다 잠깐씩 안내가 번쩍인다.
+MapNotice mapNoticeFor({
+  required bool loadFailed,
   required bool spotsEverLoaded,
   required int spotCount,
-  required bool dismissed,
+  required bool serverErrorDismissed,
+  required bool emptyAreaDismissed,
 }) {
-  if (!spotsEverLoaded) return false;
-  if (dismissed) return false;
-  return spotCount == 0;
+  if (loadFailed) {
+    return serverErrorDismissed ? MapNotice.none : MapNotice.serverError;
+  }
+  if (!spotsEverLoaded) return MapNotice.none;
+  if (spotCount > 0) return MapNotice.none;
+  return emptyAreaDismissed ? MapNotice.none : MapNotice.emptyArea;
 }
 
 /// 대한민국 전역을 보여주는 기본 카메라 위치(안개 지도의 시작 화면).
@@ -93,6 +120,18 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   /// 빈 지도 안내를 사용자가 닫았는지(#144). 세션 동안만 유지한다 —
   /// 지역을 옮겨 다시 비어도 이미 읽은 안내를 또 띄우지 않는다.
   bool _emptyNoticeDismissed = false;
+
+  /// 마지막 스팟 조회가 실패했는지(#146). 성공하면 다시 false가 된다.
+  bool _spotLoadFailed = false;
+
+  /// 서버 연결 안내를 사용자가 닫았는지(#146).
+  ///
+  /// 빈 지역 안내와 달리 **조회에 성공하면 다시 false로 되돌린다.** 한 번 닫았다고
+  /// 이후의 모든 장애를 영영 숨기면, 서버가 다시 죽었을 때 또 아무 말도 못 하게 된다.
+  bool _serverErrorDismissed = false;
+
+  /// 마지막으로 스팟을 불러온 카메라 중심(#146). "다시 시도"가 쓴다.
+  NLatLng? _lastLoadCenter;
 
   /// 마지막으로 받은 내 위치. "내 위치로 이동" 버튼(#64)과 인증 화면 진입(#47)에 쓴다.
   double? _myLat;
@@ -253,20 +292,36 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     if (mounted) setState(() => _proximityBanner = null);
   }
 
-  /// 지금 보고 있는 곳에 스팟이 하나도 없어서 안내를 띄워야 하는지(#144).
+  /// 지금 띄울 안내(#144, #146).
   ///
   /// 처음 켠 사람에게는 이 화면이 **회색 안개와 버튼 몇 개**가 전부다. 스팟이 없으면
   /// 탭할 것도, 인증할 것도, 걷어낼 안개도 없어서 앱이 고장 난 것처럼 보인다.
-  /// 지금 수집된 지역이 서울·부산·제주뿐이라(`TOUR_COLLECT_AREA_CODES`) 그 밖에서는
-  /// 반드시 이 상태가 된다.
-  bool get _showEmptyNotice => shouldShowEmptyAreaNotice(
+  /// 그 원인이 "이 지역에 데이터가 없다"인지 "서버에 못 닿았다"인지는 사용자가
+  /// 구분할 방법이 없으므로, 화면이 구분해서 말해준다.
+  MapNotice get _notice => mapNoticeFor(
+        loadFailed: _spotLoadFailed,
         spotsEverLoaded: _spotsEverLoaded,
         spotCount: _nearestLoadedSpot == null ? 0 : 1,
-        dismissed: _emptyNoticeDismissed,
+        serverErrorDismissed: _serverErrorDismissed,
+        emptyAreaDismissed: _emptyNoticeDismissed,
       );
 
   void _dismissEmptyNotice() {
     if (mounted) setState(() => _emptyNoticeDismissed = true);
+  }
+
+  void _dismissServerErrorNotice() {
+    if (mounted) setState(() => _serverErrorDismissed = true);
+  }
+
+  /// 스팟 조회를 지금 위치에서 다시 시도한다(#146).
+  ///
+  /// 카메라를 움직이면 어차피 다시 불러오지만, 서버가 죽어 회색 화면만 보는 사람에게
+  /// **당장 할 수 있는 동작 하나**는 있어야 한다.
+  void _retrySpotLoad() {
+    final center = _lastLoadCenter;
+    if (center == null) return;
+    unawaited(_spotMarkers?.loadAround(center));
   }
 
   /// 지도의 "발자취 남기기" 버튼(#118). GPS로 현재 위치를 새로 측정해 정확도가
@@ -406,8 +461,15 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
           setState(() {
             _nearestLoadedSpot = spots.isEmpty ? null : spots.first;
             _spotsEverLoaded = true;
+            // 성공했으니 장애 상태를 푼다(#146). 닫아둔 것도 함께 풀어, 다음에 또
+            // 죽으면 다시 알릴 수 있게 한다.
+            _spotLoadFailed = false;
+            _serverErrorDismissed = false;
           });
         }
+      },
+      onLoadFailed: (_) {
+        if (mounted) setState(() => _spotLoadFailed = true);
       },
       onSpotTapped: _onSpotTapped,
     );
@@ -440,6 +502,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     final initialTarget = initialPosition.target;
     _footprintMarkers?.setZoom(initialPosition.zoom);
     unawaited(_lookupRegion(initialTarget));
+    _lastLoadCenter = initialTarget;
     unawaited(_spotMarkers?.loadAround(initialTarget));
     unawaited(_refreshConquest());
     unawaited(_refreshVisitedSpots());
@@ -474,6 +537,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     _footprintMarkers?.setZoom(params.position.zoom);
     if (!params.isIdle) return;
     unawaited(_lookupRegion(params.position.target));
+    _lastLoadCenter = params.position.target;
     unawaited(_spotMarkers?.loadAround(params.position.target));
   }
 
@@ -612,11 +676,20 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                         onVerify: () => _openVisitVerify(_proximityBanner!.spot),
                       ),
                     ),
-                  if (_showEmptyNotice)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: _EmptyAreaNotice(onDismiss: _dismissEmptyNotice),
-                    ),
+                  switch (_notice) {
+                    MapNotice.serverError => Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: _ServerErrorNotice(
+                          onDismiss: _dismissServerErrorNotice,
+                          onRetry: _lastLoadCenter == null ? null : _retrySpotLoad,
+                        ),
+                      ),
+                    MapNotice.emptyArea => Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: _EmptyAreaNotice(onDismiss: _dismissEmptyNotice),
+                      ),
+                    MapNotice.none => const SizedBox.shrink(),
+                  },
                 ],
               ),
             ),
@@ -768,6 +841,72 @@ class _TopInfoBar extends StatelessWidget {
   }
 }
 
+/// 서버에 닿지 못했을 때 띄우는 안내(#146).
+///
+/// **[_EmptyAreaNotice]와 반드시 문구가 달라야 한다.** 서버가 죽었는데 "이 지역엔
+/// 스팟이 없어요"라고 하면 틀린 정보다 — 보는 사람은 "데이터가 없는 앱"으로 판단하는데
+/// 실제로는 연결이 안 된 것뿐이다.
+///
+/// 빈 지역 안내와 달리 **오류 톤(errorContainer)으로 그린다.** 이쪽은 실제로 잘못된
+/// 상태이고, 사용자가 잠시 후 다시 시도해볼 여지가 있기 때문이다.
+class _ServerErrorNotice extends StatelessWidget {
+  const _ServerErrorNotice({required this.onDismiss, required this.onRetry});
+
+  final VoidCallback onDismiss;
+
+  /// 아직 한 번도 불러온 적이 없어 재시도할 좌표를 모르면 null — 버튼을 감춘다.
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final onError = theme.colorScheme.onErrorContainer;
+
+    return Material(
+      color: theme.colorScheme.errorContainer,
+      elevation: 2,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.cloud_off_outlined, size: 20, color: onError),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '서버에 연결할 수 없어요',
+                    style: theme.textTheme.titleSmall?.copyWith(color: onError),
+                  ),
+                ),
+                if (onRetry != null)
+                  TextButton(
+                    onPressed: onRetry,
+                    child: const Text('다시 시도'),
+                  ),
+                IconButton(
+                  onPressed: onDismiss,
+                  icon: Icon(Icons.close, size: 18, color: onError),
+                  visualDensity: VisualDensity.compact,
+                  tooltip: '닫기',
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Text(
+              '지도의 스팟을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요. '
+              '지도와 내 위치는 그대로 사용할 수 있어요.',
+              style: theme.textTheme.bodySmall?.copyWith(color: onError),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// 지금 보고 있는 곳에 스팟이 없을 때 띄우는 안내(#144).
 ///
 /// 이게 없으면 회색 안개만 보이고 아무 일도 일어나지 않아, 처음 켠 사람은
@@ -775,6 +914,7 @@ class _TopInfoBar extends StatelessWidget {
 ///
 /// 오류 배너(빨강)가 아니라 안내 톤으로 그린다 — 잘못된 상태가 아니라
 /// 이 앱이 원래 장소에 가야 동작한다는 사실을 알리는 것이기 때문이다.
+/// 서버에 못 닿은 경우는 [_ServerErrorNotice]가 따로 맡는다.
 class _EmptyAreaNotice extends StatelessWidget {
   const _EmptyAreaNotice({required this.onDismiss});
 
