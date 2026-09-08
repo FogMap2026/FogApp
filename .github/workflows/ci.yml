@@ -204,16 +204,39 @@ jobs:
 
       # 디버그 키로 서명된 것이 릴리스 산출물로 나가면 스토어에서야 알게 된다.
       # 서명 주체를 확인해 debug 이면 실패시킨다.
-      - name: Verify it is not debug-signed
+      #
+      # ⚠️ keytool -printcert -jarfile 을 쓰지 말 것. 그건 v1(JAR) 서명만 읽는데,
+      #    요즘 AGP 는 v2/v3 로만 서명하는 경우가 있어 "서명이 없다" 로 보인다.
+      #    apksigner 는 v1~v4 를 전부 읽는다. (실제로 이 함정에 한 번 빠졌다)
+      #
+      # ⚠️ 파이프라인 결과를 그대로 변수에 받지 말 것. shell 이 bash -e 라
+      #    grep 이 아무것도 못 찾으면 그 줄에서 스텝이 죽어, 아래 판정에 도달하지 못한다.
+      - name: Verify signing identity
         if: steps.signing.outputs.available == 'true'
         run: |
           APK=build/app/outputs/flutter-apk/app-release.apk
-          SIGNER=$(keytool -printcert -jarfile "$APK" | grep -m1 "Owner:")
-          echo "$SIGNER"
-          if echo "$SIGNER" | grep -qi "Android Debug"; then
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)
+          if [ -z "$APKSIGNER" ]; then
+            echo "::error::apksigner 를 찾지 못했습니다 — 서명을 검증할 수 없습니다."
+            exit 1
+          fi
+          echo "apksigner: $APKSIGNER"
+
+          CERTS=$("$APKSIGNER" verify --print-certs --verbose "$APK") || {
+            echo "::error::APK 서명 검증에 실패했습니다."
+            exit 1
+          }
+          echo "$CERTS"
+
+          if echo "$CERTS" | grep -qi "CN=Android Debug"; then
             echo "::error::디버그 키로 서명됐습니다 — 스토어에 올릴 수 없습니다."
             exit 1
           fi
+          if ! echo "$CERTS" | grep -q "CN=FogApp"; then
+            echo "::error::기대한 릴리스 키(CN=FogApp)로 서명되지 않았습니다."
+            exit 1
+          fi
+          echo "릴리스 키로 서명됐습니다."
 
       - name: Upload release APK
         if: steps.signing.outputs.available == 'true'
