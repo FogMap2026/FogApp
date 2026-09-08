@@ -440,7 +440,11 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (context) => Padding(
+      useSafeArea: true,
+      // 스크롤 없이 두면 사진이 붙은 긴 글에서 '더 보기'를 눌렀을 때 넘친다 —
+      // `isScrollControlled`는 시트가 커질 수 있게 할 뿐 내용을 스크롤시키지 않는다.
+      // 목록 화면에서는 카드가 ListView 안에 있어 드러나지 않던 문제다(PR #130 리뷰).
+      builder: (context) => SingleChildScrollView(
         padding: EdgeInsets.only(
           left: 16,
           right: 16,
