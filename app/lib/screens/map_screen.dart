@@ -31,6 +31,21 @@ import 'social/personality_test_screen.dart';
 import 'spot_detail_screen.dart';
 import 'visit_verify_screen.dart';
 
+/// 빈 지도 안내를 띄울지 판정한다(#144).
+///
+/// **조회 전과 "조회했는데 0건"은 다른 상태다.** [spotsEverLoaded]를 보지 않으면
+/// 첫 조회가 끝나기 전에 "탐험할 곳이 없다"고 잘못 알리게 된다 — 스팟이 있는
+/// 지역에서도 앱을 켤 때마다 잠깐씩 안내가 번쩍인다.
+bool shouldShowEmptyAreaNotice({
+  required bool spotsEverLoaded,
+  required int spotCount,
+  required bool dismissed,
+}) {
+  if (!spotsEverLoaded) return false;
+  if (dismissed) return false;
+  return spotCount == 0;
+}
+
 /// 대한민국 전역을 보여주는 기본 카메라 위치(안개 지도의 시작 화면).
 const _southKoreaCenter = NLatLng(36.5, 127.8);
 
@@ -70,6 +85,14 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   List<ConquestRegion> _conquest = const [];
   /// 카메라 중심에서 가장 가까운(=현재 보고 있는) 스팟. 정복률 표시 지역을 고르는 데 쓴다.
   Spot? _nearestLoadedSpot;
+
+  /// 스팟 조회가 최소 한 번 끝났는지(#144). 조회 전과 "조회했는데 0건"은 다른 상태라,
+  /// 이걸 구분하지 않으면 로딩 중에 "스팟이 없다"고 잘못 알리게 된다.
+  bool _spotsEverLoaded = false;
+
+  /// 빈 지도 안내를 사용자가 닫았는지(#144). 세션 동안만 유지한다 —
+  /// 지역을 옮겨 다시 비어도 이미 읽은 안내를 또 띄우지 않는다.
+  bool _emptyNoticeDismissed = false;
 
   /// 마지막으로 받은 내 위치. "내 위치로 이동" 버튼(#64)과 인증 화면 진입(#47)에 쓴다.
   double? _myLat;
@@ -230,6 +253,22 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     if (mounted) setState(() => _proximityBanner = null);
   }
 
+  /// 지금 보고 있는 곳에 스팟이 하나도 없어서 안내를 띄워야 하는지(#144).
+  ///
+  /// 처음 켠 사람에게는 이 화면이 **회색 안개와 버튼 몇 개**가 전부다. 스팟이 없으면
+  /// 탭할 것도, 인증할 것도, 걷어낼 안개도 없어서 앱이 고장 난 것처럼 보인다.
+  /// 지금 수집된 지역이 서울·부산·제주뿐이라(`TOUR_COLLECT_AREA_CODES`) 그 밖에서는
+  /// 반드시 이 상태가 된다.
+  bool get _showEmptyNotice => shouldShowEmptyAreaNotice(
+        spotsEverLoaded: _spotsEverLoaded,
+        spotCount: _nearestLoadedSpot == null ? 0 : 1,
+        dismissed: _emptyNoticeDismissed,
+      );
+
+  void _dismissEmptyNotice() {
+    if (mounted) setState(() => _emptyNoticeDismissed = true);
+  }
+
   /// 지도의 "발자취 남기기" 버튼(#118). GPS로 현재 위치를 새로 측정해 정확도가
   /// 10m 이내일 때만 그 좌표로 작성 화면을 연다 — 이유는 [FootprintLocationGate] 참고.
   Future<void> _openFootprintCreate() async {
@@ -363,7 +402,12 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       onSpotsLoaded: (spots) {
         _geofence?.updateCandidates(spots);
         // fetchNearby는 가까운 순으로 내려주므로 첫 번째가 현재 보고 있는 지역의 대표 스팟이다.
-        if (mounted) setState(() => _nearestLoadedSpot = spots.isEmpty ? null : spots.first);
+        if (mounted) {
+          setState(() {
+            _nearestLoadedSpot = spots.isEmpty ? null : spots.first;
+            _spotsEverLoaded = true;
+          });
+        }
       },
       onSpotTapped: _onSpotTapped,
     );
@@ -564,6 +608,11 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                         onVerify: () => _openVisitVerify(_proximityBanner!.spot),
                       ),
                     ),
+                  if (_showEmptyNotice)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: _EmptyAreaNotice(onDismiss: _dismissEmptyNotice),
+                    ),
                 ],
               ),
             ),
@@ -707,6 +756,68 @@ class _TopInfoBar extends StatelessWidget {
               label: Text(rateLabel),
               visualDensity: VisualDensity.compact,
               backgroundColor: theme.colorScheme.secondaryContainer,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 지금 보고 있는 곳에 스팟이 없을 때 띄우는 안내(#144).
+///
+/// 이게 없으면 회색 안개만 보이고 아무 일도 일어나지 않아, 처음 켠 사람은
+/// **앱이 고장 났다고 생각한다.** 실제로는 "여기엔 아직 데이터가 없다"일 뿐이다.
+///
+/// 오류 배너(빨강)가 아니라 안내 톤으로 그린다 — 잘못된 상태가 아니라
+/// 이 앱이 원래 장소에 가야 동작한다는 사실을 알리는 것이기 때문이다.
+class _EmptyAreaNotice extends StatelessWidget {
+  const _EmptyAreaNotice({required this.onDismiss});
+
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Material(
+      color: theme.colorScheme.surface.withValues(alpha: 0.94),
+      elevation: 2,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 8, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.travel_explore_outlined, size: 20, color: theme.colorScheme.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '이 근처에는 아직 탐험할 곳이 없어요',
+                    style: theme.textTheme.titleSmall,
+                  ),
+                ),
+                IconButton(
+                  onPressed: onDismiss,
+                  icon: const Icon(Icons.close, size: 18),
+                  visualDensity: VisualDensity.compact,
+                  tooltip: '닫기',
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            // ⚠️ "서울·부산·제주"는 서버의 TOUR_COLLECT_AREA_CODES(1,6,39)와 묶여 있다.
+            //    수집 지역을 넓히면(#144 1번) 이 문구도 함께 고칠 것 — 안 고치면
+            //    스팟이 있는 지역인데도 "없는 지역"이라고 잘못 안내하게 된다.
+            Text(
+              'FogApp은 실제로 그 장소에 도착해야 안개가 걷히는 앱이에요. '
+              '지금은 서울·부산·제주의 관광 스팟이 준비돼 있어요 — '
+              '그 지역에서 열면 주변에 숨겨진 스팟이 나타납니다.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
           ],
         ),
