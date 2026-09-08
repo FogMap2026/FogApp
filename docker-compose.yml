@@ -56,8 +56,22 @@ services:
       FIREBASE_ENABLED: ${FIREBASE_ENABLED:-false}
       FIREBASE_SERVICE_ACCOUNT_PATH: /app/secrets/serviceAccountKey.json
 
+      # ⚠️ .env 에 적어도 여기 없으면 컨테이너에 전달되지 않는다. 조용히 무시되고
+      #    application.yml 의 기본값이 쓰인다 — 에러도 경고도 없다(#144 에서 발견).
+      #    수집 설정을 새로 추가하면 이 목록에도 반드시 추가할 것.
+      #
+      # ⚠️ 기본값은 application.yml 과 같아야 한다. `${VAR:-}` 로 두면 빈 문자열이
+      #    application.yml 의 기본값을 덮어써 오히려 망가진다.
       TOUR_API_SERVICE_KEY: ${TOUR_API_SERVICE_KEY:-}
+      TOUR_API_BASE_URL: ${TOUR_API_BASE_URL:-https://apis.data.go.kr/B551011/KorService2}
+      TOUR_API_OPERATION_SUFFIX: ${TOUR_API_OPERATION_SUFFIX:-2}
       TOUR_COLLECT_ON_STARTUP: ${TOUR_COLLECT_ON_STARTUP:-false}
+      TOUR_COLLECT_AREA_CODES: ${TOUR_COLLECT_AREA_CODES:-1,6,39}
+      TOUR_COLLECT_OVERVIEW_MAX_PER_RUN: ${TOUR_COLLECT_OVERVIEW_MAX_PER_RUN:-200}
+
+      VISIT_RADIUS_METERS: ${VISIT_RADIUS_METERS:-100}
+      VISIT_MAX_PHOTO_BYTES: ${VISIT_MAX_PHOTO_BYTES:-5242880}
+      VISIT_MAX_PHOTO_BYTES_PER_USER: ${VISIT_MAX_PHOTO_BYTES_PER_USER:-209715200}
     ports:
       - "${SERVER_PORT:-8080}:8080"
     volumes:
