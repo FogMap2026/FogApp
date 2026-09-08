@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -24,7 +25,8 @@ import 'footprint_service.dart';
 ///
 /// 위치가 갱신될 때마다 다시 조회하면 걷는 내내 요청이 쏟아지므로([SpotGeofenceController]와
 /// 달리 이 컨트롤러는 실제 네트워크 호출을 한다), 일정 거리 이상 움직였을 때만(또는 반경
-/// 모드가 바뀌었을 때만) 다시 불러온다.
+/// 모드가 바뀌었을 때만) 다시 불러온다. **숨겨진 줌에서는 아예 조회하지 않고**, 다시
+/// 보이게 되는 순간 마지막 위치로 한 번 채운다.
 class FootprintMarkerController {
   FootprintMarkerController(
     this._mapController,
@@ -82,8 +84,15 @@ class FootprintMarkerController {
   double? _lastFetchLng;
   double? _lastFetchRadius;
 
-  /// 카메라 줌이 바뀔 때마다 호출한다. 다시 조회하지 않고 보이기/숨기기만 전환한다 —
-  /// 줌은 서버에 새로 물을 이유가 없는, 순수한 표시 여부 문제다.
+  /// 마지막으로 받은 위치. 숨겨진 동안에도 계속 기록해두었다가, 다시 보이게 될 때
+  /// 이 자리로 한 번 조회한다 — 새 위치 이벤트를 기다리면 제자리에 서 있는 동안
+  /// 빈 지도가 된다(위치 스트림이 `distanceFilter: 15`라 움직이지 않으면 오지 않는다).
+  double? _lastKnownLat;
+  double? _lastKnownLng;
+  bool _lastKnownInsideUnlockedSpot = false;
+
+  /// 카메라 줌이 바뀔 때마다 호출한다. 보이기/숨기기를 전환하고, 다시 보이게 될 때만
+  /// 마지막 위치로 한 번 채운다.
   void setZoom(double zoom) {
     final visible = zoom >= _minVisibleZoom;
     if (visible == _visible) return;
@@ -91,11 +100,40 @@ class FootprintMarkerController {
     for (final marker in _markersByFootprintId.values) {
       marker.setIsVisible(visible);
     }
+    if (!visible) return;
+
+    final lat = _lastKnownLat;
+    final lng = _lastKnownLng;
+    if (lat == null || lng == null) return;
+    unawaited(
+      _fetchAround(
+        lat: lat,
+        lng: lng,
+        insideUnlockedSpot: _lastKnownInsideUnlockedSpot,
+      ),
+    );
   }
 
-  /// 새 위치를 반영한다. 일정 거리 이상 움직였거나 조회 반경 모드가 바뀌었을 때만
-  /// (예: 해금된 스팟 반경 진입/이탈) 실제로 서버에 다시 묻는다.
+  /// 새 위치를 반영한다.
+  ///
+  /// **숨겨진 줌에서는 조회하지 않는다.** 축소한 채 걸으면 15m마다 요청이 나가는데
+  /// 받아온 발자취는 곧바로 숨겨져, 화면에 아무것도 안 뜨는 채로 요청만 나갔다
+  /// (PR #130 리뷰). 다시 보이게 되는 순간은 [setZoom]이 채운다.
   Future<void> updatePosition({
+    required double lat,
+    required double lng,
+    required bool insideUnlockedSpot,
+  }) async {
+    _lastKnownLat = lat;
+    _lastKnownLng = lng;
+    _lastKnownInsideUnlockedSpot = insideUnlockedSpot;
+    if (!_visible) return;
+    await _fetchAround(lat: lat, lng: lng, insideUnlockedSpot: insideUnlockedSpot);
+  }
+
+  /// 일정 거리 이상 움직였거나 조회 반경 모드가 바뀌었을 때만(예: 해금된 스팟 반경
+  /// 진입/이탈) 실제로 서버에 다시 묻는다.
+  Future<void> _fetchAround({
     required double lat,
     required double lng,
     required bool insideUnlockedSpot,
