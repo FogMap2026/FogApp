@@ -88,22 +88,17 @@ https://<서버 주소>/privacy-policy.html
 |---|---|---|
 | "스팟 100m 안에" | `visit.radius-meters` · `SpotGeofenceController.enterRadiusMeters` | 양쪽 다 고칠 것 |
 | "시/군/구 단위 정복률" | `GET /api/conquest` 집계 단위 ([#51](../../issues/51)) | — |
-| "전국 관광 스팟" | `TOUR_COLLECT_AREA_CODES` | **수집 지역이 전국이 아니면 과장입니다** ([#144](../../issues/144) 1번) |
+| "전국 관광 스팟" | `TOUR_COLLECT_AREA_CODES` | [#149](../../pull/149) 병합으로 **12,600건 적재 완료** — 그대로 "전국" 유지 |
 
-> 🔴 **마지막 줄이 등록 전 확인 사항입니다.** [#144](../../issues/144) 1번(전국 수집)이
-> 끝나기 전에 등록하면 "전국" 이 사실과 다릅니다. 그 경우 **"서울·부산·제주의 관광 스팟"**
-> 으로 바꾸세요.
+## 카메라 권한 — 근거를 정정합니다
 
-## 카메라 권한 - 문서와 실제가 다릅니다
+애초에 "`image_picker` 가 시스템 카메라를 호출해서 `CAMERA` 선언이 필요 없다"고 적었는데,
+**틀렸습니다.** 앱은 `image_picker` 가 아니라 `camera` 패키지를 **직접** 씁니다
+(`visit_verify_screen.dart` 의 `CameraController`). `AndroidManifest.xml` 소스에 `CAMERA` 가
+안 보이는 건 **Flutter 플러그인이 자기 매니페스트를 빌드 시 병합**하기 때문입니다 — `camera`
+플러그인의 `CAMERA` 선언이 최종 APK 에는 들어갑니다. 원스토어 개발자센터가 APK 의 퍼미션
+목록을 보여주므로 **거기엔 `CAMERA` 가 뜹니다.**
 
-[ONESTORE_RELEASE.md](../ONESTORE_RELEASE.md) 는 *"위치·카메라 권한을 쓰므로"* 라고 적고 있지만,
-`AndroidManifest.xml` 에 **선언된 권한은 위치 둘뿐입니다.**
-
-```
-android.permission.ACCESS_FINE_LOCATION
-android.permission.ACCESS_COARSE_LOCATION
-```
-
-`image_picker` 가 **시스템 카메라 앱을 호출**하는 방식이라 `CAMERA` 권한 선언이 필요 없습니다.
-정상 동작이며 권한을 추가할 이유가 없습니다 — 다만 **스토어 권한 안내에 카메라를 "필수"
-로 적으면 실제와 어긋납니다.** 위 설명 문구에는 "선택" 으로 적었습니다.
+**"선택" 이라는 결론은 그대로 맞습니다** — 사진 없이도 지도·발자취 열람은 쓸 수 있고,
+방문 인증(사진 촬영)에만 필요합니다. 근거만 위치·카메라 둘 다 실제로 쓰인다는 쪽으로
+바로잡았습니다. 위 상품 설명 문구는 이미 "선택" 으로 적어 뒀으니 그대로 둡니다.
