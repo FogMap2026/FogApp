@@ -17,6 +17,7 @@ import '../services/footprint_location_gate.dart';
 import '../services/footprint_marker_controller.dart';
 import '../services/footprint_service.dart';
 import '../services/location_permission_gate.dart';
+import '../services/location_service.dart';
 import '../services/profile_service.dart';
 import '../services/region_lookup_service.dart';
 import '../services/spot_geofence_controller.dart';
@@ -165,10 +166,15 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   /// GPS 측정+정확도 확인이 진행 중일 때 버튼 연타를 막는다.
   bool _footprintLocationChecking = false;
 
+  /// 공유 위치 소스(#135). [dispose]에서도 써야 하는데 그 시점에는 `ref`를 쓸 수 없으므로
+  /// 여기서 미리 잡아둔다.
+  late final LocationService _locationService;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _locationService = ref.read(locationServiceProvider);
     // 위치 권한 요청은 onMapReady에서 한 번만 수행한다(중복 요청 시 Android가
     // "Can request only one set of permissions at a time"로 두 번째 요청을 무시함).
     _loadFootprintQuota();
@@ -196,6 +202,9 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     _spotMarkers?.dispose();
     _footprintMarkers?.dispose();
     _geofence?.dispose();
+    // 지금은 이 화면이 유일한 소비자라 화면이 사라지면 GPS도 끈다. 백그라운드 추적(#135)이
+    // 붙으면 **이 판단만** 사용자 설정으로 옮기면 된다 — 서비스와 구독자는 그대로다.
+    _locationService.stop();
     super.dispose();
   }
 
@@ -215,6 +224,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       controller.setLocationTrackingMode(NLocationTrackingMode.none);
       _geofencePositionSubscription?.cancel();
       _geofencePositionSubscription = null;
+      // 구독만 끊으면 GPS는 계속 돈다 — 소스를 함께 멈춰야 실제로 절전된다(#135).
+      _locationService.stop();
     }
   }
 
@@ -235,36 +246,45 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     _startGeofenceTracking();
   }
 
-  /// 실시간 위치 스트림을 구독해 [_geofence]에 반영한다(#45). [FogLocationTracker]와
-  /// 같은 [LocationSettings]를 재사용해 서로 다른 배터리 절충안이 섞이지 않게 한다.
+  /// 공유 위치 소스([LocationService])를 구독해 [_geofence]·발자취 조회에 반영한다(#45, #117).
+  ///
+  /// 예전에는 여기서 `Geolocator.getPositionStream()`을 직접 열어, 지도 SDK 트래커가
+  /// 연 것과 합쳐 GPS 구독이 두 개 돌았다. 이제 소스는 하나고 여기서는 구독만 한다(#135).
   void _startGeofenceTracking() {
     if (_geofencePositionSubscription != null) return;
-    _geofencePositionSubscription = Geolocator.getPositionStream(
-      locationSettings: FogLocationTracker.locationSettings,
-    ).listen((position) {
-      // 위치를 처음 받는 순간만 rebuild해서 "내 위치로 이동" 버튼을 활성화한다.
-      // 매 위치 갱신마다 다시 그릴 필요는 없다.
-      final hadLocation = _myLat != null;
-      _myLat = position.latitude;
-      _myLng = position.longitude;
-      if (!hadLocation && mounted) setState(() {});
+    unawaited(_locationService.start());
+    _geofencePositionSubscription = _locationService.positions.listen(_onPosition);
 
-      // 첫 측위에 한 번만 내 위치로 줌을 맞춘다(#144). 이게 없으면 권한을 허용해도
-      // 전국 뷰에 머물러 "회색 화면에 점 하나"로 보인다 — 스팟이 없어서가 아니라
-      // 전부 겹쳐 있어서다. 이후 갱신에서는 사용자의 카메라를 건드리지 않는다.
-      if (!_didZoomToFirstFix) {
-        _didZoomToFirstFix = true;
-        _moveToMyLocation(position.latitude, position.longitude);
-      }
-      _geofence?.updatePosition(lat: position.latitude, lng: position.longitude);
-      unawaited(
-        _footprintMarkers?.updatePosition(
-          lat: position.latitude,
-          lng: position.longitude,
-          insideUnlockedSpot: _isInsideUnlockedSpot(position.latitude, position.longitude),
-        ),
-      );
-    });
+    // 이미 알고 있는 위치가 있으면 먼저 반영한다. `distanceFilter: 15`라 제자리에 서
+    // 있으면 다음 이벤트가 오지 않아서, 화면을 다시 열었을 때 "내 위치로 이동"이 계속
+    // 비활성으로 남아 있었다 — 캐시가 생기면서 풀리는 문제다.
+    final lastKnown = _locationService.lastKnown;
+    if (lastKnown != null) _onPosition(lastKnown);
+  }
+
+  void _onPosition(Position position) {
+    // 위치를 처음 받는 순간만 rebuild해서 "내 위치로 이동" 버튼을 활성화한다.
+    // 매 위치 갱신마다 다시 그릴 필요는 없다.
+    final hadLocation = _myLat != null;
+    _myLat = position.latitude;
+    _myLng = position.longitude;
+    if (!hadLocation && mounted) setState(() {});
+
+    // 첫 측위에 한 번만 내 위치로 줌을 맞춘다(#144). 이게 없으면 권한을 허용해도
+    // 전국 뷰에 머물러 "회색 화면에 점 하나"로 보인다 — 스팟이 없어서가 아니라
+    // 전부 겹쳐 있어서다. 이후 갱신에서는 사용자의 카메라를 건드리지 않는다.
+    if (!_didZoomToFirstFix) {
+      _didZoomToFirstFix = true;
+      _moveToMyLocation(position.latitude, position.longitude);
+    }
+    _geofence?.updatePosition(lat: position.latitude, lng: position.longitude);
+    unawaited(
+      _footprintMarkers?.updatePosition(
+        lat: position.latitude,
+        lng: position.longitude,
+        insideUnlockedSpot: _isInsideUnlockedSpot(position.latitude, position.longitude),
+      ),
+    );
   }
 
   /// 해금된(방문 인증한) 스팟의 안개 걷힘 반경(150m) 안에 있는지(#117) — 발자취
@@ -537,7 +557,9 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
 
   void _onMapReady(NaverMapController controller) async {
     _controller = controller;
-    final locationTracker = FogLocationTracker();
+    // 트래커 인스턴스를 들고 있어야 캐릭터 아이콘을 등록할 수 있다(#161) —
+    // 아이콘은 트래킹 모드가 바뀔 때마다 트래커가 다시 씌운다.
+    final locationTracker = FogLocationTracker(_locationService);
     controller.setMyLocationTracker(locationTracker);
     _fogOverlay = await FogOverlayController.attach(controller);
     _geofence = SpotGeofenceController();
