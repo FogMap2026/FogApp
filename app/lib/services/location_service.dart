@@ -213,6 +213,11 @@ class LocationService {
       return false;
     }
 
+    // ⚠️ 위에도 _cancel() 이 있지만 이 줄은 중복이 아니다 — 지우지 말 것.
+    //
+    // _apply() 는 unawaited 로 여러 번 겹쳐 들어올 수 있다(빠른 구독/해제, 생명주기
+    // 전환). 두 호출이 위 검사를 모두 통과하면 구독이 둘 생기는데, listen 바로 앞의
+    // 이 _cancel() 이 앞엣것을 끊어 항상 하나만 남긴다. 없으면 구독이 샌다.
     _cancel();
     _subscription = Geolocator.getPositionStream(
       locationSettings: wantBackground ? backgroundLocationSettings : locationSettings,
