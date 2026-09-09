@@ -124,7 +124,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
               title: '11. 개인정보 보호책임자 및 문의처',
               body:
                   '개인정보 보호책임자: FogApp 팀\n'
-                  '문의 이메일: [[ 서빙 전 실제 연락처로 교체할 것 ]]\n\n'
+                  '문의 이메일: skunhee1201@naver.com\n\n'
                   '개인정보 침해에 대한 상담이 필요한 경우 아래 기관에 문의하실 수 있습니다.\n\n'
                   '• 개인정보침해신고센터 (privacy.kisa.or.kr / 국번없이 118)\n'
                   '• 개인정보 분쟁조정위원회 (kopico.go.kr / 1833-6972)\n'
