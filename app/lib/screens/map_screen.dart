@@ -122,6 +122,13 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   /// 지역을 옮겨 다시 비어도 이미 읽은 안내를 또 띄우지 않는다.
   bool _emptyNoticeDismissed = false;
 
+  /// 첫 위치를 받고 카메라를 내 위치로 한 번 맞췄는지(#144).
+  ///
+  /// `setLocationTrackingMode(follow)`는 카메라를 **옮기기만 하고 줌은 그대로 둔다.**
+  /// 그래서 권한을 허용해도 전국 뷰(6.7)에 머물러 스팟이 한 점에 뭉쳐 보였다.
+  /// 첫 측위 때 한 번만 줌을 맞추고, 그 뒤로는 사용자의 카메라 조작을 건드리지 않는다.
+  bool _didZoomToFirstFix = false;
+
   /// 마지막 스팟 조회가 실패했는지(#146). 성공하면 다시 false가 된다.
   bool _spotLoadFailed = false;
 
@@ -241,6 +248,14 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       _myLat = position.latitude;
       _myLng = position.longitude;
       if (!hadLocation && mounted) setState(() {});
+
+      // 첫 측위에 한 번만 내 위치로 줌을 맞춘다(#144). 이게 없으면 권한을 허용해도
+      // 전국 뷰에 머물러 "회색 화면에 점 하나"로 보인다 — 스팟이 없어서가 아니라
+      // 전부 겹쳐 있어서다. 이후 갱신에서는 사용자의 카메라를 건드리지 않는다.
+      if (!_didZoomToFirstFix) {
+        _didZoomToFirstFix = true;
+        _moveToMyLocation(position.latitude, position.longitude);
+      }
       _geofence?.updatePosition(lat: position.latitude, lng: position.longitude);
       unawaited(
         _footprintMarkers?.updatePosition(
@@ -267,11 +282,39 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   /// 카메라를 마지막으로 받은 내 위치로 이동한다. SDK 기본 위치 버튼
   /// (`locationButtonEnable`) 대신 우측 컨트롤에 이 버튼을 직접 그린다(#64) —
   /// 지도 좌하단(Naver 로고 자리)과 겹치지 않게 하기 위함.
+  ///
+  /// **줌도 함께 올린다(#144).** 옮기기만 하면 초기 줌(6.7, 전국 뷰)에 그대로 머물러
+  /// 조회 반경 5km가 화면에서 반경 4px쯤이 되고, 로드된 스팟이 전부 한 점에 겹쳐 쌓인다.
   void _recenterToMe() {
     final lat = _myLat;
     final lng = _myLng;
     if (lat == null || lng == null) return;
-    _controller?.updateCamera(NCameraUpdate.withParams(target: NLatLng(lat, lng)));
+    _moveToMyLocation(lat, lng);
+  }
+
+  /// 내 위치를 볼 때 쓰는 줌. 위도 37.5에서 약 3.8m/px라 100m 떨어진 스팟이 26px쯤
+  /// 벌어져 서로 구분된다(#144). 실제 밀도를 보고 조정할 튜닝값이다.
+  ///
+  /// 발자취 표시 기준([FootprintMarkerController] 줌 17)보다는 낮다 — 여기서 바로
+  /// 발자취까지 보이게 하면 스팟이 화면 밖으로 밀려난다. 발자취는 더 확대해야 나온다.
+  static const _myLocationZoom = 15.0;
+
+  /// 내 위치로 카메라를 옮긴다. **줌은 [_myLocationZoom]보다 낮을 때만 올린다** —
+  /// 사용자가 더 확대해 보고 있으면 그 배율을 빼앗지 않는다.
+  void _moveToMyLocation(double lat, double lng) {
+    final controller = _controller;
+    if (controller == null) return;
+
+    // flutter_naver_map 이 experimental 로 표시한 API 지만 현재 줌을 얻을 다른 경로가 없다.
+    // SDK 가 정식 API 를 제공하면 교체할 것(위 initialPosition 과 같은 이유).
+    // ignore: experimental_member_use
+    final currentZoom = controller.nowCameraPosition.zoom;
+    controller.updateCamera(
+      NCameraUpdate.withParams(
+        target: NLatLng(lat, lng),
+        zoom: currentZoom < _myLocationZoom ? _myLocationZoom : null,
+      ),
+    );
   }
 
   void _onGeofenceEnter(GeofenceEnterEvent event) {
