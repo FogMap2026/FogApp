@@ -146,6 +146,7 @@ FogApp/
 | [docs/ENV_GUIDE.md](docs/ENV_GUIDE.md) | 환경 변수·시크릿 관리 |
 | [docs/FIREBASE_AUTH_SETUP.md](docs/FIREBASE_AUTH_SETUP.md) | Firebase 콘솔 설정 체크리스트 |
 | [docs/ONESTORE_RELEASE.md](docs/ONESTORE_RELEASE.md) | **원스토어 출시** — 출품 요건·계정·서명·체크리스트 |
+| [docs/BUSINESS_REGISTRATION.md](docs/BUSINESS_REGISTRATION.md) | **사업자등록 신청** — 위치기반서비스사업 신고 선행. 업종코드·양식 작성값 |
 | [docs/footprint-redesign.md](docs/footprint-redesign.md) | **발자취 재설계** — 리뷰에서 "길에 남기는 글귀"로 (구현 기준) |
 | [docs/personality-test-design.md](docs/personality-test-design.md) | 여행 성향 축·설문·점수 모델 |
 | [docs/PM_SETUP.md](docs/PM_SETUP.md) | 저장소 관리자 설정(PM 전용) |
