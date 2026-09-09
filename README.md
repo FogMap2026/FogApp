@@ -128,7 +128,7 @@ FogApp/
 │       ├── tour/                     # 관광공사 OpenAPI 수집 배치
 │       ├── footprint/                # 발자취 CRUD · 좋아요
 │       └── match/                    # 매칭 요청 · 성향 유사도 추천
-│   └── src/main/resources/db/migration/   # Flyway V1~V6 (스키마 정본)
+│   └── src/main/resources/db/migration/   # Flyway V1~V7 (스키마 정본)
 ├── docs/                             # 설계·운영 문서 (아래 표)
 ├── .github/                          # CI · CODEOWNERS · 이슈/PR 템플릿
 ├── docker-compose.yml                # PostgreSQL + PostGIS 로컬 실행
@@ -171,7 +171,7 @@ cp .env.example .env
 
 ```bash
 docker compose up -d
-# 서버 기동 시 Flyway 가 V1~V6 마이그레이션을 자동 적용합니다.
+# 서버 기동 시 Flyway 가 V1~V7 마이그레이션을 자동 적용합니다.
 # DB 포트는 127.0.0.1:5432 에만 열립니다 (#124).
 ```
 
@@ -261,7 +261,7 @@ cd app    && flutter test
 
 ---
 
-## 📈 개발 현황 (2026-09-08) — `v0.4.0` · 🔴 **마감 D-6 (9/14)**
+## 📈 개발 현황 (2026-09-09) — `v0.4.0` · 🔴 **마감 D-5 (9/14)**
 
 **기능은 사실상 완성됐고, 남은 것은 출품 절차입니다.** 스팟에 도달해 사진을 찍으면 안개가 걷히고, 스팟 정보가 해금되며, 지역 정복률이 올라갑니다. 길목에 남긴 글귀가 지도에 뜨고 탭하면 읽히며, 성향이 맞는 동행을 추천받아 요청·수락하는 것까지 됩니다.
 
