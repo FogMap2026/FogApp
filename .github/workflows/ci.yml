@@ -138,6 +138,158 @@ jobs:
           path: app/build/app/outputs/flutter-apk/app-debug.apk
           retention-days: 14
 
+  # 스토어에 올릴 릴리스 APK(7-6, 원스토어). 위 apk 잡의 디버그 빌드와는 목적이 다르다 —
+  # 저건 팀 내부 확인용이고 이건 제출물이다. 둘 다 필요해서 잡을 나눴다.
+  #
+  # ⚠️ 서명 키가 없으면 이 잡은 통째로 건너뛴다. 디버그 키로 서명된 "릴리스" APK 를
+  #    만들어 두면 스토어가 거부하는데, 파일 이름만 보고 올릴 수 있게 되기 때문이다.
+  #    시크릿 4개(KEYSTORE_BASE64·KEYSTORE_PASSWORD·KEY_ALIAS·KEY_PASSWORD)가 있어야 돈다.
+  #
+  # 키스토어는 base64 로 시크릿에 넣고 여기서 복원한다 — 바이너리는 시크릿에 그대로 못 넣는다.
+  # ⚠️ 모든 앱 PR 에서 돌리지 않는다. 제출물은 "주소가 확정된 뒤 한 번" 구우면 되는데,
+  #    PR 마다 돌리면 리뷰 회전이 그만큼 느려진다(#137 에서 iOS 잡을 지운 이유와 같다).
+  #    수동 실행과 dev·main push 에서만 돈다.
+  release-apk:
+    name: Release APK
+    needs: changes
+    if: >-
+      ${{ needs.changes.outputs.app == 'true' &&
+          (github.event_name == 'workflow_dispatch' || github.event_name == 'push') }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.9"
+          channel: stable
+
+      # 시크릿이 없는 PR(포크 등)에서는 조용히 끝낸다. 아래 스텝들이 이 값을 본다.
+      - name: Check signing secrets
+        id: signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::서명 키 시크릿이 없어 릴리스 APK 를 만들지 않습니다."
+          fi
+
+      # ⚠️ 이 검사를 지우지 말 것.
+      #
+      # API_BASE_URL 이 비어 있으면 --dart-define=API_BASE_URL= 로 "키는 정의되고 값만
+      # 빈 문자열" 이 된다. String.fromEnvironment 는 키가 없을 때만 defaultValue 를 쓰므로,
+      # 빈 문자열이 그대로 들어가 Dio(BaseOptions(baseUrl: "")) 가 되고 모든 요청이 실패한다.
+      #
+      # 그런데 빌드는 성공하고, 서명 검사도 통과하고, 아티팩트도 올라간다. 앱을 켜야만 안다.
+      # 서버 주소가 바뀌는 시기에 시크릿 갱신 전 워크플로를 돌리면 그 APK 가 스토어로 간다.
+      - name: Require API_BASE_URL
+        if: steps.signing.outputs.available == 'true'
+        env:
+          API_BASE_URL: ${{ secrets.API_BASE_URL }}
+        run: |
+          if [ -z "$API_BASE_URL" ]; then
+            echo "::error::API_BASE_URL 시크릿이 비어 있습니다 — 서버에 못 붙는 APK 가 됩니다."
+            exit 1
+          fi
+          echo "API_BASE_URL 설정됨"
+
+      - name: Restore keystore
+        if: steps.signing.outputs.available == 'true'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload-keystore.p12"
+
+      - name: Install dependencies
+        if: steps.signing.outputs.available == 'true'
+        run: flutter pub get
+
+      - name: Build release APK
+        if: steps.signing.outputs.available == 'true'
+        env:
+          KEYSTORE_PATH: ${{ runner.temp }}/upload-keystore.p12
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          flutter build apk --release \
+            --dart-define=NAVER_MAP_CLIENT_ID=${{ secrets.NAVER_MAP_CLIENT_ID }} \
+            --dart-define=API_BASE_URL=${{ secrets.API_BASE_URL }}
+
+      # 디버그 키로 서명된 것이 릴리스 산출물로 나가면 스토어에서야 알게 된다.
+      # 서명 주체를 확인해 debug 이면 실패시킨다.
+      #
+      # ⚠️ keytool -printcert -jarfile 을 쓰지 말 것. 그건 v1(JAR) 서명만 읽는데,
+      #    요즘 AGP 는 v2/v3 로만 서명하는 경우가 있어 "서명이 없다" 로 보인다.
+      #    apksigner 는 v1~v4 를 전부 읽는다. (실제로 이 함정에 한 번 빠졌다)
+      #
+      # ⚠️ 파이프라인 결과를 그대로 변수에 받지 말 것. shell 이 bash -e 라
+      #    grep 이 아무것도 못 찾으면 그 줄에서 스텝이 죽어, 아래 판정에 도달하지 못한다.
+      - name: Verify signing identity
+        if: steps.signing.outputs.available == 'true'
+        run: |
+          APK=build/app/outputs/flutter-apk/app-release.apk
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)
+          if [ -z "$APKSIGNER" ]; then
+            echo "::error::apksigner 를 찾지 못했습니다 — 서명을 검증할 수 없습니다."
+            exit 1
+          fi
+          echo "apksigner: $APKSIGNER"
+
+          CERTS=$("$APKSIGNER" verify --print-certs --verbose "$APK") || {
+            echo "::error::APK 서명 검증에 실패했습니다."
+            exit 1
+          }
+          echo "$CERTS"
+
+          if echo "$CERTS" | grep -qi "CN=Android Debug"; then
+            echo "::error::디버그 키로 서명됐습니다 — 스토어에 올릴 수 없습니다."
+            exit 1
+          fi
+          if ! echo "$CERTS" | grep -q "CN=FogApp"; then
+            echo "::error::기대한 릴리스 키(CN=FogApp)로 서명되지 않았습니다."
+            exit 1
+          fi
+          echo "릴리스 키로 서명됐습니다."
+
+      # 서명이 맞아도 "엉뚱한 서버를 가리키는 APK" 는 여전히 나올 수 있다. API_BASE_URL 은
+      # 컴파일된 Dart 스냅샷(libapp.so) 안에 문자열로 남으므로 직접 열어 대조한다.
+      #
+      # 위 Require API_BASE_URL 이 "비어 있음" 을 막는다면, 이건 "값이 실제로 구워졌는지" 를
+      # 확인한다. 시크릿을 고쳤는데 캐시된 빌드가 나가는 경우까지 잡힌다.
+      - name: Verify baked server URL
+        if: steps.signing.outputs.available == 'true'
+        env:
+          API_BASE_URL: ${{ secrets.API_BASE_URL }}
+        run: |
+          APK=build/app/outputs/flutter-apk/app-release.apk
+          rm -rf "$RUNNER_TEMP/apkx" && mkdir -p "$RUNNER_TEMP/apkx"
+          unzip -q -o "$APK" 'lib/*/libapp.so' -d "$RUNNER_TEMP/apkx"
+          if grep -rqF "$API_BASE_URL" "$RUNNER_TEMP/apkx"; then
+            echo "APK 안에서 API_BASE_URL 을 확인했습니다."
+          else
+            echo "::error::APK 안에 기대한 API_BASE_URL 이 없습니다 — 엉뚱한 주소로 구워졌습니다."
+            exit 1
+          fi
+
+      - name: Upload release APK
+        if: steps.signing.outputs.available == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: fogapp-release-apk
+          path: app/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 14
+
   server:
     name: Spring Boot Server
     needs: changes

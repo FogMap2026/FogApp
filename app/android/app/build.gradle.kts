@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // START: FlutterFire Configuration
@@ -6,6 +8,33 @@ plugins {
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+// ⚠️ 아래 코드는 plugins {} 뒤에 와야 한다. Kotlin DSL 은 plugins {} 앞에 다른 문장을
+//    허용하지 않는다(import 와 buildscript {} 만 예외).
+//
+// 릴리스 서명 키(원스토어 출시, 7-6). 두 경로로 읽는다.
+//
+//   로컬  : app/android/key.properties (gitignored)
+//   CI    : 환경 변수 KEYSTORE_PATH / KEYSTORE_PASSWORD / KEY_ALIAS / KEY_PASSWORD
+//
+// ⛔ 키스토어와 비밀번호는 저장소에 커밋하지 않는다. .env·서비스 계정 키와 같은 취급이다.
+val keystoreProperties = Properties().apply {
+    val f = rootProject.file("key.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+
+fun signingValue(propKey: String, envKey: String): String? =
+    keystoreProperties.getProperty(propKey) ?: System.getenv(envKey)
+
+val releaseStoreFile = signingValue("storeFile", "KEYSTORE_PATH")
+val releaseStorePassword = signingValue("storePassword", "KEYSTORE_PASSWORD")
+val releaseKeyAlias = signingValue("keyAlias", "KEY_ALIAS")
+val releaseKeyPassword = signingValue("keyPassword", "KEY_PASSWORD")
+val hasReleaseSigning = !releaseStoreFile.isNullOrBlank() &&
+    !releaseStorePassword.isNullOrBlank() &&
+    !releaseKeyAlias.isNullOrBlank() &&
+    !releaseKeyPassword.isNullOrBlank() &&
+    file(releaseStoreFile).exists()
 
 android {
     namespace = "com.fogapp.fogapp"
@@ -30,11 +59,36 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(releaseStoreFile!!)
+                // 키스토어는 PKCS12 다 — JKS 는 keytool 이 "outdated, 향후 제거" 경고를 낸다.
+                // AGP 가 확장자·매직 바이트로 알아서 인식하기도 하지만 버전마다 다를 수 있어
+                // 명시한다. 틀리면 빌드가 죽는데, 원인 메시지가 불친절하다.
+                storeType = "PKCS12"
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            } else {
+                // 키가 없으면 디버그 키로 서명된다 — 설치는 되지만 스토어에는 올릴 수 없다.
+                //
+                // ⚠️ 조용히 넘어가면 "빌드는 됐는데 업로드가 거부되는" 상태를 뒤늦게 안다.
+                //    설정 방법은 docs/ONESTORE_RELEASE.md 참고.
+                logger.warn(
+                    "⚠️ 릴리스 서명 키가 없어 디버그 키로 서명합니다 — 스토어 업로드 불가. " +
+                        "app/android/key.properties 또는 KEYSTORE_* 환경 변수를 설정하세요."
+                )
+                signingConfig = signingConfigs.getByName("debug")
+            }
         }
     }
 }

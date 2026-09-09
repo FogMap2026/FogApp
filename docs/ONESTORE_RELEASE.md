@@ -119,37 +119,54 @@ FogApp 은 **이미** 개인위치정보를 서버에 저장하고 있습니다.
 
 ---
 
-## 2. 코드에서 막혀 있는 것 — 릴리스 서명
+## 2. 릴리스 서명 — 설정 완료
 
-[`app/android/app/build.gradle.kts`](../app/android/app/build.gradle.kts) 현재 상태:
+예전에는 `release` 가 `signingConfigs.getByName("debug")` 를 써서 **디버그 키로 서명**됐고, 그건
+어느 스토어에도 못 올립니다. 지금은 릴리스 키로 서명합니다.
 
-```kotlin
-buildTypes {
-    release {
-        // TODO: Add your own signing config for the release build.
-        signingConfig = signingConfigs.getByName("debug")   // ← 이대로는 스토어에 못 올립니다
-    }
-}
-```
+서명 키는 **두 경로**로 읽습니다.
 
-**디버그 키로 서명된 빌드는 스토어용이 아닙니다.** 릴리스 키스토어를 만들어 서명해야 합니다.
+| | 어디서 |
+|---|---|
+| 로컬 | `app/android/key.properties` — **gitignored** |
+| CI | `KEYSTORE_PATH` · `KEYSTORE_PASSWORD` · `KEY_ALIAS` · `KEY_PASSWORD` |
 
-> ⛔ **키스토어(`.jks`)와 비밀번호는 저장소에 커밋하지 않습니다.** `.env`·서비스 계정 키와 같은
-> 취급입니다. CI 에서는 base64 로 인코딩해 **저장소 시크릿**에 넣고 빌드 시 복원합니다.
->
-> ⚠️ **키를 잃어버리면 앱을 업데이트할 수 없습니다.** 원스토어도 앱 서명 기능을 제공하므로,
-> 등록 시 서명 옵션을 확인하고 키를 안전한 곳에 별도 보관하세요.
+키스토어는 **PKCS12** 입니다(JKS 는 `keytool` 이 "outdated, 향후 제거" 경고를 냅니다).
+`storeType = "PKCS12"` 를 명시해 뒀습니다 — AGP 가 자동 인식하기도 하지만 버전마다 달라질 수 있고,
+틀리면 원인 메시지가 불친절합니다.
 
-**바이너리 형식은 APK·AAB 둘 다 됩니다.** 지금 CI 가 이미 APK 를 만들고 있으므로, **릴리스 서명만 붙이면 APK 로 바로 갑니다** — 형식을 바꿀 이유가 없습니다.
+> ⛔ **키스토어와 비밀번호는 저장소에 커밋하지 않습니다.** `.gitignore` 가 `key.properties`·
+> `*.jks`·`*.keystore` 를 막습니다.
 
-| | 현재 | 할 일 |
-|---|---|---|
-| 서명 | 디버그 키 | 릴리스 키스토어 + `key.properties` |
-| 빌드 | `flutter build apk --debug` | `flutter build apk --release` 잡 추가 |
-| `versionCode` | `1` (`version: 0.1.0+1`) | 업로드마다 올려야 합니다 |
-| `applicationId` | `com.fogapp.fogapp` | **한 번 정하면 못 바꿉니다.** 확정 필요 |
+> 🔴 **키를 잃어버리면 앱을 영영 업데이트할 수 없습니다.** 키스토어와 비밀번호를 **담당자 PC
+> 한 곳에만 두지 마세요.** 다른 저장소에 한 벌 더 보관하고, 비밀번호는 **비공개 채널로** 팀에
+> 공유하세요 — 이슈·PR 에 붙이면 안 됩니다.
 
----
+### `Release APK` 잡이 막는 것 네 가지
+
+**제출물이 조용히 망가지는 경로를 전부 CI 에서 끊습니다.**
+
+| 검사 | 없으면 생기는 일 |
+|---|---|
+| 서명 시크릿 없으면 **잡 스킵** | 디버그 키로 서명된 `app-release.apk` 가 생겨 **파일 이름만 보고 올리게 됨** |
+| **`API_BASE_URL` 비어 있으면 실패** | `--dart-define=API_BASE_URL=` 는 *키는 정의되고 값만 빈 문자열*. `String.fromEnvironment` 의 기본값이 안 먹어 `baseUrl: ""` 이 되고 **모든 요청이 실패** |
+| **서명 주체 검사**(`apksigner`) | 설정이 어긋나 디버그 키로 서명돼도 모름 |
+| **APK 안의 주소 대조** | 시크릿을 고쳤는데 엉뚱한 주소로 구워진 APK 가 나감 |
+
+> ⚠️ 서명 검사에 `keytool -printcert -jarfile` 을 쓰지 마세요. **v1(JAR) 서명만 읽습니다.**
+> 우리 APK 는 v2 로만 서명돼 있어 "서명이 없다" 로 보입니다. `apksigner` 를 씁니다.
+
+**이 잡은 수동 실행과 `dev`·`main` push 에서만 돕니다.** 제출물은 주소가 확정된 뒤 한 번 구우면
+되는데, 모든 앱 PR 에서 돌리면 리뷰 회전이 느려집니다.
+
+### 바이너리 형식
+
+원스토어는 **APK·AAB 둘 다** 받습니다. CI 가 이미 APK 를 만들고 있어 **APK 로 갑니다.**
+
+| | 현재 |
+|---|---|
+| `versionCode` | `1` (`version: 0.1.0+1`) — 업로드마다 올려야 합니다 |
+| `applicationId` | `com.fogapp.fogapp` — **한 번 정하면 못 바꿉니다** |
 
 ## 3. 스토어 등록에 필요한 자료 (코드 밖의 일)
 
