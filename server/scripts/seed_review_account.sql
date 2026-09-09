@@ -17,6 +17,7 @@
 --   · 0% 가 아닌 정복률
 --   · 걷힌 영역 안에 읽을 수 있는 발자취
 --   · 해금된 스팟에 실제 소개글
+--   · 동행 추천에 성향이 비슷한 후보 3명
 --
 -- ----------------------------------------------------------------
 -- 실행
@@ -57,6 +58,14 @@ DECLARE
     -- 심사위원이 "남의 글귀를 발견하는" 경험(Phase 5.5)을 보려면 다른
     -- 사람의 발자취가 있어야 합니다. false 로 두면 본인 글만 보입니다.
     cfg_demo_authors BOOLEAN := TRUE;
+
+    -- 동행 추천(5-1)은 **양쪽 모두** 세 축 점수가 다 있어야 후보로 잡힙니다
+    -- (MatchService.recommendCandidates → PersonalitySimilarity.hasAllAxes).
+    -- 심사 계정만 테스트를 해도 상대가 없으면 "아직 추천할 동행이 없어요" 가
+    -- 뜨고, 그러면 ⑧ 스크린샷 5번을 찍을 화면이 없습니다(#158).
+    --
+    -- false 로 두면 성향은 건드리지 않습니다.
+    cfg_personality  BOOLEAN := TRUE;
     -- ─────────────────────────────────────────────────────────
 
     judge_id   BIGINT;
@@ -67,6 +76,7 @@ DECLARE
     demo_b     BIGINT;
     n_visits   INT;
     n_prints   INT;
+    n_cands    INT;
     rate       NUMERIC;
 BEGIN
     -- ── 1. 심사 계정 확인 ────────────────────────────────────
@@ -135,19 +145,87 @@ BEGIN
       FROM target t
     ON CONFLICT (user_id, spot_id) DO NOTHING;
 
-    -- ── 5. 데모 작성자 (선택) ────────────────────────────────
+    -- ── 5. 데모 사용자 (선택) ────────────────────────────────
     -- 로그인하지 않는 계정입니다. firebase_uid 를 'seed:' 로 시작하게
     -- 두어 실제 Firebase UID 와 절대 겹치지 않고, 나중에 한 번에
     -- 지울 수 있게 합니다:
     --   DELETE FROM users WHERE firebase_uid LIKE 'seed:%';
-    IF cfg_demo_authors THEN
+    --
+    -- 발자취 작성자(6장)와 동행 추천 후보(5.5장) 둘 다 이 계정들을 씁니다.
+    -- traveler-c 는 글을 쓰지 않습니다 — 후보 카드를 세 장으로 만들기 위한
+    -- 계정입니다. 6장의 작성자 배분(rn % 3)은 a·b 만 쓰므로 건드리지 않습니다.
+    IF cfg_demo_authors OR cfg_personality THEN
         INSERT INTO users (firebase_uid, nickname)
         VALUES ('seed:traveler-a', '안개를걷는사람'),
-               ('seed:traveler-b', '골목길')
+               ('seed:traveler-b', '골목길'),
+               ('seed:traveler-c', '해질녘')
         ON CONFLICT (firebase_uid) DO NOTHING;
 
         SELECT id INTO demo_a FROM users WHERE firebase_uid = 'seed:traveler-a';
         SELECT id INTO demo_b FROM users WHERE firebase_uid = 'seed:traveler-b';
+    END IF;
+
+    -- ── 5.5. 성향 점수 — 동행 추천(5-1) ──────────────────────
+    -- 후보로 잡히려면 **양쪽 모두** 세 축(spontaneity·restVsRoam·extraversion)
+    -- 점수가 다 있어야 합니다. 한쪽만 있으면 목록이 빈 채로 나옵니다.
+    --
+    -- 저장 포맷은 docs/personality-test-design.md 4.3 을 그대로 따릅니다.
+    -- 점수는 앱 채점식 round((raw - 4) / 16 * 100) 이 실제로 낼 수 있는 값
+    -- (0·6·13·19·25·31·38·44·50·56·63·69·75·81·88·94·100)만 씁니다 —
+    -- 손으로 넣은 티가 나는 값을 두면 나중에 진짜 응답과 구분이 안 됩니다.
+    --
+    -- pole 은 score > 50 일 때 P/T/I, 아니면 S/R/E 입니다
+    -- (PersonalityScorer._poleFor). personality_type 은 세 pole 을 축 순서대로
+    -- 이어붙인 3글자입니다.
+    --
+    -- 심사 계정 기준 유사도(1 - 거리/√3·100²)가 이렇게 나옵니다.
+    --   안개를걷는사람 0.94 → "잘 맞아요"
+    --   해질녘         0.91 → "잘 맞아요"
+    --   골목길         0.75 → "비슷해요"
+    -- 세 장이 같은 문구면 구간 분기가 동작하는지 화면으로 알 수 없어
+    -- 일부러 갈리게 뒀습니다.
+    IF cfg_personality THEN
+        -- 심사 계정은 **아직 안 했을 때만** 채웁니다. 실제로 테스트를
+        -- 마친 계정을 덮어쓰면 심사위원이 본 결과와 달라집니다.
+        UPDATE users
+           SET personality_type   = 'PRE',
+               personality_scores = '{"version":1,"axes":{'
+                   '"spontaneity":{"score":69,"pole":"P"},'
+                   '"restVsRoam":{"score":44,"pole":"R"},'
+                   '"extraversion":{"score":31,"pole":"E"}},'
+                   '"answeredAt":"2026-09-01T04:00:00Z"}'
+         WHERE id = judge_id
+           AND personality_scores IS NULL;
+
+        -- 데모 계정은 시딩 전용이라 무조건 맞춥니다. INSERT 의
+        -- ON CONFLICT DO NOTHING 때문에 이미 있는 행에는 값이 안 들어가므로,
+        -- 여기서 UPDATE 로 채워야 두 번째 실행에서도 반영됩니다.
+        UPDATE users
+           SET personality_type   = 'PRE',
+               personality_scores = '{"version":1,"axes":{'
+                   '"spontaneity":{"score":75,"pole":"P"},'
+                   '"restVsRoam":{"score":50,"pole":"R"},'
+                   '"extraversion":{"score":25,"pole":"E"}},'
+                   '"answeredAt":"2026-08-28T09:12:00Z"}'
+         WHERE firebase_uid = 'seed:traveler-a';
+
+        UPDATE users
+           SET personality_type   = 'STI',
+               personality_scores = '{"version":1,"axes":{'
+                   '"spontaneity":{"score":44,"pole":"S"},'
+                   '"restVsRoam":{"score":69,"pole":"T"},'
+                   '"extraversion":{"score":56,"pole":"I"}},'
+                   '"answeredAt":"2026-08-30T13:40:00Z"}'
+         WHERE firebase_uid = 'seed:traveler-b';
+
+        UPDATE users
+           SET personality_type   = 'PRE',
+               personality_scores = '{"version":1,"axes":{'
+                   '"spontaneity":{"score":63,"pole":"P"},'
+                   '"restVsRoam":{"score":38,"pole":"R"},'
+                   '"extraversion":{"score":44,"pole":"E"}},'
+                   '"answeredAt":"2026-09-02T20:05:00Z"}'
+         WHERE firebase_uid = 'seed:traveler-c';
     END IF;
 
     -- ── 6. 발자취 ────────────────────────────────────────────
@@ -223,6 +301,24 @@ BEGIN
     SELECT count(*) INTO n_visits FROM visits WHERE user_id = judge_id;
     SELECT count(*) INTO n_prints FROM footprints WHERE spot_id IS NULL;
 
+    -- 동행 추천 후보 수. MatchService 와 같은 조건입니다 — 본인 제외,
+    -- 그리고 **양쪽 모두** 세 축이 다 있어야 합니다. 심사 계정에 점수가
+    -- 없으면 상대가 몇 명이든 목록은 비므로 0 으로 셉니다.
+    SELECT CASE WHEN EXISTS (
+               SELECT 1 FROM users j
+                WHERE j.id = judge_id
+                  AND jsonb_typeof(j.personality_scores #> '{axes,spontaneity,score}')  = 'number'
+                  AND jsonb_typeof(j.personality_scores #> '{axes,restVsRoam,score}')   = 'number'
+                  AND jsonb_typeof(j.personality_scores #> '{axes,extraversion,score}') = 'number'
+           ) THEN (
+               SELECT count(*) FROM users u
+                WHERE u.id <> judge_id
+                  AND jsonb_typeof(u.personality_scores #> '{axes,spontaneity,score}')  = 'number'
+                  AND jsonb_typeof(u.personality_scores #> '{axes,restVsRoam,score}')   = 'number'
+                  AND jsonb_typeof(u.personality_scores #> '{axes,extraversion,score}') = 'number'
+           ) ELSE 0 END
+      INTO n_cands;
+
     -- ConquestRepository.aggregate 와 같은 계산입니다.
     SELECT round(100.0 * count(v.id) / NULLIF(count(*), 0), 1)
       INTO rate
@@ -238,9 +334,15 @@ BEGIN
           COALESCE(rate, 0), cfg_sido, cfg_sigungu, t_area, t_sigungu;
     RAISE NOTICE '발자취      : %건 (길목)', n_prints;
     RAISE NOTICE '발자취 쿼터 : %', cfg_quota;
+    RAISE NOTICE '동행 후보   : %명', n_cands;
     RAISE NOTICE E'─────────────────────────────────────────\n';
 
     IF n_visits = 0 THEN
         RAISE WARNING '방문 인증이 0건입니다. cfg_sigungu 를 다른 구로 바꿔보세요.';
+    END IF;
+
+    IF cfg_personality AND n_cands = 0 THEN
+        RAISE WARNING '동행 추천 후보가 0명입니다 — 그 화면은 "아직 추천할 동행이 '
+                      '없어요" 로 뜹니다(⑧ 스크린샷 5번을 찍을 수 없습니다).';
     END IF;
 END $$;
