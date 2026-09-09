@@ -65,7 +65,7 @@ class _MatchCandidatesScreenState extends ConsumerState<MatchCandidatesScreen> {
       if (mounted) {
         setState(() => _requestedIds.add(candidate.userId));
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${candidate.nickname}님에게 동행을 요청했어요.')),
+          SnackBar(content: Text('${candidate.nicknameLabel}님에게 동행을 요청했어요.')),
         );
       }
     } on DioException catch (e) {
@@ -173,7 +173,7 @@ class _CandidateCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(candidate.nickname, style: theme.textTheme.titleSmall),
+                  Text(candidate.nicknameLabel, style: theme.textTheme.titleSmall),
                   Text(
                     _similarityLabel(candidate.similarity),
                     style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
