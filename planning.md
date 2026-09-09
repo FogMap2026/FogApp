@@ -577,10 +577,10 @@ dev ← #35 feat/ui-map-screen ← #40 feat/map-spot-load
 |---|------|------|------|-------------|
 | 6-1 | 캐릭터 기반 내 위치 렌더 + heading | 🟨 MAP / 🟩 UI | ✅ [#161](../../pull/161) | `feat/map-character` |
 | 6-1 | 여정(경로) 시각화 + `journey_points` 저장 | 🟨 MAP / 🟦 API | ⏸ [#131](../../issues/131) | `feat/map-journey` |
-| 6-2 | 30분 단위 주변 스팟 데이터 갱신 | 🟦 API | ⏸ [#132](../../issues/132) | `feat/api-live-refresh` |
+| 6-2 | 30분 단위 주변 스팟 데이터 갱신 | 🟦 API | ✅ [#155](../../issues/155) 로 대체 — [#132](../../issues/132) CLOSED | `feat/api-live-refresh` |
 | 6-3 | **주변 여행자 익명 표시 — 30분 텀·스팟 기준** | 🟪 SOC | ⏸ [#133](../../issues/133) | `feat/social-traveler-presence` |
 | 6-4 | 푸시 알림 통합(FCM) — 근접·조우 이벤트 | 🟧 INF | ⏸ [#134](../../issues/134) | `feat/infra-fcm` |
-| 6-5 | **백그라운드 위치 소스 + 로컬 알림** (3-2에서 이관) | 🟨 MAP / 🟧 INF | ⏸ [#135](../../issues/135) | `feat/map-background-location` |
+| 6-5 | **백그라운드 위치 소스 + 로컬 알림** (3-2에서 이관) | 🟨 MAP / 🟧 INF | 🔶 [#166](../../pull/166) 승인·Draft — 병합 여부 미정 | `feat/map-background-location` |
 
 > 📌 **6-5는 Phase 3의 3-2에서 넘어온 항목입니다.** 앱이 꺼져 있어도 근접 알림을 받으려면
 > 위치 소스를 `MapScreen` 생명주기에서 떼어내야 하는데, 그 작업이 6-1(캐릭터 실시간 위치)과 동일합니다.
