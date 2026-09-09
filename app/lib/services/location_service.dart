@@ -78,7 +78,15 @@ class LocationService {
     ),
   );
 
-  final _positions = StreamController<Position>.broadcast();
+  /// 구독자가 생기거나 마지막 구독자가 떠날 때마다 상태를 다시 계산한다.
+  ///
+  /// broadcast 컨트롤러는 **첫 구독**에서 `onListen`, **마지막 구독 해제**에서 `onCancel`
+  /// 이 오므로, 우리가 알고 싶은 0↔1 전이가 정확히 이 두 콜백이다.
+  late final StreamController<Position> _positions = StreamController<Position>.broadcast(
+    onListen: () => unawaited(_apply()),
+    onCancel: () => unawaited(_apply()),
+  );
+
   StreamSubscription<Position>? _subscription;
   Position? _lastKnown;
 
@@ -89,7 +97,11 @@ class LocationService {
   /// 앱이 화면에 떠 있는지. 화면이 알려준다.
   bool _appInForeground = true;
 
-  /// 추적을 원하는 상태인지([start] 했고 아직 [stop] 안 함).
+  /// 추적이 **허용된** 상태인지([start] 했고 아직 [stop] 안 함).
+  ///
+  /// 구독자 수와 별개로 남겨둔다. 권한 요청을 시작하는 지점이 필요하고(구독만으로
+  /// 권한 팝업을 띄우면 화면이 통제할 수 없다), 화면이 사라질 때 확실히 끄는 수단도
+  /// 있어야 한다. 이 값이 `false` 면 [_apply] 가 권한 분기까지 가지 않는다.
   bool _started = false;
 
   /// 지금 돌고 있는 구독이 백그라운드 설정인지 — 설정이 바뀔 때만 다시 구독한다.
@@ -116,10 +128,29 @@ class LocationService {
 
   bool get isTracking => _subscription != null;
 
-  /// 위치 추적을 시작한다. 위치 서비스가 꺼져 있거나 권한이 없으면 `false`.
-  Future<bool> start() {
+  /// 위치 추적을 허용한다. 위치 서비스가 꺼져 있거나 권한이 없으면 `false`.
+  ///
+  /// **반환값은 "지금 GPS 가 돌고 있는가" 가 아니라 "돌릴 수 있는가" 다.** 구독자가 아직
+  /// 없으면 실제 구독은 만들지 않는데(위 [_shouldTrack]), 그걸 실패로 돌려주면
+  /// [FogLocationTracker.startLocationService] 가 "위치를 못 얻었다"고 판단해 SDK 가
+  /// 내 위치 표시를 포기한다 — 구독은 곧바로 뒤따라 붙는데도.
+  Future<bool> start() async {
     _started = true;
-    return _apply();
+    if (!await _ensurePermission()) {
+      _started = false;
+      return false;
+    }
+    await _apply();
+    return true;
+  }
+
+  /// 위치 서비스가 켜져 있고 권한이 있는지 확인한다.
+  /// 요청이 겹쳐도 [LocationPermissionGate] 가 직렬화한다.
+  Future<bool> _ensurePermission() async {
+    if (!await Geolocator.isLocationServiceEnabled()) return false;
+    final permission = await LocationPermissionGate.request();
+    return permission != LocationPermission.denied &&
+        permission != LocationPermission.deniedForever;
   }
 
   /// 위치 추적을 멈춘다. [lastKnown]은 남긴다.
@@ -144,11 +175,26 @@ class LocationService {
     return _apply().then((_) {});
   }
 
+  /// GPS 를 켤지 판정한다 — **두 가지를 따로 본다**(#131 @songkh1201 결정).
+  ///
+  /// | | 누가 정하나 |
+  /// |---|---|
+  /// | 얼마나 오래 켜둘 것인가 (앱을 벗어나도 계속?) | [_mode] — 사용자 설정 |
+  /// | 지금 이 순간 켤 필요가 있는가 (아무도 안 듣는데?) | 구독자 수 — 런타임 |
+  ///
+  /// [LocationTrackingMode.always] 여도 **듣는 사람이 없으면 끈다.** 다시 구독이 붙으면
+  /// 켜면 되고, 그동안은 배터리만 쓴다. 반대로 [LocationTrackingMode.foregroundOnly] 는
+  /// 구독자가 있어도 화면이 없으면 꺼야 한다 — 사용자가 그렇게 설정했기 때문이다.
+  ///
+  /// 6-5 가 와도 이 식은 바뀌지 않는다. `always` 를 켜는 스위치만 붙는다.
+  bool get _shouldTrack =>
+      _started &&
+      _positions.hasListener &&
+      (_appInForeground || _mode == LocationTrackingMode.always);
+
   /// 지금 상태에 맞는 구독을 만든다 — 필요 없으면 끊고, 설정이 달라졌으면 다시 연다.
   Future<bool> _apply() async {
-    final shouldTrack =
-        _started && (_appInForeground || _mode == LocationTrackingMode.always);
-    if (!shouldTrack) {
+    if (!_shouldTrack) {
       _cancel();
       return false;
     }
@@ -158,12 +204,12 @@ class LocationService {
     final wantBackground = !_appInForeground;
     if (_subscription != null && _runningInBackground == wantBackground) return true;
 
-    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) return false;
+    if (!await _ensurePermission()) return false;
 
-    final permission = await LocationPermissionGate.request();
-    if (permission == LocationPermission.denied ||
-        permission == LocationPermission.deniedForever) {
+    // 위 await 사이에 상태가 바뀌었을 수 있다(구독자가 떠나거나 앱이 백그라운드로 감).
+    // 그대로 진행하면 아무도 안 듣는 GPS 를 켜게 된다.
+    if (!_shouldTrack) {
+      _cancel();
       return false;
     }
 
