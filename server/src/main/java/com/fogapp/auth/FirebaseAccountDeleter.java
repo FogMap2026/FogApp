@@ -27,8 +27,12 @@ public class FirebaseAccountDeleter implements AuthAccountDeleter {
             return true;
         } catch (FirebaseAuthException e) {
             // 🔑 여기서 예외를 던지면 «DB 는 지워졌는데 탈퇴가 실패한 것처럼» 보인다.
-            //    사용자는 다시 시도할 텐데 우리 쪽엔 이미 아무것도 없다. 로그만 남긴다.
-            log.warn("인증 계정 삭제 실패 uid={} : {}", firebaseUid, e.toString());
+            //    사용자는 다시 시도할 텐데 우리 쪽엔 이미 아무것도 없다.
+            //
+            // 🔴 그래서 로그 «등급»이 이 실패의 유일한 출구다. warn 이면 묻힌다 —
+            //    남는 것은 우리가 약속한 파기의 일부(이메일)이고, 사람이 손으로
+            //    지워야 한다. uid 를 실어야 그게 가능하다(#182).
+            log.error("인증 계정 삭제 실패 — 수동 삭제 필요 uid={} : {}", firebaseUid, e.toString());
             return false;
         }
     }
