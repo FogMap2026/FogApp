@@ -166,6 +166,14 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   /// GPS 측정+정확도 확인이 진행 중일 때 버튼 연타를 막는다.
   bool _footprintLocationChecking = false;
 
+  /// 좌하단 액션 목록을 펼쳤는지. **기본값은 접힘** — 버튼 5개가 상시로 서 있으면
+  /// 지도를 그만큼 가리는데, 이 앱에서 화면의 주인공은 지도다.
+  ///
+  /// 임시 진입점들(#73·5-1·5-2)이 하나씩 늘면서 열이 길어졌고, 결국 네이버 로고와
+  /// 지도 컨트롤까지 밀어냈다(#64·#187·#190·#194). 근본은 "상시 노출 항목이 계속
+  /// 늘어난 것"이라 접어서 해결한다.
+  bool _actionsExpanded = false;
+
   @override
   void initState() {
     super.initState();
@@ -823,67 +831,94 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    FilledButton.tonal(
-                      // 지도 위 탐험 UI가 준비될 때까지 성향 테스트(#31)로 가는 임시 진입점.
-                      onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const PersonalityTestScreen()),
-                      ),
-                      child: const Text('여행 성향 테스트 하기'),
-                    ),
-                    const SizedBox(height: 8),
-                    FilledButton.tonalIcon(
-                      // 제대로 된 네비게이션(하단 바 등)이 붙기 전까지의 최소 진입점(#73) —
-                      // 성향 테스트 버튼과 같은 임시 성격이다.
-                      onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const ProfileScreen()),
-                      ),
-                      icon: const Icon(Icons.person_outline),
-                      label: const Text('내 프로필'),
-                    ),
-                    const SizedBox(height: 8),
-                    FilledButton.tonalIcon(
-                      // 같은 이유의 임시 진입점(5-1).
-                      onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const MatchCandidatesScreen()),
-                      ),
-                      icon: const Icon(Icons.people_outline),
-                      label: const Text('동행 추천'),
-                    ),
-                    const SizedBox(height: 8),
-                    FilledButton.tonalIcon(
-                      // 같은 이유의 임시 진입점(5-2).
-                      onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const MatchListScreen()),
-                      ),
-                      icon: const Icon(Icons.mark_email_unread_outlined),
-                      label: const Text('내 동행 요청'),
-                    ),
-                    const SizedBox(height: 8),
-                    FilledButton.tonalIcon(
-                      // 발자취 남기기(#118). 임시 진입점이 아니라 상시 노출 버튼이다 —
-                      // 위 항목들과 달리 하단 네비게이션이 생겨도 계속 여기 있을 기능이다.
-                      onPressed: (_footprintQuota == 0 || _footprintLocationChecking)
-                          ? null
-                          : _openFootprintCreate,
-                      icon: _footprintLocationChecking
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
+                    // 펼쳤을 때만 나온다. 접힘이 기본이라 지도가 그만큼 열린다.
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeOut,
+                      alignment: Alignment.bottomLeft,
+                      child: _actionsExpanded
+                          ? Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                FilledButton.tonal(
+                                  // 지도 위 탐험 UI가 준비될 때까지 성향 테스트(#31)로 가는 임시 진입점.
+                                  onPressed: () => Navigator.of(context).push(
+                                    MaterialPageRoute(builder: (_) => const PersonalityTestScreen()),
+                                  ),
+                                  child: const Text('여행 성향 테스트 하기'),
+                                ),
+                                const SizedBox(height: 8),
+                                FilledButton.tonalIcon(
+                                  // 제대로 된 네비게이션(하단 바 등)이 붙기 전까지의 최소 진입점(#73) —
+                                  // 성향 테스트 버튼과 같은 임시 성격이다.
+                                  onPressed: () => Navigator.of(context).push(
+                                    MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                                  ),
+                                  icon: const Icon(Icons.person_outline),
+                                  label: const Text('내 프로필'),
+                                ),
+                                const SizedBox(height: 8),
+                                FilledButton.tonalIcon(
+                                  // 같은 이유의 임시 진입점(5-1).
+                                  onPressed: () => Navigator.of(context).push(
+                                    MaterialPageRoute(builder: (_) => const MatchCandidatesScreen()),
+                                  ),
+                                  icon: const Icon(Icons.people_outline),
+                                  label: const Text('동행 추천'),
+                                ),
+                                const SizedBox(height: 8),
+                                FilledButton.tonalIcon(
+                                  // 같은 이유의 임시 진입점(5-2).
+                                  onPressed: () => Navigator.of(context).push(
+                                    MaterialPageRoute(builder: (_) => const MatchListScreen()),
+                                  ),
+                                  icon: const Icon(Icons.mark_email_unread_outlined),
+                                  label: const Text('내 동행 요청'),
+                                ),
+                                const SizedBox(height: 8),
+                                FilledButton.tonalIcon(
+                                  // 발자취 남기기(#118). 위 임시 진입점들과 달리 계속 남을 기능이지만,
+                                  // 지도를 가리지 않는 쪽을 택해 같이 접는다.
+                                  onPressed: (_footprintQuota == 0 || _footprintLocationChecking)
+                                      ? null
+                                      : _openFootprintCreate,
+                                  icon: _footprintLocationChecking
+                                      ? const SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(strokeWidth: 2),
+                                        )
+                                      : const Icon(Icons.edit_location_alt_outlined),
+                                  label: Text(
+                                    _footprintQuota == null
+                                        ? '발자취 남기기'
+                                        : '발자취 남기기 ($_footprintQuota)',
+                                  ),
+                                ),
+                                if (_footprintQuota == 0)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 4, left: 4),
+                                    child: Text(
+                                      '스팟을 정복하면 다시 채워집니다',
+                                      style: Theme.of(context).textTheme.bodySmall,
+                                    ),
+                                  ),
+                                const SizedBox(height: 8),
+                              ],
                             )
-                          : const Icon(Icons.edit_location_alt_outlined),
-                      label: Text(
-                        _footprintQuota == null ? '발자취 남기기' : '발자취 남기기 ($_footprintQuota)',
-                      ),
+                          : const SizedBox.shrink(),
                     ),
-                    if (_footprintQuota == 0)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4, left: 4),
-                        child: Text(
-                          '스팟을 정복하면 다시 채워집니다',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ),
+                    // 토글은 접든 펼치든 **같은 자리**에 있는다 — 목록이 위로만 자라므로
+                    // 연달아 누를 때 손가락을 옮기지 않아도 된다.
+                    FloatingActionButton.small(
+                      // Scaffold 의 FAB 이 아니라 Stack 안에 직접 놓은 것이라 Hero 태그가
+                      // 필요 없다. 두면 화면 전환 때 태그 충돌로 예외가 날 수 있다.
+                      heroTag: null,
+                      onPressed: () => setState(() => _actionsExpanded = !_actionsExpanded),
+                      tooltip: _actionsExpanded ? '메뉴 닫기' : '메뉴 열기',
+                      child: Icon(_actionsExpanded ? Icons.close : Icons.menu),
+                    ),
                   ],
                 ),
               ),
