@@ -55,4 +55,12 @@ public class UserService {
         }
         return user;
     }
+
+    /** 개인정보·위치정보 수집 동의를 기록한다(#152). */
+    @Transactional
+    public User recordConsent(Long id, boolean privacy, boolean location) {
+        User user = get(id);
+        user.recordConsent(privacy, location);
+        return user;
+    }
 }

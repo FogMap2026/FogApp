@@ -47,4 +47,16 @@ public class ProfileController {
         userService.updatePersonality(me.userId(), request.personalityType(), request.personalityScores());
         return ResponseEntity.noContent().build();
     }
+
+    /**
+     * 개인정보·위치정보 수집 동의를 기록한다(#152). {@link ConsentUpdateRequest}가
+     * 두 항목 다 {@code true}만 허용하므로, 여기 도달했다는 것 자체가 전체 동의다.
+     */
+    @PatchMapping("/consent")
+    public ProfileResponse updateConsent(@AuthenticationPrincipal AuthUser me,
+                                          @Valid @RequestBody ConsentUpdateRequest request) {
+        return ProfileResponse.from(
+                userService.recordConsent(me.userId(), request.privacy(), request.location()),
+                objectMapper);
+    }
 }
