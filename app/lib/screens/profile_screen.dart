@@ -165,10 +165,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 // 그전에는 이행 수단이 «운영 DB 에 손으로 치는 SQL» 뿐이었다.
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.person_remove_outlined,
-                      color: Theme.of(context).colorScheme.error),
-                  title: Text('회원 탈퇴',
-                      style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                  leading: Icon(
+                    Icons.person_remove_outlined,
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                  title: Text(
+                    '회원 탈퇴',
+                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                  ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: _withdraw,
                 ),
@@ -180,9 +184,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  /// 회원 탈퇴(#182). ⛔ **되돌릴 수 없다** — 확인을 두 번 받는다.
+  /// 회원 탈퇴(#182). ⛔ **되돌릴 수 없다** — 무엇이 지워지는지 나열하고 확인을 받는다.
   ///
-  /// 첫 번째는 「무엇이 지워지는가」를 알리는 것이고, 기본 동작은 취소다.
+  /// 목록을 «세지 않고 나열»하는 것은 「관련 정보」 같은 말로는 무엇을 잃는지 모르기
+  /// 때문이다. 기본 동작은 취소다.
   /// 지운 뒤에는 토큰이 가리키는 계정이 없으므로 **곧바로 로그아웃한다** — 안 그러면
   /// 다음 요청이 전부 실패하며 화면이 깨진 것처럼 보인다.
   Future<void> _withdraw() async {
@@ -191,18 +196,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       builder: (context) => AlertDialog(
         title: const Text('회원 탈퇴'),
         content: const Text(
-          '계정과 함께 아래가 모두 삭제됩니다.
-
-'
-          '· 방문 인증 기록과 사진
-'
-          '· 남긴 발자취와 좋아요
-'
-          '· 동행 요청·수락 이력
-'
-          '· 여행 성향 결과
-
-'
+          '계정과 함께 아래가 모두 삭제됩니다.\n\n'
+          '· 방문 인증 기록과 사진\n'
+          '· 남긴 발자취와 좋아요\n'
+          '· 동행 요청·수락 이력\n'
+          '· 여행 성향 결과\n\n'
           '되돌릴 수 없습니다.',
         ),
         actions: [
@@ -227,7 +225,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       // 계정이 사라졌으니 토큰도 의미가 없다. 로그아웃하면 AuthGate 가 로그인 화면으로
       // 되돌린다 — 화면을 직접 밀어내지 않는 것은 그 판정이 한 곳에 있어야 하기 때문이다.
       await ref.read(authServiceProvider).signOut();
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('탈퇴에 실패했어요. 잠시 후 다시 시도해 주세요.')),
