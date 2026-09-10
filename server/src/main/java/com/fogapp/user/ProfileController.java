@@ -2,6 +2,7 @@ package com.fogapp.user;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -58,5 +59,20 @@ public class ProfileController {
         return ProfileResponse.from(
                 userService.recordConsent(me.userId(), request.privacy(), request.location()),
                 objectMapper);
+    }
+
+    /**
+     * 회원 탈퇴(#182). 계정과 관련 정보를 <b>즉시</b> 파기한다.
+     *
+     * <p>⛔ <b>되돌릴 수 없다.</b> 지우는 대상은 인증 필터가 세운 <b>현재 사용자</b>뿐이다 —
+     * 경로나 본문으로 {@code userId} 를 받지 않는다(#52 에서 발자취·매칭이 겪은 문제).</p>
+     *
+     * <p>방침 4장·7장이 「11장의 연락처로 요청」이라고 적어둔 것은, 그때 앱에 이 기능이
+     * 없었기 때문이다. 문구는 이 변경과 함께 고친다.</p>
+     */
+    @DeleteMapping
+    public ResponseEntity<Void> withdraw(@AuthenticationPrincipal AuthUser me) {
+        userService.withdraw(me.userId());
+        return ResponseEntity.noContent().build();
     }
 }

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/footprint.dart';
 import '../models/personality.dart';
 import '../models/profile.dart';
+import '../services/auth_service.dart';
 import '../services/footprint_service.dart';
 import '../services/profile_service.dart';
 import '../widgets/footprint_card.dart';
@@ -160,12 +161,78 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen()),
                   ),
                 ),
+                // 회원 탈퇴(#182). 방침 4장·7장이 약속한 「즉시 파기」의 실제 경로다 —
+                // 그전에는 이행 수단이 «운영 DB 에 손으로 치는 SQL» 뿐이었다.
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.person_remove_outlined,
+                      color: Theme.of(context).colorScheme.error),
+                  title: Text('회원 탈퇴',
+                      style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: _withdraw,
+                ),
               ],
             );
           },
         ),
       ),
     );
+  }
+
+  /// 회원 탈퇴(#182). ⛔ **되돌릴 수 없다** — 확인을 두 번 받는다.
+  ///
+  /// 첫 번째는 「무엇이 지워지는가」를 알리는 것이고, 기본 동작은 취소다.
+  /// 지운 뒤에는 토큰이 가리키는 계정이 없으므로 **곧바로 로그아웃한다** — 안 그러면
+  /// 다음 요청이 전부 실패하며 화면이 깨진 것처럼 보인다.
+  Future<void> _withdraw() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('회원 탈퇴'),
+        content: const Text(
+          '계정과 함께 아래가 모두 삭제됩니다.
+
+'
+          '· 방문 인증 기록과 사진
+'
+          '· 남긴 발자취와 좋아요
+'
+          '· 동행 요청·수락 이력
+'
+          '· 여행 성향 결과
+
+'
+          '되돌릴 수 없습니다.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('탈퇴하기'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await ref.read(profileServiceProvider).withdraw();
+      // 계정이 사라졌으니 토큰도 의미가 없다. 로그아웃하면 AuthGate 가 로그인 화면으로
+      // 되돌린다 — 화면을 직접 밀어내지 않는 것은 그 판정이 한 곳에 있어야 하기 때문이다.
+      await ref.read(authServiceProvider).signOut();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('탈퇴에 실패했어요. 잠시 후 다시 시도해 주세요.')),
+      );
+    }
   }
 
   Widget _buildFootprintList(int userId) {
