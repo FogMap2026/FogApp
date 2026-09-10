@@ -719,12 +719,26 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     final locationIssue = _locationIssue;
 
     // SDK 콘텐츠 패딩에 우리 오버레이가 차지하는 대략적인 높이를 더한다 — 안 그러면
-    // "내 위치로 이동" 시 마커가 상단 정보 바·하단 액션 영역 뒤에 숨을 수 있다(#64).
+    // "내 위치로 이동" 시 마커가 상단 정보 바 뒤에 숨을 수 있다(#64).
+    //
+    // ⚠️ **bottom 에는 더하지 않는다.** 로고·스케일 바가 그만큼 딸려 올라온다.
+    //
+    // SDK 문서에는 «카메라가 콘텐츠 패딩을 제외한 영역의 중심에 위치한다» 까지만
+    // 적혀 있고 로고 배치는 언급이 없는데, 실기기 화면에서 재보니 로고가 화면
+    // 아래에서 **약 154dp** 위에 있었다 — `bottom(안전영역 48 + 96) + logoMargin 12`
+    // 과 맞아떨어진다. 즉 로고도 콘텐츠 영역을 기준으로 놓인다.
+    //
+    // 그 결과 예전 값(+96)에서는 로고가 좌하단 버튼 열 중간(「내 동행 요청」과
+    // 「발자취 남기기」 사이)에 끼어 보였다.
+    //
+    // 로고를 가리는 것은 네이버 지도 이용 약관 위반이기도 해서, 로고 자리는
+    // 화면 맨 아래로 두고 **우리 버튼이 그 위에 서도록** 한다 — 좌하단 열의 아래
+    // 여백 64 가 그 간격이다(로고는 12~34 구간을 쓴다).
     final contentPadding = EdgeInsets.only(
       left: safeAreaPadding.left,
       right: safeAreaPadding.right,
       top: safeAreaPadding.top + 64,
-      bottom: safeAreaPadding.bottom + 96,
+      bottom: safeAreaPadding.bottom,
     );
 
     return Scaffold(
