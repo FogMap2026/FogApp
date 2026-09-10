@@ -86,9 +86,13 @@ class FogOverlayController {
   /// 격자에 스냅해 키로 쓰기 때문이다. 안 그러면 같은 길을 왕복할 때마다 거의
   /// 겹치는 원이 쌓이고, `setHoles` 가 매번 전체 목록을 보내므로 비용이 제곱으로 는다.
   ///
-  /// ⚠️ **세션 동안만 유지된다.** 앱을 다시 켜면 사라진다 — 서버에 저장하는 것은
-  /// [#131](../../issues/131) 여정(`journey_points`)의 몫이다. 인증으로 걷힌 안개는
-  /// `GET /api/visits` 로 복원되므로 그쪽은 영향이 없다.
+  /// 🔑 **앱을 다시 켜도 남는다.** 호출부가 같은 점을 `journey_points` 에 올리고
+  /// (`JourneyService.upload`), 지도가 뜰 때 `GET /api/journeys` 로 되돌린다
+  /// ([#131](../../issues/131)). 인증으로 걷힌 안개가 `GET /api/visits` 로 복원되는
+  /// 것과 같은 모양이다.
+  ///
+  /// ⚠️ 다만 **이 메서드 자체는 화면만 만진다** — 서버에 보내는 것은 호출부의 몫이다.
+  /// 여기서 업로드까지 하면 복원 경로(`clearTrails`)가 방금 받은 점을 도로 올린다.
   void clearTrail(NLatLng center, {double radiusMeters = trailRadiusMeters}) {
     final landmass = _landmassFor(center);
     final key = fogTrailKey(center, radiusMeters);

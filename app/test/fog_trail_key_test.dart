@@ -1,7 +1,7 @@
-/// 걸어온 자리의 안개를 걷을 때 쓰는 격자 키.
-///
-/// 지도 컨트롤러가 필요한 `FogOverlayController` 대신 판정만 떼어 검증한다 —
-/// `mapNoticeFor`·`classifyFootprintLocation` 과 같은 이유다.
+// 걸어온 자리의 안개를 걷을 때 쓰는 격자 키.
+//
+// 지도 컨트롤러가 필요한 `FogOverlayController` 대신 판정만 떼어 검증한다 —
+// `mapNoticeFor`·`classifyFootprintLocation` 과 같은 이유다.
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fogapp/services/fog_overlay_controller.dart';

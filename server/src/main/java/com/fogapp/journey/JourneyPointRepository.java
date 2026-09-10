@@ -15,12 +15,17 @@ public interface JourneyPointRepository extends JpaRepository<JourneyPoint, Long
      *
      * <p>상한을 둔다 — 오래 쓴 계정이 수만 점을 쌓으면 지도 진입이 그만큼 느려진다.
      * 안개 복원은 «최근에 어디를 걸었는가» 면 충분하다.</p>
+     *
+     * <p>🔴 {@code CAST(:from AS timestamptz)} 를 <b>지우지 말 것</b>. {@code :from IS NULL} 만
+     * 쓰면 Postgres 가 그 자리의 자리표시자 타입을 정할 근거가 없어
+     * <i>could not determine data type of parameter</i> 로 <b>질의 자체가 거절된다</b> —
+     * 값이 null 이든 아니든 한 번도 안 돈다. CI 가 이걸 잡았다(#131).</p>
      */
     @Query(value = """
             SELECT * FROM journey_points
              WHERE user_id = :userId
-               AND (:from IS NULL OR recorded_at >= :from)
-               AND (:to IS NULL OR recorded_at <= :to)
+               AND (CAST(:from AS timestamptz) IS NULL OR recorded_at >= CAST(:from AS timestamptz))
+               AND (CAST(:to   AS timestamptz) IS NULL OR recorded_at <= CAST(:to   AS timestamptz))
              ORDER BY recorded_at DESC
              LIMIT :limit
             """, nativeQuery = true)

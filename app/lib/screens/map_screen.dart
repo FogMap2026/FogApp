@@ -285,11 +285,13 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       _fogOverlay?.clearTrail(NLatLng(position.latitude, position.longitude));
       // 화면에는 바로 반영하고(위), 서버에는 모아서 올린다(#131) — 앱을 다시 켜도
       // 걸어온 자리가 남아야 한다. 인증 안개가 GET /api/visits 로 복원되는 것과 같다.
-      _journeyBuffer.add(JourneyPointUpload(
-        lat: position.latitude,
-        lng: position.longitude,
-        recordedAt: position.timestamp,
-      ));
+      _journeyBuffer.add(
+        JourneyPointUpload(
+          lat: position.latitude,
+          lng: position.longitude,
+          recordedAt: position.timestamp,
+        ),
+      );
       if (_journeyBuffer.length >= _journeyBatchSize) unawaited(_flushJourney());
 
       _geofence?.updatePosition(lat: position.latitude, lng: position.longitude);

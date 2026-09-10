@@ -54,10 +54,12 @@ class JourneyService {
     final response = await _apiClient.dio.get<List<dynamic>>('/api/journeys');
     return (response.data ?? [])
         .map((e) => e as Map<String, dynamic>)
-        .map((e) => NLatLng(
-              (e['lat'] as num).toDouble(),
-              (e['lng'] as num).toDouble(),
-            ))
+        .map(
+          (e) => NLatLng(
+            (e['lat'] as num).toDouble(),
+            (e['lng'] as num).toDouble(),
+          ),
+        )
         .toList();
   }
 }
