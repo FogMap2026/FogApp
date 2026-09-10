@@ -39,7 +39,9 @@ void main() {
       lessThan(screenWidth / 2),
       reason: '컨트롤이 화면 절반보다 넓다 — 좌하단 버튼을 덮는다',
     );
-    expect(width, 48);
+    // 40 — 지도를 가리는 면적을 줄이려고 Material 권장(48)보다 작게 잡았다.
+    // 값 자체보다 "화면 폭까지 늘어나지 않는다"가 이 테스트의 핵심이다.
+    expect(width, 40);
   });
 
   testWidgets('세 버튼이 다 있고 잘리지 않는다', (tester) async {
@@ -66,7 +68,11 @@ void main() {
   });
 
   testWidgets('좌하단 버튼을 덮지 않는다', (tester) async {
-    // 실제 지도 화면과 같은 Stack 배치를 재현한다.
+    // 지금 컨트롤은 상단 우측에 있어 좌하단 버튼과 아예 만나지 않는다.
+    // 그래도 이 테스트를 남긴다 — 폭 고정이 풀리면 «어디에 두든» 덮기 때문이다.
+    // 실제로 우하단에 있던 시절 스토어 스크린샷에 그 상태가 찍혔다(#185).
+    //
+    // 아래는 그 시절 배치를 그대로 재현한 것이다.
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
