@@ -792,6 +792,21 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                       ),
                     MapNotice.none => const SizedBox.shrink(),
                   },
+                  // 지도 컨트롤은 이 Column 안에 둔다 — 배너가 뜨고 지는 만큼
+                  // 자동으로 아래위로 밀려 서로 겹치지 않는다. 별도 Align 으로
+                  // 빼면 배너 높이를 상수로 짐작해야 하고, 배너가 늘어날 때마다
+                  // 그 값이 낡는다.
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: MapControls(
+                        onZoomIn: () => _zoomBy(1),
+                        onZoomOut: () => _zoomBy(-1),
+                        onRecenter: _myLat != null ? _recenterToMe : null,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -870,19 +885,6 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                         ),
                       ),
                   ],
-                ),
-              ),
-            ),
-          ),
-          SafeArea(
-            child: Align(
-              alignment: Alignment.bottomRight,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: MapControls(
-                  onZoomIn: () => _zoomBy(1),
-                  onZoomOut: () => _zoomBy(-1),
-                  onRecenter: _myLat != null ? _recenterToMe : null,
                 ),
               ),
             ),
