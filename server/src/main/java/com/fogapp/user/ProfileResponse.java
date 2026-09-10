@@ -17,6 +17,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  * <p>{@code personalityScores}는 저장된 JSONB 원문을 그대로 내려주지 않는다.
  * {@link PersonalityScoreParser}로 축별 0~100 점수만 뽑아 {@code Map<축, 점수>}로 준다 —
  * 매칭 유사도 계산({@code MatchService})이 쓰는 것과 같은 파서라 표현이 어긋나지 않는다.</p>
+ *
+ * <p>{@code privacyConsentedAt}·{@code locationConsentedAt}은 각각 null이면 미동의다(#152).
+ * 앱은 로그인 직후 이 값으로 동의 화면을 띄울지 판단한다 — 별도로 분리한 이유는
+ * {@link User#recordConsent} 참고.</p>
  */
 public record ProfileResponse(
         Long id,
@@ -26,6 +30,8 @@ public record ProfileResponse(
         String personalityType,
         Map<String, Integer> personalityScores,
         int footprintQuota,
+        OffsetDateTime privacyConsentedAt,
+        OffsetDateTime locationConsentedAt,
         OffsetDateTime createdAt
 ) {
     public static ProfileResponse from(User user, ObjectMapper objectMapper) {
@@ -37,6 +43,8 @@ public record ProfileResponse(
                 user.getPersonalityType(),
                 PersonalityScoreParser.parseAxisScores(objectMapper, user.getPersonalityScores()),
                 user.getFootprintQuota(),
+                user.getPrivacyConsentedAt(),
+                user.getLocationConsentedAt(),
                 user.getCreatedAt());
     }
 }

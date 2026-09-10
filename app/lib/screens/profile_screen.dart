@@ -8,6 +8,7 @@ import '../services/footprint_service.dart';
 import '../services/profile_service.dart';
 import '../widgets/footprint_card.dart';
 import '../widgets/personality_axis_bar.dart';
+import 'privacy_policy_screen.dart';
 import 'social/personality_test_screen.dart';
 
 /// 프로필 화면(#73, 5-3) — 앱의 첫 프로필 화면. "내 성향"과 "내 발자취 모아보기"를 담는다.
@@ -146,6 +147,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 Text('내 발자취', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),
                 _buildFootprintList(profile.id),
+                const SizedBox(height: 24),
+                const Divider(),
+                // 동의 화면(#152)에서 한 번만 보고 지나가는 처리방침을 여기서도
+                // 다시 볼 수 있게 한다 — 이슈의 "다시 볼 수 있는 경로" 요구사항.
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.privacy_tip_outlined),
+                  title: const Text('개인정보처리방침'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen()),
+                  ),
+                ),
               ],
             );
           },
