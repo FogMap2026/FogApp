@@ -185,4 +185,52 @@ class ProfileControllerIT {
                         .content("{\"personalityType\":\"\",\"personalityScores\":{}}"))
                 .andExpect(status().isBadRequest());
     }
+
+    // ── 개인정보·위치정보 수집 동의 (#152) ──────────────────────────────────
+
+    @Test
+    void 동의_전에는_두_동의_시각이_모두_null이다() throws Exception {
+        given(tokenVerifier.verify("grace-token"))
+                .willReturn(new VerifiedToken("uid-grace", "grace@example.com", null, null));
+
+        mockMvc.perform(get("/api/profile").header("Authorization", "Bearer grace-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.privacyConsentedAt").doesNotExist())
+                .andExpect(jsonPath("$.locationConsentedAt").doesNotExist());
+    }
+
+    @Test
+    void 둘_다_동의하면_두_시각이_채워진다() throws Exception {
+        given(tokenVerifier.verify("heidi-token"))
+                .willReturn(new VerifiedToken("uid-heidi", "heidi@example.com", null, null));
+
+        mockMvc.perform(patch("/api/profile/consent")
+                        .header("Authorization", "Bearer heidi-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"privacy\":true,\"location\":true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.privacyConsentedAt").exists())
+                .andExpect(jsonPath("$.locationConsentedAt").exists());
+
+        User saved = userRepository.findByFirebaseUid("uid-heidi").orElseThrow();
+        assertThat(saved.getPrivacyConsentedAt()).isNotNull();
+        assertThat(saved.getLocationConsentedAt()).isNotNull();
+    }
+
+    @Test
+    void 위치정보_동의가_빠지면_400이다() throws Exception {
+        // 개인정보와 위치정보 동의를 하나로 묶지 않는다(#152 to-do) — 위치정보만
+        // 빠져도 전체 요청이 거부돼야, 둘을 몰래 하나로 합쳐 받는 걸 막는다.
+        given(tokenVerifier.verify("ivan-token"))
+                .willReturn(new VerifiedToken("uid-ivan", "ivan@example.com", null, null));
+
+        mockMvc.perform(patch("/api/profile/consent")
+                        .header("Authorization", "Bearer ivan-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"privacy\":true,\"location\":false}"))
+                .andExpect(status().isBadRequest());
+
+        assertThat(userRepository.findByFirebaseUid("uid-ivan").orElseThrow().getLocationConsentedAt())
+                .isNull();
+    }
 }

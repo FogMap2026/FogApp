@@ -1,6 +1,22 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+
+    <!-- 마이크 권한을 병합 단계에서 뺀다(#158).
+         camera 플러그인이 동영상 촬영을 지원해 자기 매니페스트에 RECORD_AUDIO 를
+         선언하고, 매니페스트 병합으로 우리 APK 에 딸려 들어온다. 우리가 요청한 적은 없다.
+
+         우리는 소리를 녹음하지 않는다 — 유일한 카메라 사용처인
+         visit_verify_screen.dart 가 enableAudio: false 로 오디오를 끄고 있고,
+         동영상 API(startVideoRecording 등)는 쓰는 곳이 없다. 그래서 빼도 깨질
+         코드 경로가 없다.
+
+         ⚠️ 지우지 말 것. 빼면 스토어 권한 목록에 「마이크」가 다시 뜨는데,
+         docs/store/LISTING.md 의 [필요한 권한] 은 위치·카메라 둘만 적고 있어
+         상품 설명과 실제 권한이 어긋난다. 원스토어는 권한·수집 항목을 사실과
+         다르게 적거나 누락하면 검증 반려한다(docs/ONESTORE_RELEASE.md 1-2). -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" tools:node="remove"/>
     <application
         android:label="FogApp"
         android:name="${applicationName}"
