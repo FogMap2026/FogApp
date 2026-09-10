@@ -257,6 +257,15 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
         _didZoomToFirstFix = true;
         _moveToMyLocation(position.latitude, position.longitude);
       }
+      // 걸어온 자리의 안개를 걷는다. 스트림이 15m 이상 움직였을 때만 오므로
+      // (FogLocationTracker.locationSettings) 갱신마다 15m 원을 뚫으면 원들이
+      // 맞닿아 끊기지 않는 길이 된다.
+      //
+      // ⚠️ 인증(150m)과 «다른 축»이다 — 이건 지나간 자리 표시일 뿐 정복률에는
+      //    영향이 없다. 걸어서 걷힌 안개가 정복으로 세어지면 사진 인증을 할 이유가
+      //    없어진다(planning.md 3장 「도달 → 인증 → 해제」).
+      _fogOverlay?.clearTrail(NLatLng(position.latitude, position.longitude));
+
       _geofence?.updatePosition(lat: position.latitude, lng: position.longitude);
       unawaited(
         _footprintMarkers?.updatePosition(

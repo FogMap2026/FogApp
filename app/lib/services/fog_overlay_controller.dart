@@ -5,6 +5,28 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 
+/// 궤적 구멍의 키 — 좌표를 [cellMeters] 격자에 스냅한다. 같은 칸을 다시 밟으면
+/// 같은 키가 나오므로 «구멍이 늘지 않는다».
+///
+/// 격자로 묶지 않으면 같은 길을 왕복할 때마다 거의 겹치는 원이 쌓이고,
+/// `setHoles` 가 호출마다 전체 목록을 다시 보내므로 비용이 제곱으로 는다.
+///
+/// 🔴 **접두어 `trail:` 이 핵심이다.** 구멍은 하나의 `Map<String, …>` 에 스팟과 함께
+/// 담기는데, 키가 스팟 id 문자열(`"12"` 같은)과 겹치면 **궤적이 인증 구멍을 덮어써
+/// 걷힌 스팟이 다시 안개에 잠긴다.**
+///
+/// 경도 간격은 위도에 따라 달라진다(고위도일수록 같은 각도가 짧은 거리다) — 그래서
+/// `cos(lat)` 로 보정한다. 안 하면 북쪽에서 격자가 촘촘해져 같은 칸인데 다른 키가 난다.
+///
+/// [FogOverlayController] 밖에 두는 것은 **지도 컨트롤러 없이 검증하기 위해서다** —
+/// `mapNoticeFor`·`classifyFootprintLocation` 과 같은 이유다.
+String fogTrailKey(NLatLng center, double cellMeters) {
+  const metersPerDegreeLat = 111320.0;
+  final latStep = cellMeters / metersPerDegreeLat;
+  final lngStep = cellMeters / (metersPerDegreeLat * cos(center.latitude * pi / 180));
+  return 'trail:${(center.latitude / latStep).round()}:${(center.longitude / lngStep).round()}';
+}
+
 /// 대한민국 해안선 모양을 따라가는 안개 오버레이를 관리한다.
 ///
 /// 사각형 대신 실제 국토 외곽선(본토+도서 각각의 폴리곤, [_boundaryAssetPath])으로
@@ -42,6 +64,37 @@ class FogOverlayController {
 
     await mapController.addOverlayAll(landmasses.map((l) => l.overlay).toSet());
     return FogOverlayController._(mapController, landmasses);
+  }
+
+  /// 걸어온 자리를 걷어낼 반경. 위치 스트림의 `distanceFilter`(15m)와 «같은 값»이다 —
+  /// 갱신마다 15m 원을 뚫으면 원들이 서로 맞닿아 끊기지 않는 길이 된다. 더 작으면
+  /// 점선이 되고, 더 크면 걷지 않은 골목까지 걷힌다.
+  static const trailRadiusMeters = 15.0;
+
+  /// 궤적 원의 분할 수. 인증 원(48)보다 성기게 잡는다 — 반경 15m 에서 12분할이면
+  /// 실제 원과의 오차가 **0.5m** 라 화면에서 구분되지 않는데, 좌표 수는 1/4 이다.
+  /// 궤적은 개수가 계속 늘어나므로 하나당 비용이 그대로 총량이 된다.
+  static const _trailSegments = 12;
+
+  /// 걸어온 자리의 안개를 걷어낸다.
+  ///
+  /// **인증(150m)과 다른 축이다.** 이건 「지나간 자리」 표시일 뿐이고 **정복률에는
+  /// 영향이 없다** — 정복률은 서버가 `visits` 로 계산한다(`GET /api/conquest`).
+  /// 걸어서 걷힌 안개가 정복으로 세어지면 사진 인증을 할 이유가 없어진다.
+  ///
+  /// 같은 자리를 다시 지나가도 «구멍이 늘지 않는다» — 좌표를 [trailRadiusMeters]
+  /// 격자에 스냅해 키로 쓰기 때문이다. 안 그러면 같은 길을 왕복할 때마다 거의
+  /// 겹치는 원이 쌓이고, `setHoles` 가 매번 전체 목록을 보내므로 비용이 제곱으로 는다.
+  ///
+  /// ⚠️ **세션 동안만 유지된다.** 앱을 다시 켜면 사라진다 — 서버에 저장하는 것은
+  /// [#131](../../issues/131) 여정(`journey_points`)의 몫이다. 인증으로 걷힌 안개는
+  /// `GET /api/visits` 로 복원되므로 그쪽은 영향이 없다.
+  void clearTrail(NLatLng center, {double radiusMeters = trailRadiusMeters}) {
+    final landmass = _landmassFor(center);
+    final key = fogTrailKey(center, radiusMeters);
+    if (landmass._hasHole(key)) return;
+    landmass._addHole(key, center, radiusMeters: radiusMeters, segments: _trailSegments);
+    landmass._applyHoles();
   }
 
   /// [spotId] 위치의 반경 [radiusMeters] 안 안개를 걷어낸다(방문 인증 시 호출 예정).
@@ -136,6 +189,8 @@ class _Landmass {
     coords: outerRing,
     color: FogOverlayController.fogColor,
   );
+
+  bool _hasHole(String key) => _clearedHoles.containsKey(key);
 
   /// 구멍을 계산해 저장만 한다 — 지도에는 반영하지 않는다. 여러 스팟을 모아 한 번에
   /// [_applyHoles]하려는 호출자([FogOverlayController.clearCircles])를 위한 분리.
