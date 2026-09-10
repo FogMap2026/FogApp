@@ -97,6 +97,26 @@ class FogOverlayController {
     landmass._applyHoles();
   }
 
+  /// 걸어온 자리 **여럿**을 한 번에 걷어낸다(#131) — 지도 진입 시 서버에서 받은
+  /// 궤적으로 안개를 복원할 때 쓴다.
+  ///
+  /// [clearTrail] 을 점 수만큼 반복하면 호출마다 landmass 의 구멍 «전체»를 다시
+  /// 지도에 보내므로(`setHoles`) 총 비용이 O(n²) 가 된다 — [clearCircles] 가 스팟에
+  /// 대해 푼 것과 같은 문제다. 여기서는 모아둔 뒤 landmass 하나당 한 번만 반영한다.
+  void clearTrails(Iterable<NLatLng> centers, {double radiusMeters = trailRadiusMeters}) {
+    final touched = <_Landmass>{};
+    for (final center in centers) {
+      final landmass = _landmassFor(center);
+      final key = fogTrailKey(center, radiusMeters);
+      if (landmass._hasHole(key)) continue;
+      landmass._addHole(key, center, radiusMeters: radiusMeters, segments: _trailSegments);
+      touched.add(landmass);
+    }
+    for (final landmass in touched) {
+      landmass._applyHoles();
+    }
+  }
+
   /// [spotId] 위치의 반경 [radiusMeters] 안 안개를 걷어낸다(방문 인증 시 호출 예정).
   ///
   /// [center]를 포함하는 landmass 폴리곤을 찾아 그 폴리곤에만 구멍을 낸다.
