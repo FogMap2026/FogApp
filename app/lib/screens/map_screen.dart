@@ -24,6 +24,7 @@ import '../services/spot_marker_controller.dart';
 import '../services/spot_service.dart';
 import '../services/visit_service.dart';
 import '../widgets/footprint_card.dart';
+import '../widgets/map_controls.dart';
 import 'footprint_nearby_create_screen.dart';
 import 'match_candidates_screen.dart';
 import 'match_list_screen.dart';
@@ -878,7 +879,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
               alignment: Alignment.bottomRight,
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: _MapControls(
+                child: MapControls(
                   onZoomIn: () => _zoomBy(1),
                   onZoomOut: () => _zoomBy(-1),
                   onRecenter: _myLat != null ? _recenterToMe : null,
@@ -1112,39 +1113,6 @@ class _LocationBanner extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// 지도 우측 세로 컨트롤(#64) — 줌 인/아웃 + 내 위치로 이동을 한 곳에 모은다.
-/// SDK 기본 위치 버튼과 중복되지 않도록 이 화면에서는 이 버튼만 쓴다.
-class _MapControls extends StatelessWidget {
-  const _MapControls({
-    required this.onZoomIn,
-    required this.onZoomOut,
-    required this.onRecenter,
-  });
-
-  final VoidCallback onZoomIn;
-  final VoidCallback onZoomOut;
-  final VoidCallback? onRecenter;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.92),
-      elevation: 2,
-      borderRadius: BorderRadius.circular(12),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(onPressed: onZoomIn, icon: const Icon(Icons.add)),
-          const Divider(height: 1),
-          IconButton(onPressed: onZoomOut, icon: const Icon(Icons.remove)),
-          const Divider(height: 1),
-          IconButton(onPressed: onRecenter, icon: const Icon(Icons.my_location)),
-        ],
       ),
     );
   }
