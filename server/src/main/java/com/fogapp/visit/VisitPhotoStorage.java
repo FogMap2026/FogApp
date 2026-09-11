@@ -6,6 +6,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.Locale;
 import java.util.regex.Pattern;
@@ -201,6 +202,47 @@ public class VisitPhotoStorage {
     }
 
     /** 저장 루트. 고아 파일 정리(#76)가 훑을 대상이다. */
+    /**
+     * 한 사용자의 인증 사진을 <b>전부</b> 지운다(#182 회원 탈퇴).
+     *
+     * <p>DB 는 {@code ON DELETE CASCADE} 로 {@code visits} 행이 따라가지만,
+     * <b>디스크의 파일은 따라가지 않는다.</b> 야간 {@link VisitPhotoCleaner} 가
+     * 참조 없는 사진을 걷어가긴 하지만 유예 시간이 지나야 하므로, 방침이 약속한
+     * <b>「요청을 확인한 즉시 파기」</b>와는 다르다. 그래서 여기서 바로 지운다.</p>
+     *
+     * <p>지우지 못해도 예외를 던지지 않는다 — 파일 하나 때문에 탈퇴 자체가 막히면
+     * 사용자는 계정을 지울 방법이 없어진다. 대신 <b>로그로 남긴다</b>: 남은 파일은
+     * 참조가 사라졌으므로 야간 배치가 결국 걷어간다.</p>
+     *
+     * @return 지운 파일 수
+     */
+    public int deleteAllOf(String firebaseUid) {
+        requireSafeSegment(firebaseUid, "사용자 식별자");
+        Path userDir = root.resolve(firebaseUid).normalize();
+        requireInsideRoot(userDir);
+        if (!Files.isDirectory(userDir)) {
+            return 0;
+        }
+
+        int[] deleted = {0};
+        try (var paths = Files.walk(userDir)) {
+            // 깊은 것부터 지워야 디렉터리가 빈 뒤에 지워진다.
+            paths.sorted(Comparator.reverseOrder()).forEach(path -> {
+                try {
+                    if (Files.deleteIfExists(path) && !Files.isDirectory(path)) {
+                        deleted[0]++;
+                    }
+                } catch (IOException e) {
+                    log.warn("탈퇴 사진 삭제 실패 uid={} path={} : {}", firebaseUid, path, e.toString());
+                }
+            });
+        } catch (IOException e) {
+            log.warn("탈퇴 사진 디렉터리 순회 실패 uid={} : {}", firebaseUid, e.toString());
+        }
+        log.info("탈퇴 사진 삭제: uid={} files={}", firebaseUid, deleted[0]);
+        return deleted[0];
+    }
+
     Path root() {
         return root;
     }

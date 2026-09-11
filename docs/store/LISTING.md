@@ -71,14 +71,23 @@ FogApp은 화면만 보는 여행 앱이 아닙니다. 실제로 그 장소에 �
 
 ## 개인정보처리방침 URL
 
-[privacy-policy.html](privacy-policy.html) 을 **공개 HTTPS 주소에 올리고 그 URL** 을 넣습니다.
-서버가 이미 공개돼 있으니 정적 파일 하나를 서빙하면 됩니다 (🟧 INF).
+**게시 완료됐습니다**([#153](../../issues/153)). 등록 화면에 아래 주소를 그대로 넣으면 됩니다.
 
 ```
-https://<서버 주소>/privacy-policy.html
+https://fogapp.taild500a1.ts.net/privacy-policy.html
 ```
 
-> 🔴 **서버 이전 후 최종 주소로 올려야 합니다.** 지금 주소로 등록하면 이전과 동시에 죽습니다.
+넣기 전에 한 번 열어보세요 — **200 이 아니면 등록이 반려됩니다.**
+
+```bash
+curl -sI https://fogapp.taild500a1.ts.net/privacy-policy.html | head -1
+# HTTP/1.1 200 OK
+```
+
+> 🔴 **게시본은 자동으로 갱신되지 않습니다.** Funnel 경로 서빙(정적 파일 복사)이라
+> 저장소의 [privacy-policy.html](privacy-policy.html) 을 고쳐도 **손으로 다시 올려야**
+> 반영됩니다([ONESTORE_RELEASE.md](../ONESTORE_RELEASE.md) ⑦). 방침을 건드리는 PR 이
+> 병합되면 재게시부터 하고 이 URL 을 다시 확인하세요.
 
 ---
 
@@ -89,6 +98,8 @@ https://<서버 주소>/privacy-policy.html
 | "스팟 100m 안에" | `visit.radius-meters` · `SpotGeofenceController.enterRadiusMeters` | 양쪽 다 고칠 것 |
 | "시/군/구 단위 정복률" | `GET /api/conquest` 집계 단위 ([#51](../../issues/51)) | — |
 | "전국 관광 스팟" | `TOUR_COLLECT_AREA_CODES` | [#149](../../pull/149) 병합으로 **12,600건 적재 완료** — 그대로 "전국" 유지 |
+| "위치 정보는 방문 인증과 발자취를 남긴 지점을 기록하는 데만" | 서버에 저장되는 좌표의 범위 | 🔴 [#192](../../pull/192)(걸어온 자리)가 병합되면 **거짓이 됩니다** — 방침 §3 과 같이 고칠 것 |
+| "[필요한 권한] 위치·카메라" | APK 의 실제 퍼미션 목록 | 등록 화면이 APK 목록을 보여줍니다. [#189](../../pull/189)로 `RECORD_AUDIO` 를 뺀 뒤라 지금은 일치합니다 |
 
 ## 카메라 권한 — 근거를 정정합니다
 
