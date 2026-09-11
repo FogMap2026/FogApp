@@ -160,7 +160,10 @@ class _ConsentScreenState extends ConsumerState<ConsentScreen> {
                     controlAffinity: ListTileControlAffinity.leading,
                     contentPadding: EdgeInsets.zero,
                     title: const Text('위치정보 수집·이용에 동의합니다'),
-                    subtitle: const Text('방문 인증·발자취 작성 시점의 좌표 — 개인정보 동의와 별도입니다'),
+                    subtitle: const Text(
+                      '방문 인증·발자취 작성 시점의 좌표, 그리고 앱 실행 중 걸어온 자리 '
+                      '— 개인정보 동의와 별도입니다',
+                    ),
                   ),
                   if (_errorMessage != null)
                     Padding(
