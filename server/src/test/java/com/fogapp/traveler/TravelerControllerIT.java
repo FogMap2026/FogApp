@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -55,6 +56,15 @@ class TravelerControllerIT {
 
     @MockBean
     private TokenVerifier tokenVerifier;
+
+    @BeforeEach
+    void cleanUpUsers() {
+        // radiusMeters=5000로 조회하기 때문에 테스트마다 좌표를 0.01도씩만 떨어뜨려도
+        // 서로의 반경 안에 들어온다. 이전 테스트의 traveler_positions가 남아 있으면
+        // 이번 테스트의 nearby 조회에 섞여 든다 — user_id FK의 ON DELETE CASCADE로
+        // 함께 정리되도록 매번 users를 비운다.
+        jdbcTemplate.update("DELETE FROM users");
+    }
 
     private void loginAs(String token, String uid) {
         given(tokenVerifier.verify(token)).willReturn(new VerifiedToken(uid, uid + "@example.com", null, null));
