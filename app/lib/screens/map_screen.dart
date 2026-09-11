@@ -211,6 +211,10 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
 
   @override
   void dispose() {
+    // ⛔ 여기서 _flushJourney() 를 부르지 않는다 — ref 를 쓸 수 없다(위젯이 해체되는
+    //    중이라 프로바이더 조회가 던진다). 대신 앱이 백그라운드로 갈 때
+    //    didChangeAppLifecycleState 에서 비운다. 여기서 잃는 것은 마지막 묶음
+    //    최대 19점(≈300m)이고, 다음 실행에 그 구간만 비어 보인다.
     WidgetsBinding.instance.removeObserver(this);
     _cameraSubscription?.cancel();
     _geofencePositionSubscription?.cancel();
@@ -290,18 +294,26 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       // ⚠️ 인증(150m)과 «다른 축»이다 — 이건 지나간 자리 표시일 뿐 정복률에는
       //    영향이 없다. 걸어서 걷힌 안개가 정복으로 세어지면 사진 인증을 할 이유가
       //    없어진다(planning.md 3장 「도달 → 인증 → 해제」).
-      _fogOverlay?.clearTrail(NLatLng(position.latitude, position.longitude));
-      // 화면에는 바로 반영하고(위), 서버에는 모아서 올린다(#131) — 앱을 다시 켜도
-      // 걸어온 자리가 남아야 한다. 인증 안개가 GET /api/visits 로 복원되는 것과 같다.
-      _journeyBuffer.add(
-        JourneyPointUpload(
-          lat: position.latitude,
-          lng: position.longitude,
-          recordedAt: position.timestamp,
-        ),
-      );
-      if (_journeyBuffer.length >= _journeyBatchSize) unawaited(_flushJourney());
+      //
+      // 🔴 정확도부터 본다. distanceFilter 는 «움직였나»만 말하고 «진짜 움직였나»는
+      //    안 말한다 — 콜드 스타트 첫 fix 는 오차가 수백 m 라 그 자체로 15m 를
+      //    만든다. 궤적 구멍은 지우는 길이 없어서, 튄 점 하나가 영영 남는다.
+      if (isTrailWorthyAccuracy(position.accuracy)) {
+        _fogOverlay?.clearTrail(NLatLng(position.latitude, position.longitude));
+        // 화면에는 바로 반영하고(위), 서버에는 모아서 올린다(#131) — 앱을 다시 켜도
+        // 걸어온 자리가 남아야 한다. 인증 안개가 GET /api/visits 로 복원되는 것과 같다.
+        _journeyBuffer.add(
+          JourneyPointUpload(
+            lat: position.latitude,
+            lng: position.longitude,
+            recordedAt: position.timestamp,
+          ),
+        );
+        if (_journeyBuffer.length >= _journeyBatchSize) unawaited(_flushJourney());
+      }
 
+      // ⚠️ 아래 둘은 «정확도 판정 밖»이다 — 화면 표시라 튀어도 다음 갱신에 되돌아온다.
+      //    되돌아오지 않는 것(구멍·서버 저장)만 거른다.
       _geofence?.updatePosition(lat: position.latitude, lng: position.longitude);
       unawaited(
         _footprintMarkers?.updatePosition(
@@ -441,7 +453,14 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   ///
   /// 인증 안개를 `GET /api/visits` 로 복원하는 것([_loadVisitedSpots])과 같은 자리다 —
   /// 이게 없으면 앱을 다시 켤 때마다 걸어온 자리가 사라진다.
+  ///
+  /// 🔑 **아직 안 올라간 버퍼도 같이 그린다.** 위치 스트림은 권한 직후에 시작하고
+  /// 오버레이는 지도 준비 후에 붙으므로, 그 사이에 온 점은 `_fogOverlay` 가 null 이라
+  /// 구멍이 안 난다. 서버에는 올라가니 «다음 실행»부터는 보이지만 **이번 세션엔 첫
+  /// 몇십 m 가 비어 있다** — 첫 실행 인상이 걸리는 자리다.
   Future<void> _restoreJourney() async {
+    // 서버 응답을 기다리는 동안에도 버퍼는 늘어나므로 «먼저» 그린다.
+    _drawBufferedJourney();
     try {
       final points = await ref.read(journeyServiceProvider).fetchMine();
       if (!mounted || points.isEmpty) return;
@@ -450,6 +469,16 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     } catch (e) {
       debugPrint('[Journey] 궤적 복원 실패: $e');
     }
+  }
+
+  /// 오버레이가 붙기 «전»에 받아 둔 점들을 그린다. 서버 왕복과 무관하게 돌아야
+  /// 하므로 [_restoreJourney] 의 `try` 밖이다 — 복원이 실패해도 이번 세션에 걸은
+  /// 자리는 보여야 한다.
+  void _drawBufferedJourney() {
+    if (_journeyBuffer.isEmpty) return;
+    _fogOverlay?.clearTrails(
+      _journeyBuffer.map((p) => NLatLng(p.lat, p.lng)),
+    );
   }
 
   Future<void> _openFootprintCreate() async {

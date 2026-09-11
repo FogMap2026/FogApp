@@ -27,6 +27,36 @@ String fogTrailKey(NLatLng center, double cellMeters) {
   return 'trail:${(center.latitude / latStep).round()}:${(center.longitude / lngStep).round()}';
 }
 
+/// 궤적으로 칠 수 있는 위치 정확도의 상한(미터).
+///
+/// 🔴 **궤적은 지우는 길이 없다.** 인증·발자취 구멍은 이용자가 «그 자리에 있었다»는
+/// 판정을 거친 좌표지만, 궤적은 그 판정이 없는 유일한 구멍이고 삭제 API 도 없다 —
+/// 한 번 튄 점은 그 사용자의 지도에 영영 남는다.
+///
+/// `distanceFilter: 15` 는 「15m 이상 움직였을 때만 준다」일 뿐 **그 15m 가 실제
+/// 이동인지 오차인지는 가리지 않는다.** 콜드 스타트 첫 fix(네트워크 측위, 오차
+/// 수백 m)·실내·지하철 터널이 전부 그 15m 를 만든다.
+///
+/// 50 인 이유 — 도심 실외 GPS 가 보통 5~20m 라 걷는 동안엔 거의 안 걸리고,
+/// 콜드 스타트와 실내 튐은 걸린다. 30 이면 건물 사이에서 길이 자주 끊기고,
+/// 100 이면 「걸어온 자리」라 부르기 어려운 점이 들어온다.
+///
+/// 📌 발자취의 [maxConfirmableAccuracyMeters](footprint_location_gate.dart) 와 같은
+/// 축이되 값이 다르다 — 거기는 오차를 «보여주고 사용자에게 맡기는» 자리가 있지만,
+/// 궤적은 15m 마다 자동으로 찍혀 물어볼 수 없으므로 **그냥 버린다.**
+const double trailMaxAccuracyMeters = 50.0;
+
+/// 이 측정치를 궤적으로 쳐도 되는가 — 구멍을 내고 서버에 올릴지의 판정.
+///
+/// ⚠️ `accuracy <= 0` 은 **거른다.** Android 는 정확도를 모를 때 0 을 준다
+/// (`Location.hasAccuracy()` 가 false). 모르는 것을 「완벽하다」로 읽으면
+/// 가장 못 믿을 측정치가 가장 먼저 통과한다.
+///
+/// 화면 표시(지오펜스·발자취 마커)는 이 판정 «밖»이다 — 그건 튀어도 다음 갱신에
+/// 되돌아오지만, 저장되는 것은 안 되돌아온다.
+bool isTrailWorthyAccuracy(double accuracyMeters) =>
+    accuracyMeters > 0 && accuracyMeters <= trailMaxAccuracyMeters;
+
 /// 대한민국 해안선 모양을 따라가는 안개 오버레이를 관리한다.
 ///
 /// 사각형 대신 실제 국토 외곽선(본토+도서 각각의 폴리곤, [_boundaryAssetPath])으로
