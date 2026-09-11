@@ -1,5 +1,6 @@
 package com.fogapp.traveler;
 
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.List;
 
@@ -63,11 +64,17 @@ public interface TravelerPositionRepository extends JpaRepository<TravelerPositi
      * 익명이 여기서부터 지켜진다. {@code lat}/{@code lng} 는 <b>여행자 본인의 좌표가
      * 아니라 스팟의 좌표</b>다 — 스팟 위치는 원래 공개 정보라 앱이 다시 조회할 필요
      * 없이 바로 마커를 그릴 수 있게 같이 내려준다.
+     *
+     * <p>{@code seenAt} 은 {@code Instant} 로 받는다 — 네이티브 쿼리 인터페이스
+     * 프로젝션은 JDBC 드라이버가 돌려주는 타입을 그대로 쓰는데, {@code TIMESTAMPTZ}
+     * 컬럼은 {@code OffsetDateTime} 이 아니라 {@code Instant} 로 온다. 여기서
+     * {@code OffsetDateTime} 을 쓰면 변환기를 못 찾아 {@code UnsupportedOperationException}
+     * 이 난다.</p>
      */
     interface NearbyTravelerRow {
         Long getSpotId();
         double getLat();
         double getLng();
-        OffsetDateTime getSeenAt();
+        Instant getSeenAt();
     }
 }

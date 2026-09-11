@@ -1,6 +1,7 @@
 package com.fogapp.traveler;
 
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 
 import com.fogapp.traveler.TravelerPositionRepository.NearbyTravelerRow;
 
@@ -14,6 +15,7 @@ import com.fogapp.traveler.TravelerPositionRepository.NearbyTravelerRow;
 public record NearbyTravelerResponse(Long spotId, double lat, double lng, OffsetDateTime seenAt) {
 
     public static NearbyTravelerResponse from(NearbyTravelerRow row) {
-        return new NearbyTravelerResponse(row.getSpotId(), row.getLat(), row.getLng(), row.getSeenAt());
+        return new NearbyTravelerResponse(
+                row.getSpotId(), row.getLat(), row.getLng(), row.getSeenAt().atOffset(ZoneOffset.UTC));
     }
 }
