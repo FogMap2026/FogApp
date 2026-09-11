@@ -8,6 +8,7 @@ import 'package:geolocator/geolocator.dart';
 
 import '../models/conquest.dart';
 import '../models/footprint.dart';
+import '../models/nearby_traveler.dart';
 import '../models/spot.dart';
 import '../services/character_overlay.dart';
 import '../services/conquest_service.dart';
@@ -22,6 +23,8 @@ import '../services/region_lookup_service.dart';
 import '../services/spot_geofence_controller.dart';
 import '../services/spot_marker_controller.dart';
 import '../services/spot_service.dart';
+import '../services/traveler_marker_controller.dart';
+import '../services/traveler_service.dart';
 import '../services/visit_service.dart';
 import '../widgets/footprint_card.dart';
 import '../widgets/map_controls.dart';
@@ -174,6 +177,15 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   /// 늘어난 것"이라 접어서 해결한다.
   bool _actionsExpanded = false;
 
+  TravelerMarkerController? _travelerMarkers;
+
+  /// 내 위치 공유(#133) 여부. **기본값 꺼짐** — 신고 접수본의 opt-in 요건이다.
+  /// "주변 여행자 보기"와는 별개다 — 그건 공유 여부와 무관하게 항상 켜져 있다.
+  bool _travelerSharingEnabled = false;
+
+  /// 30분마다 위치를 다시 게시하는 타이머. 공유가 꺼져 있으면 null이다.
+  Timer? _travelerShareTimer;
+
   @override
   void initState() {
     super.initState();
@@ -201,6 +213,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     _geofencePositionSubscription?.cancel();
     _geofenceEnterSubscription?.cancel();
     _geofenceExitSubscription?.cancel();
+    _travelerShareTimer?.cancel();
     _fogOverlay?.dispose();
     _spotMarkers?.dispose();
     _footprintMarkers?.dispose();
@@ -603,6 +616,18 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     } catch (e) {
       debugPrint('[MapScreen] 캐릭터 아이콘 생성 실패: $e');
     }
+    // 주변 여행자(#133) 아이콘도 같은 원칙 — 실패해도 지도 자체는 그대로 쓸 수 있다.
+    if (!mounted) return;
+    try {
+      final travelerIcon = await TravelerMarkerController.createIcon(context);
+      _travelerMarkers = TravelerMarkerController(
+        controller,
+        icon: travelerIcon,
+        onTapped: _onTravelerTapped,
+      );
+    } catch (e) {
+      debugPrint('[MapScreen] 여행자 아이콘 생성 실패: $e');
+    }
     _cameraSubscription = controller.nowCameraPositionStream.listen(_onCameraChanged);
     if (mounted) setState(() => _mapReady = true);
     // flutter_naver_map 이 experimental 로 표시한 API 지만, 초기 카메라 위치를 얻을
@@ -614,6 +639,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     unawaited(_lookupRegion(initialTarget));
     _lastLoadCenter = initialTarget;
     unawaited(_spotMarkers?.loadAround(initialTarget));
+    unawaited(_refreshNearbyTravelers(initialTarget));
     unawaited(_refreshConquest());
     unawaited(_refreshVisitedSpots());
     await _requestLocationPermission();
@@ -649,6 +675,86 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     unawaited(_lookupRegion(params.position.target));
     _lastLoadCenter = params.position.target;
     unawaited(_spotMarkers?.loadAround(params.position.target));
+    unawaited(_refreshNearbyTravelers(params.position.target));
+  }
+
+  /// "가장 가까운 스팟"을 찾을 때 서버가 뒤지는 반경과 같은 값이다
+  /// ([TravelerService], 서버 `TravelerService.NEAREST_SPOT_SEARCH_RADIUS_METERS`) —
+  /// 내가 볼 수 있는 범위와 남이 나를 찾을 수 있는 범위를 맞춘다.
+  static const _travelerNearbyRadiusMeters = 3000.0;
+
+  /// 주변 익명 여행자(#133)를 다시 불러와 지도에 그린다. **내 공유 여부와 무관하게
+  /// 항상 조회한다** — "보기"와 "내 위치 공유"는 서로 다른 opt-in이다.
+  Future<void> _refreshNearbyTravelers(NLatLng center) async {
+    final markers = _travelerMarkers;
+    if (markers == null) return;
+    try {
+      final travelers = await ref.read(travelerServiceProvider).fetchNearby(
+            lat: center.latitude,
+            lng: center.longitude,
+            radiusMeters: _travelerNearbyRadiusMeters,
+          );
+      if (mounted) await markers.refresh(travelers);
+    } catch (e) {
+      // 보조 정보라 실패해도 지도 사용을 막지 않는다 — SpotMarkerController와 같은 원칙.
+      debugPrint('[MapScreen] 주변 여행자 조회 실패: $e');
+    }
+  }
+
+  /// 여행자 마커 탭(#133). 신원은 애초에 서버가 안 주므로 보여줄 수 있는 것은
+  /// "언제"뿐이다 — "30분 전 위치"라는 것을 분명히 한다(실시간으로 오해하면
+  /// 약속을 잘못 잡는다, 이슈 To-do).
+  void _onTravelerTapped(NearbyTraveler traveler) {
+    final minutesAgo = DateTime.now().difference(traveler.seenAt).inMinutes;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('저 여행자는 약 $minutesAgo분 전 이 근처에 있었어요')),
+    );
+  }
+
+  /// 내 위치 공유(#133) 토글. 기본값 꺼짐 — 켤 때만 30분마다 위치를 게시한다.
+  Future<void> _toggleTravelerSharing() async {
+    if (_travelerSharingEnabled) {
+      _travelerShareTimer?.cancel();
+      _travelerShareTimer = null;
+      if (mounted) setState(() => _travelerSharingEnabled = false);
+      try {
+        await ref.read(travelerServiceProvider).stopSharing();
+      } catch (e) {
+        // 로컬 상태는 이미 껐다 — 서버 쪽이 실패해도 사용자에게는 꺼진 것으로 보이는
+        // 게 맞다(다시 켤 때 UPSERT가 갱신하므로 오래 남을 걱정은 없다).
+        debugPrint('[MapScreen] 위치 공유 끄기 실패: $e');
+      }
+      return;
+    }
+
+    final lat = _myLat;
+    final lng = _myLng;
+    if (lat == null || lng == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('위치를 확인한 뒤 다시 시도해주세요.')),
+      );
+      return;
+    }
+
+    setState(() => _travelerSharingEnabled = true);
+    unawaited(_shareMyPosition());
+    _travelerShareTimer = Timer.periodic(
+      const Duration(minutes: 30),
+      (_) => unawaited(_shareMyPosition()),
+    );
+  }
+
+  Future<void> _shareMyPosition() async {
+    final lat = _myLat;
+    final lng = _myLng;
+    if (lat == null || lng == null) return;
+    try {
+      await ref.read(travelerServiceProvider).share(lat: lat, lng: lng);
+    } catch (e) {
+      // 주변에 스팟이 없으면 서버가 404를 준다 — 조용히 넘어간다. 그 외 실패도
+      // 30분 뒤 다음 틱에서 다시 시도되므로 여기서 사용자에게 알리지 않는다.
+      debugPrint('[MapScreen] 위치 공유 실패: $e');
+    }
   }
 
   /// 발자취 도형 탭(#117). 지도를 벗어나지 않도록 화면 전환 대신 바텀시트로 띄운다
@@ -918,6 +1024,18 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                                       style: Theme.of(context).textTheme.bodySmall,
                                     ),
                                   ),
+                                const SizedBox(height: 8),
+                                // 내 위치 공유(#133). 기본값 꺼짐 — "주변 여행자 보기"
+                                // 자체는 이 토글과 무관하게 항상 동작한다.
+                                FilledButton.tonalIcon(
+                                  onPressed: _toggleTravelerSharing,
+                                  icon: Icon(
+                                    _travelerSharingEnabled ? Icons.people : Icons.people_outline,
+                                  ),
+                                  label: Text(
+                                    _travelerSharingEnabled ? '내 위치 공유 중 (끄기)' : '내 위치 공유하기',
+                                  ),
+                                ),
                                 const SizedBox(height: 8),
                               ],
                             )
