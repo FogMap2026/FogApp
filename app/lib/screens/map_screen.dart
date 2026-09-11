@@ -233,10 +233,19 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
         controller.setLocationTrackingMode(NLocationTrackingMode.follow);
         _startGeofenceTracking();
       }
+      if (_travelerSharingEnabled) {
+        _startTravelerShareTimer();
+      }
     } else if (state == AppLifecycleState.paused) {
       controller.setLocationTrackingMode(NLocationTrackingMode.none);
       _geofencePositionSubscription?.cancel();
       _geofencePositionSubscription = null;
+      // 위치 스트림이 끊기는 동안 타이머가 울려도 _myLat/_myLng는 갱신되지 않은
+      // 옛 값이다 — 배터리만 쓰고 낡은 좌표를 올리는 꼴이라 여기서도 멈춘다.
+      // "위치 수집은 앱 실행 중에만"이라는 신고서·방침 전제와도 어긋난다
+      // (oorony, PR #201 리뷰).
+      _travelerShareTimer?.cancel();
+      _travelerShareTimer = null;
     }
   }
 
@@ -711,7 +720,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     );
   }
 
-  /// 내 위치 공유(#133) 토글. 기본값 꺼짐 — 켤 때만 30분마다 위치를 게시한다.
+  /// 내 위치 공유(#133) 토글. 기본값 꺼짐 — 켤 때만 [_travelerSharePeriod]마다 위치를 게시한다.
   Future<void> _toggleTravelerSharing() async {
     if (_travelerSharingEnabled) {
       _travelerShareTimer?.cancel();
@@ -738,8 +747,19 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
 
     setState(() => _travelerSharingEnabled = true);
     unawaited(_shareMyPosition());
+    _startTravelerShareTimer();
+  }
+
+  /// 게시 주기 — **서버 컷오프(30분, `TravelerService.DELAY_MINUTES`)보다 반드시
+  /// 길어야 한다.** 같거나 짧으면 "보이기 시작하는 순간"과 "갱신되는 순간"이
+  /// 겹쳐 노출 구간이 0이 된다(songkh1201, PR #201 리뷰). 60분이면 게시 주기의
+  /// 절반(30~60분 구간)은 항상 노출된다.
+  static const Duration _travelerSharePeriod = Duration(minutes: 60);
+
+  void _startTravelerShareTimer() {
+    _travelerShareTimer?.cancel();
     _travelerShareTimer = Timer.periodic(
-      const Duration(minutes: 30),
+      _travelerSharePeriod,
       (_) => unawaited(_shareMyPosition()),
     );
   }
