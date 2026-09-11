@@ -346,7 +346,11 @@ docker compose logs -f server        # "소개글 수집: 대상 N, 채움 N" �
 
 ## 📄 라이선스
 
-본 프로젝트는 오픈소스 개발자대회 2026 출품작입니다. (라이선스 확정 후 기재)
+본 프로젝트는 오픈소스 개발자대회 2026 출품작이며, [MIT License](LICENSE)로 배포됩니다.
+
+> ⚠️ **네이버 지도 SDK(`flutter_naver_map`)는 이 라이선스와 무관하게 [NAVER 이용약관](https://www.ncloud.com/policy/all)을
+> 따로 따릅니다.** 이 저장소를 그대로 받아도 지도를 띄우려면 본인의 `NAVER_MAP_CLIENT_ID`가 필요합니다 —
+> [ENV_GUIDE.md](docs/ENV_GUIDE.md) 참고.
 
 ---
 
