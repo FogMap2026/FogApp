@@ -76,15 +76,20 @@ class WithdrawalIT {
         Long spotId = createSpot();
 
         // 관련 정보를 만들어 둔다 — 전부 ON DELETE CASCADE 로 따라가야 한다.
-        // 🔴 journey_points 는 «여기 없다» — 그 표는 #131(PR #192)의 V9 가 만든다.
-        //    dev 에 없는 표를 여기서 넣으면 CI 가 「탈퇴가 깨졌다」가 아니라
-        //    「표가 없다」로 운다. 그 단언은 표를 «만드는» PR 이 진다.
+        // 🔑 users 를 참조하는 표가 늘면 여기에 한 줄씩 는다. 그 줄은 표를 «만드는» PR 이
+        //    넣는다 — dev 에 없는 표를 먼저 넣으면 CI 가 「탈퇴가 깨졌다」가 아니라
+        //    「표가 없다」로 운다.
         jdbcTemplate.update(
                 "INSERT INTO visits (user_id, spot_id, photo_url, lat, lng) VALUES (?, ?, ?, 37.5, 127.0)",
                 userId, spotId, "/api/visits/photos/uid-wd-alice/" + spotId + "/x.jpg");
         jdbcTemplate.update(
                 "INSERT INTO footprints (user_id, content, lat, lng) VALUES (?, ?, 37.5, 127.0)",
                 userId, "탈퇴 전 글귀");
+        // journey_points(#131, V9) — 걸어온 자리. 이용자가 아무것도 안 눌러도 쌓이는
+        // 유일한 좌표라, 탈퇴 때 남으면 방침 §3 의 「탈퇴 시 함께 파기」가 거짓이 된다.
+        jdbcTemplate.update(
+                "INSERT INTO journey_points (user_id, lat, lng, recorded_at) VALUES (?, 37.5, 127.0, now())",
+                userId);
 
         mockMvc.perform(delete("/api/profile").header("Authorization", "Bearer wd-alice"))
                 .andExpect(status().isNoContent());
@@ -92,6 +97,7 @@ class WithdrawalIT {
         assertThat(countOf("users", "id", userId)).isZero();
         assertThat(countOf("visits", "user_id", userId)).isZero();
         assertThat(countOf("footprints", "user_id", userId)).isZero();
+        assertThat(countOf("journey_points", "user_id", userId)).isZero();
     }
 
     @Test
