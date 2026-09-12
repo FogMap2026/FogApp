@@ -13,6 +13,7 @@ import '../services/character_overlay.dart';
 import '../services/conquest_service.dart';
 import '../services/fog_location_tracker.dart';
 import '../services/fog_overlay_controller.dart';
+import '../services/journey_service.dart';
 import '../services/footprint_location_gate.dart';
 import '../services/footprint_marker_controller.dart';
 import '../services/footprint_service.dart';
@@ -142,6 +143,20 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   /// 마지막으로 스팟을 불러온 카메라 중심(#146). "다시 시도"가 쓴다.
   NLatLng? _lastLoadCenter;
 
+  /// 아직 서버에 못 올린 궤적(#131). 위치가 갱신될 때마다 쌓이고, [_journeyBatchSize]
+  /// 가 차거나 앱이 백그라운드로 갈 때 한 번에 올린다.
+  ///
+  /// 점 하나마다 POST 하면 걷는 내내 요청이 쏟아진다 — 발자취 반경 조회(#115)에
+  /// 스로틀을 둔 것과 같은 이유다.
+  final List<JourneyPointUpload> _journeyBuffer = [];
+
+  /// 15m 마다 한 점이므로 20점 ≒ **300m**. 이 정도면 요청이 잦지 않으면서,
+  /// 앱이 갑자기 죽어도 잃는 궤적이 한 블록 남짓이다.
+  static const _journeyBatchSize = 20;
+
+  /// 업로드가 겹치지 않게 한다. 실패해도 버퍼를 비우지 않으므로 다음에 다시 시도된다.
+  bool _journeyUploading = false;
+
   /// 마지막으로 받은 내 위치. "내 위치로 이동" 버튼(#64)과 인증 화면 진입(#47)에 쓴다.
   double? _myLat;
   double? _myLng;
@@ -196,6 +211,10 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
 
   @override
   void dispose() {
+    // ⛔ 여기서 _flushJourney() 를 부르지 않는다 — ref 를 쓸 수 없다(위젯이 해체되는
+    //    중이라 프로바이더 조회가 던진다). 대신 앱이 백그라운드로 갈 때
+    //    didChangeAppLifecycleState 에서 비운다. 여기서 잃는 것은 마지막 묶음
+    //    최대 19점(≈300m)이고, 다음 실행에 그 구간만 비어 보인다.
     WidgetsBinding.instance.removeObserver(this);
     _cameraSubscription?.cancel();
     _geofencePositionSubscription?.cancel();
@@ -224,6 +243,9 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       controller.setLocationTrackingMode(NLocationTrackingMode.none);
       _geofencePositionSubscription?.cancel();
       _geofencePositionSubscription = null;
+      // 화면을 벗어나기 전에 남은 궤적을 올린다 — 배치가 차기 전에 앱을 닫으면
+      // 그 구간이 사라진다.
+      unawaited(_flushJourney());
     }
   }
 
@@ -265,6 +287,33 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
         _didZoomToFirstFix = true;
         _moveToMyLocation(position.latitude, position.longitude);
       }
+      // 걸어온 자리의 안개를 걷는다. 스트림이 15m 이상 움직였을 때만 오므로
+      // (FogLocationTracker.locationSettings) 갱신마다 15m 원을 뚫으면 원들이
+      // 맞닿아 끊기지 않는 길이 된다.
+      //
+      // ⚠️ 인증(150m)과 «다른 축»이다 — 이건 지나간 자리 표시일 뿐 정복률에는
+      //    영향이 없다. 걸어서 걷힌 안개가 정복으로 세어지면 사진 인증을 할 이유가
+      //    없어진다(planning.md 3장 「도달 → 인증 → 해제」).
+      //
+      // 🔴 정확도부터 본다. distanceFilter 는 «움직였나»만 말하고 «진짜 움직였나»는
+      //    안 말한다 — 콜드 스타트 첫 fix 는 오차가 수백 m 라 그 자체로 15m 를
+      //    만든다. 궤적 구멍은 지우는 길이 없어서, 튄 점 하나가 영영 남는다.
+      if (isTrailWorthyAccuracy(position.accuracy)) {
+        _fogOverlay?.clearTrail(NLatLng(position.latitude, position.longitude));
+        // 화면에는 바로 반영하고(위), 서버에는 모아서 올린다(#131) — 앱을 다시 켜도
+        // 걸어온 자리가 남아야 한다. 인증 안개가 GET /api/visits 로 복원되는 것과 같다.
+        _journeyBuffer.add(
+          JourneyPointUpload(
+            lat: position.latitude,
+            lng: position.longitude,
+            recordedAt: position.timestamp,
+          ),
+        );
+        if (_journeyBuffer.length >= _journeyBatchSize) unawaited(_flushJourney());
+      }
+
+      // ⚠️ 아래 둘은 «정확도 판정 밖»이다 — 화면 표시라 튀어도 다음 갱신에 되돌아온다.
+      //    되돌아오지 않는 것(구멍·서버 저장)만 거른다.
       _geofence?.updatePosition(lat: position.latitude, lng: position.longitude);
       unawaited(
         _footprintMarkers?.updatePosition(
@@ -379,6 +428,59 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
 
   /// 지도의 "발자취 남기기" 버튼(#118). GPS로 현재 위치를 새로 측정해 정확도가
   /// 10m 이내일 때만 그 좌표로 작성 화면을 연다 — 이유는 [FootprintLocationGate] 참고.
+  /// 쌓인 궤적을 서버로 올린다(#131).
+  ///
+  /// **실패해도 버퍼를 비우지 않는다** — 다음 기회에 다시 올라간다. 서버가
+  /// `(user_id, recorded_at)` 유니크로 멱등하게 받으므로 **재전송이 안전하다**.
+  /// 성공했을 때만 비우는 것이 핵심이다: 비우고 실패하면 그 구간이 영영 사라진다.
+  Future<void> _flushJourney() async {
+    if (_journeyUploading || _journeyBuffer.isEmpty) return;
+    _journeyUploading = true;
+    final batch = List<JourneyPointUpload>.from(_journeyBuffer);
+    try {
+      await ref.read(journeyServiceProvider).upload(batch);
+      _journeyBuffer.removeRange(0, batch.length);
+    } catch (e) {
+      // 궤적은 지도 위 보조 표시라 실패해도 탐험은 계속돼야 한다
+      // (SpotMarkerController·FootprintMarkerController 와 같은 원칙).
+      debugPrint('[Journey] 궤적 업로드 실패: $e');
+    } finally {
+      _journeyUploading = false;
+    }
+  }
+
+  /// 서버에 남은 궤적으로 안개를 복원한다(#131). 지도 준비 직후 한 번.
+  ///
+  /// 인증 안개를 `GET /api/visits` 로 복원하는 것([_loadVisitedSpots])과 같은 자리다 —
+  /// 이게 없으면 앱을 다시 켤 때마다 걸어온 자리가 사라진다.
+  ///
+  /// 🔑 **아직 안 올라간 버퍼도 같이 그린다.** 위치 스트림은 권한 직후에 시작하고
+  /// 오버레이는 지도 준비 후에 붙으므로, 그 사이에 온 점은 `_fogOverlay` 가 null 이라
+  /// 구멍이 안 난다. 서버에는 올라가니 «다음 실행»부터는 보이지만 **이번 세션엔 첫
+  /// 몇십 m 가 비어 있다** — 첫 실행 인상이 걸리는 자리다.
+  Future<void> _restoreJourney() async {
+    // 서버 응답을 기다리는 동안에도 버퍼는 늘어나므로 «먼저» 그린다.
+    _drawBufferedJourney();
+    try {
+      final points = await ref.read(journeyServiceProvider).fetchMine();
+      if (!mounted || points.isEmpty) return;
+      // 점마다 부르지 않는다 — landmass 하나당 setHoles 한 번으로 끝낸다.
+      _fogOverlay?.clearTrails(points);
+    } catch (e) {
+      debugPrint('[Journey] 궤적 복원 실패: $e');
+    }
+  }
+
+  /// 오버레이가 붙기 «전»에 받아 둔 점들을 그린다. 서버 왕복과 무관하게 돌아야
+  /// 하므로 [_restoreJourney] 의 `try` 밖이다 — 복원이 실패해도 이번 세션에 걸은
+  /// 자리는 보여야 한다.
+  void _drawBufferedJourney() {
+    if (_journeyBuffer.isEmpty) return;
+    _fogOverlay?.clearTrails(
+      _journeyBuffer.map((p) => NLatLng(p.lat, p.lng)),
+    );
+  }
+
   Future<void> _openFootprintCreate() async {
     if (_footprintLocationChecking) return;
     setState(() => _footprintLocationChecking = true);
@@ -549,6 +651,9 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     final locationTracker = FogLocationTracker();
     controller.setMyLocationTracker(locationTracker);
     _fogOverlay = await FogOverlayController.attach(controller);
+    // 걸어온 자리를 서버에서 되살린다(#131). 인증 안개를 GET /api/visits 로 복원하는
+    // 것(_loadVisitedSpots)과 같은 자리다 — 오버레이가 붙은 «뒤»라야 구멍을 낼 수 있다.
+    unawaited(_restoreJourney());
     _geofence = SpotGeofenceController();
     _geofenceEnterSubscription = _geofence!.onEnter.listen(_onGeofenceEnter);
     _geofenceExitSubscription = _geofence!.onExit.listen(_onGeofenceExit);

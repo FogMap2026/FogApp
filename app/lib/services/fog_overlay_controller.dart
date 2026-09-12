@@ -5,6 +5,58 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 
+/// 궤적 구멍의 키 — 좌표를 [cellMeters] 격자에 스냅한다. 같은 칸을 다시 밟으면
+/// 같은 키가 나오므로 «구멍이 늘지 않는다».
+///
+/// 격자로 묶지 않으면 같은 길을 왕복할 때마다 거의 겹치는 원이 쌓이고,
+/// `setHoles` 가 호출마다 전체 목록을 다시 보내므로 비용이 제곱으로 는다.
+///
+/// 🔴 **접두어 `trail:` 이 핵심이다.** 구멍은 하나의 `Map<String, …>` 에 스팟과 함께
+/// 담기는데, 키가 스팟 id 문자열(`"12"` 같은)과 겹치면 **궤적이 인증 구멍을 덮어써
+/// 걷힌 스팟이 다시 안개에 잠긴다.**
+///
+/// 경도 간격은 위도에 따라 달라진다(고위도일수록 같은 각도가 짧은 거리다) — 그래서
+/// `cos(lat)` 로 보정한다. 안 하면 북쪽에서 격자가 촘촘해져 같은 칸인데 다른 키가 난다.
+///
+/// [FogOverlayController] 밖에 두는 것은 **지도 컨트롤러 없이 검증하기 위해서다** —
+/// `mapNoticeFor`·`classifyFootprintLocation` 과 같은 이유다.
+String fogTrailKey(NLatLng center, double cellMeters) {
+  const metersPerDegreeLat = 111320.0;
+  final latStep = cellMeters / metersPerDegreeLat;
+  final lngStep = cellMeters / (metersPerDegreeLat * cos(center.latitude * pi / 180));
+  return 'trail:${(center.latitude / latStep).round()}:${(center.longitude / lngStep).round()}';
+}
+
+/// 궤적으로 칠 수 있는 위치 정확도의 상한(미터).
+///
+/// 🔴 **궤적은 지우는 길이 없다.** 인증·발자취 구멍은 이용자가 «그 자리에 있었다»는
+/// 판정을 거친 좌표지만, 궤적은 그 판정이 없는 유일한 구멍이고 삭제 API 도 없다 —
+/// 한 번 튄 점은 그 사용자의 지도에 영영 남는다.
+///
+/// `distanceFilter: 15` 는 「15m 이상 움직였을 때만 준다」일 뿐 **그 15m 가 실제
+/// 이동인지 오차인지는 가리지 않는다.** 콜드 스타트 첫 fix(네트워크 측위, 오차
+/// 수백 m)·실내·지하철 터널이 전부 그 15m 를 만든다.
+///
+/// 50 인 이유 — 도심 실외 GPS 가 보통 5~20m 라 걷는 동안엔 거의 안 걸리고,
+/// 콜드 스타트와 실내 튐은 걸린다. 30 이면 건물 사이에서 길이 자주 끊기고,
+/// 100 이면 「걸어온 자리」라 부르기 어려운 점이 들어온다.
+///
+/// 📌 발자취의 [maxConfirmableAccuracyMeters](footprint_location_gate.dart) 와 같은
+/// 축이되 값이 다르다 — 거기는 오차를 «보여주고 사용자에게 맡기는» 자리가 있지만,
+/// 궤적은 15m 마다 자동으로 찍혀 물어볼 수 없으므로 **그냥 버린다.**
+const double trailMaxAccuracyMeters = 50.0;
+
+/// 이 측정치를 궤적으로 쳐도 되는가 — 구멍을 내고 서버에 올릴지의 판정.
+///
+/// ⚠️ `accuracy <= 0` 은 **거른다.** Android 는 정확도를 모를 때 0 을 준다
+/// (`Location.hasAccuracy()` 가 false). 모르는 것을 「완벽하다」로 읽으면
+/// 가장 못 믿을 측정치가 가장 먼저 통과한다.
+///
+/// 화면 표시(지오펜스·발자취 마커)는 이 판정 «밖»이다 — 그건 튀어도 다음 갱신에
+/// 되돌아오지만, 저장되는 것은 안 되돌아온다.
+bool isTrailWorthyAccuracy(double accuracyMeters) =>
+    accuracyMeters > 0 && accuracyMeters <= trailMaxAccuracyMeters;
+
 /// 대한민국 해안선 모양을 따라가는 안개 오버레이를 관리한다.
 ///
 /// 사각형 대신 실제 국토 외곽선(본토+도서 각각의 폴리곤, [_boundaryAssetPath])으로
@@ -42,6 +94,61 @@ class FogOverlayController {
 
     await mapController.addOverlayAll(landmasses.map((l) => l.overlay).toSet());
     return FogOverlayController._(mapController, landmasses);
+  }
+
+  /// 걸어온 자리를 걷어낼 반경. 위치 스트림의 `distanceFilter`(15m)와 «같은 값»이다 —
+  /// 갱신마다 15m 원을 뚫으면 원들이 서로 맞닿아 끊기지 않는 길이 된다. 더 작으면
+  /// 점선이 되고, 더 크면 걷지 않은 골목까지 걷힌다.
+  static const trailRadiusMeters = 15.0;
+
+  /// 궤적 원의 분할 수. 인증 원(48)보다 성기게 잡는다 — 반경 15m 에서 12분할이면
+  /// 실제 원과의 오차가 **0.5m** 라 화면에서 구분되지 않는데, 좌표 수는 1/4 이다.
+  /// 궤적은 개수가 계속 늘어나므로 하나당 비용이 그대로 총량이 된다.
+  static const _trailSegments = 12;
+
+  /// 걸어온 자리의 안개를 걷어낸다.
+  ///
+  /// **인증(150m)과 다른 축이다.** 이건 「지나간 자리」 표시일 뿐이고 **정복률에는
+  /// 영향이 없다** — 정복률은 서버가 `visits` 로 계산한다(`GET /api/conquest`).
+  /// 걸어서 걷힌 안개가 정복으로 세어지면 사진 인증을 할 이유가 없어진다.
+  ///
+  /// 같은 자리를 다시 지나가도 «구멍이 늘지 않는다» — 좌표를 [trailRadiusMeters]
+  /// 격자에 스냅해 키로 쓰기 때문이다. 안 그러면 같은 길을 왕복할 때마다 거의
+  /// 겹치는 원이 쌓이고, `setHoles` 가 매번 전체 목록을 보내므로 비용이 제곱으로 는다.
+  ///
+  /// 🔑 **앱을 다시 켜도 남는다.** 호출부가 같은 점을 `journey_points` 에 올리고
+  /// (`JourneyService.upload`), 지도가 뜰 때 `GET /api/journeys` 로 되돌린다
+  /// ([#131](../../issues/131)). 인증으로 걷힌 안개가 `GET /api/visits` 로 복원되는
+  /// 것과 같은 모양이다.
+  ///
+  /// ⚠️ 다만 **이 메서드 자체는 화면만 만진다** — 서버에 보내는 것은 호출부의 몫이다.
+  /// 여기서 업로드까지 하면 복원 경로(`clearTrails`)가 방금 받은 점을 도로 올린다.
+  void clearTrail(NLatLng center, {double radiusMeters = trailRadiusMeters}) {
+    final landmass = _landmassFor(center);
+    final key = fogTrailKey(center, radiusMeters);
+    if (landmass._hasHole(key)) return;
+    landmass._addHole(key, center, radiusMeters: radiusMeters, segments: _trailSegments);
+    landmass._applyHoles();
+  }
+
+  /// 걸어온 자리 **여럿**을 한 번에 걷어낸다(#131) — 지도 진입 시 서버에서 받은
+  /// 궤적으로 안개를 복원할 때 쓴다.
+  ///
+  /// [clearTrail] 을 점 수만큼 반복하면 호출마다 landmass 의 구멍 «전체»를 다시
+  /// 지도에 보내므로(`setHoles`) 총 비용이 O(n²) 가 된다 — [clearCircles] 가 스팟에
+  /// 대해 푼 것과 같은 문제다. 여기서는 모아둔 뒤 landmass 하나당 한 번만 반영한다.
+  void clearTrails(Iterable<NLatLng> centers, {double radiusMeters = trailRadiusMeters}) {
+    final touched = <_Landmass>{};
+    for (final center in centers) {
+      final landmass = _landmassFor(center);
+      final key = fogTrailKey(center, radiusMeters);
+      if (landmass._hasHole(key)) continue;
+      landmass._addHole(key, center, radiusMeters: radiusMeters, segments: _trailSegments);
+      touched.add(landmass);
+    }
+    for (final landmass in touched) {
+      landmass._applyHoles();
+    }
   }
 
   /// [spotId] 위치의 반경 [radiusMeters] 안 안개를 걷어낸다(방문 인증 시 호출 예정).
@@ -136,6 +243,8 @@ class _Landmass {
     coords: outerRing,
     color: FogOverlayController.fogColor,
   );
+
+  bool _hasHole(String key) => _clearedHoles.containsKey(key);
 
   /// 구멍을 계산해 저장만 한다 — 지도에는 반영하지 않는다. 여러 스팟을 모아 한 번에
   /// [_applyHoles]하려는 호출자([FogOverlayController.clearCircles])를 위한 분리.
