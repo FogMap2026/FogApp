@@ -122,6 +122,13 @@ class _ConsentScreenState extends ConsumerState<ConsentScreen> {
                     title: '여행 성향',
                     detail: '성향 테스트 결과 — 동행 추천에 사용',
                   ),
+                  const _CollectionItem(
+                    title: '위치공유 (선택)',
+                    detail:
+                        '지도 화면에서 켜면, 가까운 스팟 근처에 있다는 사실과 시각이 다른 '
+                        '이용자에게 익명으로 공개됩니다. 좌표·닉네임은 포함되지 않고 30분 '
+                        '지난 뒤에만 노출됩니다. 기본값은 꺼짐이며 언제든 끌 수 있습니다.',
+                  ),
                   const SizedBox(height: 8),
                   Text(
                     '보유 기간: 발자취는 직접 삭제할 수 있고, 삭제하면 즉시 파기됩니다. 계정은 '
