@@ -772,7 +772,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       await ref.read(travelerServiceProvider).share(lat: lat, lng: lng);
     } catch (e) {
       // 주변에 스팟이 없으면 서버가 404를 준다 — 조용히 넘어간다. 그 외 실패도
-      // 30분 뒤 다음 틱에서 다시 시도되므로 여기서 사용자에게 알리지 않는다.
+      // _travelerSharePeriod 뒤 다음 틱에서 다시 시도되므로 여기서 사용자에게 알리지 않는다.
       debugPrint('[MapScreen] 위치 공유 실패: $e');
     }
   }

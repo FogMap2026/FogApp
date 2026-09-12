@@ -46,9 +46,14 @@ class TravelerMarkerController {
     }
     _markers.clear();
 
-    for (final traveler in travelers) {
+    for (var i = 0; i < travelers.length; i++) {
+      final traveler = travelers[i];
+      // 인덱스를 붙인다 — 안 붙이면 같은 스팟이 최근접인 두 사람이 같은 id로
+      // 마커를 덮어써 한 명만 남는다(PGH0621, PR #201 리뷰). "N명"으로 묶어
+      // 보여주는 건 더 큰 설계 결정이라 마감 후로 남기고, 지금은 조용히
+      // 사라지지만 않게 한다.
       final marker = NMarker(
-        id: 'traveler-spot-${traveler.spotId}',
+        id: 'traveler-$i-${traveler.spotId}',
         position: NLatLng(traveler.lat, traveler.lng),
         icon: _icon,
         size: iconSize,

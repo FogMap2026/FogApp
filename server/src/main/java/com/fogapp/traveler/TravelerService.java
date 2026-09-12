@@ -30,6 +30,16 @@ public class TravelerService {
      */
     private static final int DELAY_MINUTES = 30;
 
+    /**
+     * 하한(30분)만 있고 상한이 없으면, 토글을 끄지 않고 앱을 종료한 사람이
+     * <b>영원히</b> 노출된다 — 서버는 행이 그대로 남고, 앱은 화면 상태(꺼짐)로
+     * 다시 시작해 둘이 갈라진다(PGH0621, PR #201 리뷰). 게시 주기(60분,
+     * {@code map_screen.dart}의 {@code _travelerSharePeriod})의 두 배로 잡는다 —
+     * 이보다 짧으면 게시가 한 번만 실패해도(404·네트워크) 그 사람이 통째로
+     * 사라지고, 이보다 길면 꺼진 뒤에도 오래 남는다.
+     */
+    private static final int MAX_AGE_MINUTES = 120;
+
     private final TravelerPositionRepository repository;
     private final SpotRepository spotRepository;
 
@@ -61,10 +71,15 @@ public class TravelerService {
         repository.deleteByUserId(userId);
     }
 
-    /** 반경 내 익명 여행자 목록. 본인과 30분 이내 갱신분은 제외된다. */
+    /**
+     * 반경 내 익명 여행자 목록. 본인, 30분 이내 갱신분, {@link #MAX_AGE_MINUTES}
+     * 보다 오래된 갱신분이 제외된다 — 하한(지연)과 상한(보유) 둘 다다.
+     */
     public List<NearbyTravelerResponse> nearby(Long userId, double lat, double lng, double radiusMeters) {
-        OffsetDateTime cutoff = OffsetDateTime.now().minusMinutes(DELAY_MINUTES);
-        return repository.findNearby(userId, lat, lng, radiusMeters, cutoff)
+        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime cutoff = now.minusMinutes(DELAY_MINUTES);
+        OffsetDateTime staleBefore = now.minusMinutes(MAX_AGE_MINUTES);
+        return repository.findNearby(userId, lat, lng, radiusMeters, cutoff, staleBefore)
                 .stream()
                 .map(NearbyTravelerResponse::from)
                 .toList();

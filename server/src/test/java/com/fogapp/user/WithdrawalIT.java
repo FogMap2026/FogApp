@@ -85,6 +85,10 @@ class WithdrawalIT {
         jdbcTemplate.update(
                 "INSERT INTO footprints (user_id, content, lat, lng) VALUES (?, ?, 37.5, 127.0)",
                 userId, "탈퇴 전 글귀");
+        // traveler_positions(#133, V10)는 이 PR이 만드는 표라 여기서 단언한다 — #192의
+        // journey_points와 같은 원칙(PGH0621, PR #201 리뷰).
+        jdbcTemplate.update(
+                "INSERT INTO traveler_positions (user_id, nearest_spot_id) VALUES (?, ?)", userId, spotId);
 
         mockMvc.perform(delete("/api/profile").header("Authorization", "Bearer wd-alice"))
                 .andExpect(status().isNoContent());
@@ -92,6 +96,7 @@ class WithdrawalIT {
         assertThat(countOf("users", "id", userId)).isZero();
         assertThat(countOf("visits", "user_id", userId)).isZero();
         assertThat(countOf("footprints", "user_id", userId)).isZero();
+        assertThat(countOf("traveler_positions", "user_id", userId)).isZero();
     }
 
     @Test

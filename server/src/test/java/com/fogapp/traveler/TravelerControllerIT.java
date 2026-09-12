@@ -138,6 +138,27 @@ class TravelerControllerIT {
     }
 
     @Test
+    void 너무_오래된_위치는_보이지_않는다() throws Exception {
+        // 공유를 끄지 않고 앱만 종료한 경우를 재현한다 — 행은 그대로 남고 계속 늙는다.
+        Long alice = signUp("trv-alice2b", "uid-trv-alice2b");
+        signUp("trv-bob2b", "uid-trv-bob2b");
+        createSpot(37.515, 127.015);
+
+        mockMvc.perform(post("/api/travelers/position")
+                        .header("Authorization", "Bearer trv-alice2b")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"lat\":37.515,\"lng\":127.015}"))
+                .andExpect(status().isNoContent());
+        ageToPast(alice, 121); // MAX_AGE_MINUTES(120)보다 하루가 아니라 1분만 더 늙힌다.
+
+        mockMvc.perform(get("/api/travelers/nearby")
+                        .header("Authorization", "Bearer trv-bob2b")
+                        .param("lat", "37.515").param("lng", "127.015").param("radiusMeters", "5000"))
+                .andExpect(status().isOk())
+                .andExpect(content().json("[]"));
+    }
+
+    @Test
     void 내_위치는_내_조회에서_빠진다() throws Exception {
         Long alice = signUp("trv-alice3", "uid-trv-alice3");
         createSpot(37.52, 127.02);

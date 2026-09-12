@@ -31,11 +31,16 @@ public interface TravelerPositionRepository extends JpaRepository<TravelerPositi
     void deleteByUserId(Long userId);
 
     /**
-     * 반경 내, <b>30분 이상 지난</b> 남의 위치를 스팟 단위로 조회한다.
+     * 반경 내, <b>30분 이상 지났지만 너무 오래되지는 않은</b> 남의 위치를 스팟
+     * 단위로 조회한다.
      *
      * <p>{@code cutoff} 이후(=최근 30분 이내)는 조회에서 뺀다 — 신고 접수본의
      * "측정 시점으로부터 30분이 경과한 위치정보만 지연하여 제공"을 만족한다.
      * {@code excludeUserId} 로 본인은 뺀다 — 내 캐릭터가 이중으로 안 뜬다.</p>
+     *
+     * <p>{@code staleBefore} 보다 이전 갱신은 뺀다 — 하한(지연)만 있고 상한이
+     * 없으면, 공유를 끄지 않고 앱만 종료한 사람이 그 행 하나로 영원히 노출된다
+     * (PGH0621, PR #201 리뷰). {@link TravelerService#MAX_AGE_MINUTES} 참고.</p>
      *
      * <p>{@code spots.geom} 의 geography GiST 인덱스(V7)를 타도록 반경 판정을
      * spots 쪽에서 한다 — {@code traveler_positions} 은 스팟 id 만 들고 있다.</p>
@@ -46,6 +51,7 @@ public interface TravelerPositionRepository extends JpaRepository<TravelerPositi
             JOIN spots s ON s.id = tp.nearest_spot_id
             WHERE tp.user_id != :excludeUserId
               AND tp.updated_at <= :cutoff
+              AND tp.updated_at >= :staleBefore
               AND s.geom IS NOT NULL
               AND ST_DWithin(
                     s.geom::geography,
@@ -57,7 +63,8 @@ public interface TravelerPositionRepository extends JpaRepository<TravelerPositi
                                         @Param("lat") double lat,
                                         @Param("lng") double lng,
                                         @Param("radiusMeters") double radiusMeters,
-                                        @Param("cutoff") OffsetDateTime cutoff);
+                                        @Param("cutoff") OffsetDateTime cutoff,
+                                        @Param("staleBefore") OffsetDateTime staleBefore);
 
     /**
      * {@link #findNearby} 의 네이티브 프로젝션. 응답에 {@code userId} 를 담지 않는다 —
