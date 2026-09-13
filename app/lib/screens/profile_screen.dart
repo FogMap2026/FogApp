@@ -200,7 +200,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           '· 방문 인증 기록과 사진\n'
           '· 남긴 발자취와 좋아요\n'
           '· 동행 요청·수락 이력\n'
-          '· 여행 성향 결과\n\n'
+          '· 여행 성향 결과\n'
+          '· 걸어온 자리(안개가 걷힌 지점 기록)\n\n'
           '되돌릴 수 없습니다.',
         ),
         actions: [
