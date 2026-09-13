@@ -163,6 +163,10 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   /// 마지막으로 받은 내 위치. "내 위치로 이동" 버튼(#64)과 인증 화면 진입(#47)에 쓴다.
   double? _myLat;
   double? _myLng;
+  /// 마지막 측위의 정확도(m). 위치공유(#133) 게시 전에 [isTrailWorthyAccuracy]로
+  /// 거른다 — 3km 반경에서 최근접 스팟을 고르므로 오차 수백 m 면 다른 스팟이
+  /// 잡힌다. 콜드 스타트 직후가 특히 그렇다(oorony, PR #201 리뷰).
+  double? _myAccuracy;
 
   /// 이미 인증한 스팟 id 목록(#46) — 이 스팟들은 반경에 들어와도 알리지 않는다.
   Set<int> _visitedSpotIds = const {};
@@ -300,6 +304,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       final hadLocation = _myLat != null;
       _myLat = position.latitude;
       _myLng = position.longitude;
+      _myAccuracy = position.accuracy;
       if (!hadLocation && mounted) setState(() {});
 
       // 첫 측위에 한 번만 내 위치로 줌을 맞춘다(#144). 이게 없으면 권한을 허용해도
@@ -872,7 +877,11 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   Future<void> _shareMyPosition() async {
     final lat = _myLat;
     final lng = _myLng;
+    final accuracy = _myAccuracy;
     if (lat == null || lng == null) return;
+    // 정확도가 나쁜 fix로 게시하면 3km 반경에서 엉뚱한 스팟이 최근접으로 잡힌다.
+    // 잃는 것은 없다 — 거르면 그냥 다음 틱에 다시 시도된다(share와 같은 원칙).
+    if (accuracy == null || !isTrailWorthyAccuracy(accuracy)) return;
     try {
       await ref.read(travelerServiceProvider).share(lat: lat, lng: lng);
     } catch (e) {
