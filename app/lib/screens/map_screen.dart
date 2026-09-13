@@ -24,6 +24,7 @@ import '../services/spot_geofence_controller.dart';
 import '../services/spot_marker_controller.dart';
 import '../services/spot_service.dart';
 import '../services/visit_service.dart';
+import '../theme/app_theme.dart';
 import '../widgets/footprint_card.dart';
 import '../widgets/map_controls.dart';
 import 'footprint_nearby_create_screen.dart';
@@ -944,7 +945,12 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
           SafeArea(
             child: Align(
               alignment: Alignment.bottomLeft,
-              child: Padding(
+              child: FilledButtonTheme(
+                // 지도 위 액션 버튼(tonal)은 흰 알약이라 밝은 지도 타일에 묻힌다 — 경계선 한 줄과
+                // 옅은 그림자로 종이에서 살짝 뜨게 한다(Notion button-secondary). 전역 테마를
+                // «대체»하지 않고 병합해야 알약 모양·글자 크기가 유지된다.
+                data: FilledButtonThemeData(style: mapActionButtonStyle(Theme.of(context))),
+                child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 64),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -1041,6 +1047,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                   ],
                 ),
               ),
+              ),
             ),
           ),
         ],
@@ -1090,7 +1097,6 @@ class _TopInfoBar extends StatelessWidget {
             Chip(
               label: Text(rateLabel),
               visualDensity: VisualDensity.compact,
-              backgroundColor: theme.colorScheme.secondaryContainer,
             ),
           ],
         ),

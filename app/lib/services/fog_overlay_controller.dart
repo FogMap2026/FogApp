@@ -71,8 +71,11 @@ class FogOverlayController {
   final List<_Landmass> _landmasses;
   bool _disposed = false;
 
-  /// 안개 색상/투명도. 앱 테마(ColorScheme seed `0xFF5B7A99`)와 어울리는 톤의
-  /// 짙은 청회색 + 85% 불투명도로, 아래 지도가 은은히 비치되 스팟은 가려지도록 한다.
+  /// 안개 색상/투명도. 짙은 청회색 + 85% 불투명도로, 아래 지도가 은은히 비치되 스팟은 가려지도록 한다.
+  ///
+  /// 앱 테마(`theme/app_theme.dart`)는 Notion 체계로 바뀌었지만 이 값은 그대로 둔다 — 안개는
+  /// 화면의 유일한 «어두운 섬»이고, 테마의 남색 `AppColors.secondary` 와 같은 결이다. 바꾸면
+  /// 스토어 그래픽·스크린샷의 안개색과 어긋난다.
   static const fogColor = Color(0xD948566B);
 
   static const _boundaryAssetPath = 'assets/geo/kr_boundary.json';

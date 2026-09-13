@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/match_candidate.dart';
 import '../services/match_service.dart';
 import '../services/profile_service.dart';
+import '../theme/app_theme.dart';
 import 'social/personality_test_screen.dart';
 
 enum _LoadState { loading, needsPersonalityTest, ready, error }
@@ -166,7 +167,7 @@ class _CandidateCard extends StatelessWidget {
             CircleAvatar(
               radius: 20,
               backgroundColor: theme.colorScheme.surfaceContainerHighest,
-              child: const Icon(Icons.person_outline, color: Colors.black45),
+              child: const Icon(Icons.person_outline, color: AppColors.inkMuted),
             ),
             const SizedBox(width: 12),
             Expanded(

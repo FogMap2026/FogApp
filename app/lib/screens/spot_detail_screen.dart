@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/footprint.dart';
 import '../models/spot.dart';
 import '../services/footprint_service.dart';
+import '../theme/app_theme.dart';
 import '../widgets/footprint_card.dart';
 import 'footprint_create_screen.dart';
 
@@ -126,7 +127,7 @@ class _SpotDetailScreenState extends ConsumerState<SpotDetailScreen> {
     final theme = Theme.of(context);
     return [
       const SizedBox(height: 40),
-      const Center(child: Icon(Icons.help_outline, size: 72, color: Colors.black38)),
+      const Center(child: Icon(Icons.help_outline, size: 72, color: AppColors.inkFaint)),
       const SizedBox(height: 16),
       Center(
         child: Text('아직 밝혀지지 않은 곳이에요', style: theme.textTheme.titleMedium),
@@ -208,7 +209,7 @@ class _SpotImage extends StatelessWidget {
     return Container(
       height: 180,
       decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(12)),
-      child: Center(child: Icon(icon, size: 48, color: Colors.black26)),
+      child: Center(child: Icon(icon, size: 48, color: AppColors.hairline)),
     );
   }
 }
