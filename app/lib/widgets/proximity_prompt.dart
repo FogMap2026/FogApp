@@ -280,85 +280,107 @@ class _VerifyBeaconState extends State<_VerifyBeacon> with SingleTickerProviderS
       child: GestureDetector(
         onTap: widget.onTap,
         behavior: HitTestBehavior.opaque,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (widget.showLabel) ...[
-              // «근처» 카드(_NearCardContent)와 같은 옷 — 연파랑 바탕·파란 테두리·제목/부제 두 줄.
-              // 두 단계가 같은 카드의 문구만 바뀐 것으로 읽히게(시진, 09-14). 검은 알약은 혼자
-              // 다른 물건처럼 보였다.
-              // 화면이 좁으면 카드가 줄어든다 — Row 가 넘치지 않게.
-              Flexible(
-                child: Container(
-                  padding: const EdgeInsets.fromLTRB(AppSpacing.sm, 6, AppSpacing.sm, 6),
-                  // 이름이 길어도 카드가 왼쪽으로 너무 자라 좌하단 메뉴를 덮지 않게.
-                  constraints: const BoxConstraints(maxWidth: 220),
-                  decoration: BoxDecoration(
-                    color: AppColors.infoContainer,
-                    borderRadius: BorderRadius.circular(AppRadii.lg),
-                    border: Border.all(color: AppColors.primary),
-                    boxShadow: AppShadows.soft,
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${widget.spotTitle} 인증 가능',
-                        style: Theme.of(context).textTheme.titleSmall,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text(
-                        '약 ${widget.distanceMeters.round()}m · 눌러서 인증하기',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.inkMuted, height: 1.3),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: AppSpacing.xs),
-            ],
-            SizedBox(
-              // 퍼지는 고리가 잘리지 않도록 원보다 넉넉한 칸을 잡는다.
-              width: _size * 1.5,
-              height: _size * 1.5,
-              child: AnimatedBuilder(
-                animation: _pulse,
-                builder: (context, child) {
-                  final t = _pulse.value;
-                  return Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      _ring(t),
-                      _ring((t + 0.5) % 1),
-                      Transform.scale(
-                        // 원 자체도 살짝 숨 쉬게 한다 — 고리만 퍼지면 멀리서 정지 아이콘처럼 보인다.
-                        scale: 1 + 0.06 * sin(t * 2 * pi),
-                        child: child,
-                      ),
-                    ],
-                  );
-                },
-                child: Container(
-                  width: _size,
-                  height: _size,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [AppColors.accentOrange, AppColors.accentPink],
+        // 카메라(맥박 원)가 위, 카드가 아래 — 카드는 «근처» 카드와 같은 자리·같은 폭에 놓인다
+        // (시진, 09-14). 옆으로 붙이면 카드가 왼쪽으로 자라 좌하단 메뉴를 덮고, 300m 카드와
+        // 다른 자리에 뜬다.
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final cardWidth = min(constraints.maxWidth, 420.0);
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                _beacon(),
+                if (widget.showLabel) ...[
+                  const SizedBox(height: AppSpacing.xxs),
+                  // «근처» 카드(_NearCardContent)와 같은 옷 — 연파랑 바탕·파란 테두리·같은 높이.
+                  // 두 단계가 같은 카드의 문구만 바뀐 것으로 읽히게.
+                  Container(
+                    width: cardWidth,
+                    height: _cardHeight,
+                    padding: const EdgeInsets.fromLTRB(AppSpacing.sm, 6, AppSpacing.sm, 6),
+                    decoration: BoxDecoration(
+                      color: AppColors.infoContainer,
+                      borderRadius: BorderRadius.circular(AppRadii.lg),
+                      border: Border.all(color: AppColors.primary),
+                      boxShadow: AppShadows.soft,
                     ),
-                    boxShadow: [BoxShadow(color: Color(0x55DD5B00), blurRadius: 16, offset: Offset(0, 4))],
+                    // 카드 안에는 아이콘을 두지 않는다 — 카메라는 바로 위 맥박 원이 이미 하나다.
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${widget.spotTitle} 인증 가능',
+                                style: Theme.of(context).textTheme.titleSmall,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                '약 ${widget.distanceMeters.round()}m · 눌러서 인증하기',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(color: AppColors.inkMuted, height: 1.3),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  child: const Icon(Icons.photo_camera_rounded, color: Colors.white, size: 30),
-                ),
+                ],
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  /// «근처» 카드와 같은 높이 — 두 단계가 한자리에서 문구만 바뀌는 것으로 보이게.
+  static const _cardHeight = 76.0;
+
+  Widget _beacon() {
+    return SizedBox(
+      // 퍼지는 고리가 잘리지 않도록 원보다 넉넉한 칸을 잡는다.
+      width: _size * 1.5,
+      height: _size * 1.5,
+      child: AnimatedBuilder(
+        animation: _pulse,
+        builder: (context, child) {
+          final t = _pulse.value;
+          return Stack(
+            alignment: Alignment.center,
+            children: [
+              _ring(t),
+              _ring((t + 0.5) % 1),
+              Transform.scale(
+                // 원 자체도 살짝 숨 쉬게 한다 — 고리만 퍼지면 멀리서 정지 아이콘처럼 보인다.
+                scale: 1 + 0.06 * sin(t * 2 * pi),
+                child: child,
               ),
+            ],
+          );
+        },
+        child: Container(
+          width: _size,
+          height: _size,
+          decoration: const BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [AppColors.accentOrange, AppColors.accentPink],
             ),
-          ],
+            boxShadow: [BoxShadow(color: Color(0x55DD5B00), blurRadius: 16, offset: Offset(0, 4))],
+          ),
+          child: const Icon(Icons.photo_camera_rounded, color: Colors.white, size: 30),
         ),
       ),
     );
