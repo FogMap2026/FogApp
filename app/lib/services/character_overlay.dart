@@ -81,16 +81,17 @@ class _CharacterPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final width = size.width;
     final height = size.height;
-    // 원이 몸통, 삼각형은 그 위에 얹힌 작은 방향 표시 — 처음엔 삼각형이 원만큼 커서
-    // 「화살표」로 읽혔다(시진, 09-14). 원 지름 ≈ 아이콘 폭의 56%, 삼각형 폭 ≈ 26%.
-    final center = Offset(width / 2, height * 0.6);
-    final radius = width * 0.28;
+    // 원이 몸통, 삼각형은 그 위에 «떨어져» 떠 있는 작은 방향 표시 — 처음엔 삼각형이
+    // 원만큼 커서 화살표로 읽혔다(시진, 09-14). 원 지름 ≈ 아이콘 폭의 54%, 삼각형 폭 ≈ 24%,
+    // 둘 사이 틈 ≈ 높이의 10%. 원 테두리는 삼각형보다 두껍게 — 몸통이 먼저 읽히게.
+    final center = Offset(width / 2, height * 0.65);
+    final radius = width * 0.27;
 
     // 위(북쪽)를 향한 삼각형 — 회전은 SDK 가 bearing 으로 처리한다.
     final arrow = Path()
-      ..moveTo(width / 2, height * 0.06)
-      ..lineTo(width * 0.63, height * 0.33)
-      ..lineTo(width * 0.37, height * 0.33)
+      ..moveTo(width / 2, height * 0.04)
+      ..lineTo(width * 0.62, height * 0.26)
+      ..lineTo(width * 0.38, height * 0.26)
       ..close();
 
     final outline = Paint()
@@ -99,7 +100,7 @@ class _CharacterPainter extends CustomPainter {
       ..strokeWidth = 3
       ..strokeJoin = StrokeJoin.round;
     canvas.drawPath(arrow, outline);
-    canvas.drawCircle(center, radius, outline);
+    canvas.drawCircle(center, radius, outline..strokeWidth = 5);
 
     final fill = Paint()..color = _fillColor;
     canvas.drawPath(arrow, fill);
