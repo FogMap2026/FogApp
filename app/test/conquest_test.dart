@@ -31,12 +31,12 @@ void main() {
 }
 
 ConquestRegion _region(String code, String name, int total, int visited) => ConquestRegion(
-  regionCode: code,
-  regionName: name,
-  totalSpots: total,
-  visitedSpots: visited,
-  rate: total == 0 ? 0 : visited / total,
-);
+      regionCode: code,
+      regionName: name,
+      totalSpots: total,
+      visitedSpots: visited,
+      rate: total == 0 ? 0 : visited / total,
+    );
 
 void _sidoTests() {
   test('시/군/구를 시/도로 합산한다 — 비율의 평균이 아니라 합산 후 나눈 값', () {
@@ -72,11 +72,19 @@ void _sidoTests() {
       _region('35-9', '35-9', 4, 0), // addr1 이 비어 서버가 코드로 폴백한 지역
       _region('35-2', '경상북도 경주시', 20, 2),
     ]);
-    // 어느 시/도인지 모르는 코드 폴백 지역은 이름 그룹에 섞지 않고 따로 둔다.
+    // 같은 코드(35)의 이름 있는 시/도가 있으니 거기에 합친다 — 배지가 늘지 않는다.
+    final gyeongbuk = sidos.single;
+    expect(gyeongbuk.sidoName, '경상북도');
+    expect(gyeongbuk.totalSpots, 24);
+  });
+
+  test('같은 코드의 이름 있는 시/도가 아예 없을 때만 코드 배지로 남는다', () {
+    final sidos = aggregateBySido([
+      _region('39-1', '39-1', 5, 0),
+      _region('2-1', '인천광역시 남동구', 10, 5),
+    ]);
     expect(sidos, hasLength(2));
-    final gyeongbuk = sidos.singleWhere((s) => s.sidoName == '경상북도');
-    expect(gyeongbuk.totalSpots, 20);
-    expect(sidos.singleWhere((s) => s.sidoName.isEmpty).areaCodes, ['35']);
+    expect(sidos.singleWhere((s) => s.sidoName.isEmpty).areaCodes, ['39']);
   });
 
   test('역지오코딩과 관광공사 주소가 다르게 부르는 시/도를 같은 것으로 본다', () {

@@ -9,12 +9,12 @@ class ConquestRegion {
   });
 
   factory ConquestRegion.fromJson(Map<String, dynamic> json) => ConquestRegion(
-    regionCode: json['regionCode'] as String,
-    regionName: json['regionName'] as String,
-    totalSpots: json['totalSpots'] as int,
-    visitedSpots: json['visitedSpots'] as int,
-    rate: (json['rate'] as num).toDouble(),
-  );
+        regionCode: json['regionCode'] as String,
+        regionName: json['regionName'] as String,
+        totalSpots: json['totalSpots'] as int,
+        visitedSpots: json['visitedSpots'] as int,
+        rate: (json['rate'] as num).toDouble(),
+      );
 
   final String regionCode;
   final String regionName;
@@ -68,17 +68,21 @@ class ConquestSido {
 /// 시/군/구 목록을 시/도별로 합산한다. 순서는 입력에 처음 나타난 시/도 순.
 ///
 /// **이름([normalizeSidoName])으로 묶는다** — 코드로 묶으면 통합된 시/도가 둘로 갈라진다
-/// ([ConquestSido.areaCodes]). 이름을 못 만든 지역(주소 품질 문제로 서버가 코드로 폴백)만
-/// 코드로 묶는다 — 어느 시/도인지 모르는 것을 아무 데나 섞을 수는 없다.
+/// ([ConquestSido.areaCodes]). 이름을 못 만든 지역(주소가 비어 서버가 코드로 폴백)은
+/// **같은 코드를 가진 이름 있는 시/도에 합친다** — 관광공사 데이터는 지역마다 주소 없는
+/// 스팟이 수십~수백 개라, 따로 두면 「지역 34」 같은 배지가 시/도 수만큼 더 생긴다
+/// (실기기, 09-14). 같은 코드의 이름 있는 시/도가 하나도 없을 때만 코드 배지로 남긴다.
 List<ConquestSido> aggregateBySido(List<ConquestRegion> regions) {
-  final byKey = <String, ConquestSido>{};
+  final byName = <String, ConquestSido>{};
+  final nameless = <String, ConquestSido>{}; // areaCode → 합산
   for (final region in regions) {
     final areaCode = region.regionCode.split('-').first;
     // 이름을 못 만든 지역은 regionName 이 코드(「35-2」)라 첫 토큰이 시/도가 아니다.
     final sidoName = region.regionName == region.regionCode ? '' : region.regionName.split(' ').first;
-    final key = sidoName.isEmpty ? 'code:$areaCode' : 'name:${normalizeSidoName(sidoName)}';
-    final prev = byKey[key];
-    byKey[key] = ConquestSido(
+    final target = sidoName.isEmpty ? nameless : byName;
+    final key = sidoName.isEmpty ? areaCode : normalizeSidoName(sidoName);
+    final prev = target[key];
+    target[key] = ConquestSido(
       areaCodes: prev == null
           ? [areaCode]
           : (prev.areaCodes.contains(areaCode) ? prev.areaCodes : [...prev.areaCodes, areaCode]),
@@ -87,7 +91,23 @@ List<ConquestSido> aggregateBySido(List<ConquestRegion> regions) {
       visitedSpots: (prev?.visitedSpots ?? 0) + region.visitedSpots,
     );
   }
-  return byKey.values.toList();
+
+  final result = byName.values.toList();
+  for (final entry in nameless.entries) {
+    final i = result.indexWhere((s) => s.areaCodes.contains(entry.key));
+    if (i < 0) {
+      result.add(entry.value);
+      continue;
+    }
+    final named = result[i];
+    result[i] = ConquestSido(
+      areaCodes: named.areaCodes,
+      sidoName: named.sidoName,
+      totalSpots: named.totalSpots + entry.value.totalSpots,
+      visitedSpots: named.visitedSpots + entry.value.visitedSpots,
+    );
+  }
+  return result;
 }
 
 /// 시/도 이름 비교용 정규화. 역지오코딩과 관광공사 주소가 같은 곳을 다르게 부른다 —
