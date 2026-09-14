@@ -74,8 +74,10 @@ class _CharacterPainter extends CustomPainter {
   const _CharacterPainter();
 
   /// 스팟의 숨김 톤(짙은 청회색)·발자취의 금색과 뚜렷이 구분되는 파랑.
-  static const _fillColor = Color(0xFF3D8BFD);
-  static const _outlineColor = Colors.white;
+  // 속은 흰색, 테두리가 파랑 — 처음엔 반대였는데 어두운 안개 위에서 흰 몸통이 더
+  // 「내 자리」로 읽힌다(시진, 09-14).
+  static const _fillColor = Colors.white;
+  static const _outlineColor = Color(0xFF3D8BFD);
 
   @override
   void paint(Canvas canvas, Size size) {
