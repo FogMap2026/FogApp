@@ -116,7 +116,6 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   bool _regionLookupFailed = false;
 
   /// 정복률(#51) 조회 결과 전체. 표시할 지역만 골라 쓴다.
-  List<ConquestRegion> _conquest = const [];
   /// 카메라 중심에서 가장 가까운(=현재 보고 있는) 스팟. 정복률 표시 지역을 고르는 데 쓴다.
   Spot? _nearestLoadedSpot;
 
@@ -769,23 +768,31 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   Future<void> _refreshConquest() async {
     try {
       final regions = await ref.read(conquestServiceProvider).myConquest();
-      if (mounted) setState(() => _conquest = regions);
+      if (mounted) {
+        // 시/군/구 목록은 여기선 안 쓴다 — 상단 바는 시/도 합산만 본다.
+        setState(() => _conquestBySido = aggregateBySido(regions));
+      }
     } catch (_) {
       // 정복률은 보조 정보라 실패해도 지도 사용을 막지 않는다 — 플레이스홀더로 남겨둔다.
     }
   }
 
-  /// 현재 보고 있는 지역의 정복률. 대표 스팟의 areaCode/sigunguCode로 [_conquest]에서 찾는다.
-  ConquestRegion? get _currentConquest {
-    final spot = _nearestLoadedSpot;
-    final areaCode = spot?.areaCode;
-    if (areaCode == null) return null;
-    final code = regionCodeFor(areaCode: areaCode, sigunguCode: spot?.sigunguCode);
-    for (final region in _conquest) {
-      if (region.regionCode == code) return region;
-    }
-    return null;
+  /// 상단 바에 보여줄 정복률 — **시/도 단위**다. 바에 뜨는 지역명([_regionName])이
+  /// 시/도라서 퍼센트도 같은 단위여야 한다. 시/군/구로 보여주면 「경기도 · 15%」가
+  /// 실은 부천시 비율이라, 옆 시로 넘어갈 때 이름은 그대로인데 숫자만 널뛴다.
+  ///
+  /// 이름으로 먼저 찾고, 안 맞으면 가장 가까운 스팟의 areaCode 로 찾는다([findSidoConquest]).
+  ConquestSido? get _currentConquest {
+    return findSidoConquest(
+      _conquestBySido,
+      regionName: _regionName,
+      areaCode: _nearestLoadedSpot?.areaCode,
+    );
   }
+
+  /// 정복률(#51)을 시/도로 합산한 것. 새로 받을 때만 다시 만든다 —
+  /// build 마다 합산하면 매 프레임 목록을 훑는다.
+  List<ConquestSido> _conquestBySido = const [];
 
   void _onCameraChanged(OnCameraChangedParams params) {
     // 줌 임계값에 따른 발자취 표시/숨김(#117)은 카메라가 멈추기 전에도 즉시
