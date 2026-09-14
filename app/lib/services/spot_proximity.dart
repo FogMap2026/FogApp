@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:geolocator/geolocator.dart';
 
 import '../models/spot.dart';
@@ -41,7 +43,13 @@ class SpotProximity {
   /// 인천시청 앞처럼 스팟 셋이 100m 안에 겹치면, 처음 잡은 스팟이 그대로 남아 「인천애뜰 인증
   /// 가능」인데 실제로는 한복사랑 앞에 서 있는 일이 났다(시진, 실기기 09-14). 인증은 «지금 서
   /// 있는 곳»이 중요하니 가까운 쪽으로 바꾸되, GPS 가 튀는 몇 m 로 왔다 갔다 하지 않게 여유를 둔다.
+  ///
+  /// GPS 정확도가 이보다 나쁘면(실내 50~100m) 정확도만큼을 여유로 쓴다 — 인천애뜰과 한복사랑처럼
+  /// 30m 떨어진 두 스팟 사이에서 실내 좌표가 튈 때마다 문구가 번갈아 바뀌었다(시진, 09-15).
   static const verifySwitchMarginMeters = 20.0;
+
+  static double switchMargin(double? accuracyMeters) =>
+      accuracyMeters == null ? verifySwitchMarginMeters : max(verifySwitchMarginMeters, accuracyMeters);
 }
 
 /// [candidates] 가운데 지금 알릴 스팟을 고른다. 알릴 것이 없으면 `null`.
@@ -64,7 +72,9 @@ SpotProximity? resolveSpotProximity({
   required double lng,
   Set<int> visitedSpotIds = const {},
   SpotProximity? previous,
+  double? accuracyMeters,
 }) {
+  final margin = SpotProximity.switchMargin(accuracyMeters);
   SpotProximity? best;
   for (final spot in candidates) {
     if (visitedSpotIds.contains(spot.id)) continue;
@@ -73,26 +83,24 @@ SpotProximity? resolveSpotProximity({
     final level = _levelFor(distance, wasLevel);
     if (level == null) continue;
     final candidate = SpotProximity(spot: spot, distanceMeters: distance, level: level);
-    if (best == null || _outranks(candidate, best, previous?.spot.id)) best = candidate;
+    if (best == null || _outranks(candidate, best, previous?.spot.id, margin)) best = candidate;
   }
   return best;
 }
 
 ProximityLevel? _levelFor(double distance, ProximityLevel? wasLevel) {
-  final verifyLimit = wasLevel == ProximityLevel.verifiable
-      ? SpotProximity.verifyExitMeters
-      : SpotProximity.verifyEnterMeters;
+  final verifyLimit =
+      wasLevel == ProximityLevel.verifiable ? SpotProximity.verifyExitMeters : SpotProximity.verifyEnterMeters;
   if (distance <= verifyLimit) return ProximityLevel.verifiable;
   final nearLimit = wasLevel != null ? SpotProximity.nearExitMeters : SpotProximity.nearEnterMeters;
   if (distance <= nearLimit) return ProximityLevel.near;
   return null;
 }
 
-bool _outranks(SpotProximity a, SpotProximity b, int? previousSpotId) {
+bool _outranks(SpotProximity a, SpotProximity b, int? previousSpotId, double margin) {
   if (a.level != b.level) return a.level.index > b.level.index;
   if (a.level == ProximityLevel.verifiable) {
-    // 인증 단계: 알리던 스팟이라도 다른 스팟이 여유(20m) 이상 더 가까우면 넘겨준다.
-    const margin = SpotProximity.verifySwitchMarginMeters;
+    // 인증 단계: 알리던 스팟이라도 다른 스팟이 여유(20m, 정확도가 나쁘면 그만큼) 이상 더 가까우면 넘겨준다.
     if (b.spot.id == previousSpotId) return a.distanceMeters + margin < b.distanceMeters;
     if (a.spot.id == previousSpotId) return b.distanceMeters + margin >= a.distanceMeters;
     return a.distanceMeters < b.distanceMeters;

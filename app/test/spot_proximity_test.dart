@@ -21,6 +21,7 @@ SpotProximity? _at(
   List<Spot> spots, {
   SpotProximity? previous,
   Set<int> visited = const {},
+  double? accuracy,
 }) =>
     resolveSpotProximity(
       candidates: spots,
@@ -28,6 +29,7 @@ SpotProximity? _at(
       lng: _baseLng,
       visitedSpotIds: visited,
       previous: previous,
+      accuracyMeters: accuracy,
     );
 
 void main() {
@@ -116,6 +118,16 @@ void main() {
       final previous = _at(10, [a, b]); // A
       // 북쪽 45m → A 45m · B 35m. 10m 차이는 여유(20m) 안이라 A 유지.
       expect(_at(45, [a, b], previous: previous)!.spot.id, 1);
+    });
+
+    test('GPS 정확도가 나쁘면 그만큼 여유를 둔다 — 실내에서 30m 떨어진 두 스팟이 번갈아 뜨지 않게', () {
+      final a = _spot(1);
+      final b = _spot(2, northMeters: 80);
+      final previous = _at(10, [a, b]); // A
+      // 북쪽 70m → A 70m · B 10m. 60m 차이지만 정확도가 80m 면 여유 안이라 A 유지.
+      expect(_at(70, [a, b], previous: previous, accuracy: 80)!.spot.id, 1);
+      // 정확도가 좋으면(10m) 기본 여유 20m 라 B 로 바꾼다.
+      expect(_at(70, [a, b], previous: previous, accuracy: 10)!.spot.id, 2);
     });
 
     test('알리던 스팟이 후보에서 빠지면 조용히 사라진다', () {

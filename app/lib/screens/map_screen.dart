@@ -421,6 +421,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
             lng: lng,
             visitedSpotIds: _visitedSpotIds,
             previous: previous,
+            accuracyMeters: _myAccuracy,
           );
 
     final becameVerifiable = next != null &&
