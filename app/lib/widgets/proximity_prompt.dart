@@ -293,8 +293,10 @@ class _VerifyBeaconState extends State<_VerifyBeacon> with SingleTickerProviderS
               const SizedBox(height: AppSpacing.xxs),
               // «근처» 카드(_NearCardContent)와 같은 옷 — 연파랑 바탕·파란 테두리·같은 높이.
               // 두 단계가 같은 카드의 문구만 바뀐 것으로 읽히게.
+              // 폭은 문구만큼만 — 화면 폭으로 늘리면 글 오른쪽이 비어 보인다(시진, 09-14).
+              // 오른쪽 끝(카메라 아래)에 붙는 건 Column 의 end 정렬이 한다.
               Container(
-                width: cardWidth,
+                constraints: BoxConstraints(maxWidth: cardWidth),
                 height: _cardHeight,
                 padding: const EdgeInsets.fromLTRB(AppSpacing.sm, 6, AppSpacing.sm, 6),
                 decoration: BoxDecoration(
@@ -305,9 +307,11 @@ class _VerifyBeaconState extends State<_VerifyBeacon> with SingleTickerProviderS
                 ),
                 // 카드 안에는 아이콘을 두지 않는다 — 카메라는 바로 위 맥박 원이 이미 하나다.
                 child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Expanded(
+                    Flexible(
                       child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
