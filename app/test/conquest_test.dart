@@ -79,6 +79,24 @@ void _sidoTests() {
     expect(gyeongbuk.totalSpots, 24);
   });
 
+  test('코드와 주소가 어긋난 소수 스팟이 있어도 코드는 «다수» 시/도의 것이다', () {
+    // 코드 34(충남) 안에 주소가 「대전」인 시/군/구가 소수 섞여 있고, 주소 없는 그룹도 있다.
+    final sidos = aggregateBySido([
+      _region('34-1', '충청남도 천안시', 800, 8),
+      _region('34-2', '대전광역시 유성구', 20, 0), // 코드는 충남인데 주소는 대전
+      _region('34-9', '34-9', 180, 0), // 주소 없음
+      _region('3-1', '대전광역시 서구', 300, 3),
+    ]);
+    final chungnam = sidos.singleWhere((s) => s.sidoName == '충청남도');
+    final daejeon = sidos.singleWhere((s) => s.sidoName == '대전광역시');
+    // 코드 34 는 통째로 충남 — 어긋난 20개와 주소 없는 180개까지.
+    expect(chungnam.areaCodes, ['34']);
+    expect(chungnam.totalSpots, 1000);
+    // 대전은 자기 코드(3)만. 코드 34 가 끼어들지 않는다.
+    expect(daejeon.areaCodes, ['3']);
+    expect(daejeon.totalSpots, 300);
+  });
+
   test('같은 코드의 이름 있는 시/도가 아예 없을 때만 코드 배지로 남는다', () {
     final sidos = aggregateBySido([
       _region('39-1', '39-1', 5, 0),
