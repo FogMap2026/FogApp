@@ -90,7 +90,8 @@ class _NearMorph extends StatelessWidget {
 
   static const _circle = 52.0;
 
-  static const _cardHeight = 76.0;
+  /// 제목 한 줄 + 부제 두 줄(거리 / 안내)이 들어가는 높이.
+  static const _cardHeight = 84.0;
   static const _duration = Duration(milliseconds: 360);
 
   @override
@@ -205,10 +206,12 @@ class _NearCardContent extends StatelessWidget {
                   alignment: Alignment.centerLeft,
                   child: Text('${proximity.spot.title} 근처예요', style: theme.textTheme.titleSmall, maxLines: 1),
                 ),
+                // 거리 뒤에서 줄을 바꾼다 — 한 줄에 넣으면 좁은 폰에서 「인증할…」로 잘렸다(시진, 09-14).
                 Text(
-                  '약 ${distance}m · ${verifyMeters}m 안으로 가면 인증할 수 있어요',
+                  '약 ${distance}m
+${verifyMeters}m 안으로 가면 인증할 수 있어요',
                   style: theme.textTheme.bodySmall?.copyWith(color: AppColors.inkMuted, height: 1.3),
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
               ],
