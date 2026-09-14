@@ -14,6 +14,7 @@ import '../services/character_overlay.dart';
 import '../services/conquest_service.dart';
 import '../services/fog_location_tracker.dart';
 import '../services/fog_overlay_controller.dart';
+import '../services/province_boundary_overlay.dart';
 import '../services/journey_service.dart';
 import '../services/footprint_location_gate.dart';
 import '../services/footprint_marker_controller.dart';
@@ -103,6 +104,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   NaverMapController? _controller;
   StreamSubscription<OnCameraChangedParams>? _cameraSubscription;
   FogOverlayController? _fogOverlay;
+  ProvinceBoundaryOverlay? _provinceBoundary;
   SpotMarkerController? _spotMarkers;
   FootprintMarkerController? _footprintMarkers;
   SpotGeofenceController? _geofence;
@@ -239,6 +241,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     _geofenceExitSubscription?.cancel();
     _travelerShareTimer?.cancel();
     _fogOverlay?.dispose();
+    _provinceBoundary?.dispose();
     _spotMarkers?.dispose();
     _footprintMarkers?.dispose();
     _geofence?.dispose();
@@ -679,6 +682,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     final locationTracker = FogLocationTracker();
     controller.setMyLocationTracker(locationTracker);
     _fogOverlay = await FogOverlayController.attach(controller);
+    // 시/도 경계선 — 탐험 현황의 배지·단계구분도와 같은 경계를 지도에도 보인다.
+    unawaited(_attachProvinceBoundary(controller));
     // 걸어온 자리를 서버에서 되살린다(#131). 인증 안개를 GET /api/visits 로 복원하는
     // 것(_loadVisitedSpots)과 같은 자리다 — 오버레이가 붙은 «뒤»라야 구멍을 낼 수 있다.
     unawaited(_restoreJourney());
@@ -794,6 +799,20 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   /// 정복률(#51)을 시/도로 합산한 것. 새로 받을 때만 다시 만든다 —
   /// build 마다 합산하면 매 프레임 목록을 훑는다.
   List<ConquestSido> _conquestBySido = const [];
+
+  Future<void> _attachProvinceBoundary(NaverMapController controller) async {
+    try {
+      final overlay = await ProvinceBoundaryOverlay.attach(controller);
+      if (!mounted) {
+        overlay.dispose();
+        return;
+      }
+      _provinceBoundary = overlay;
+    } catch (e) {
+      // 경계선은 장식이다 — 못 그려도 지도는 그대로 쓴다.
+      debugPrint('[MapScreen] 시/도 경계선 실패: $e');
+    }
+  }
 
   void _onCameraChanged(OnCameraChangedParams params) {
     // 줌 임계값에 따른 발자취 표시/숨김(#117)은 카메라가 멈추기 전에도 즉시
