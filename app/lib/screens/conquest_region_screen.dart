@@ -226,31 +226,56 @@ class _ImagePlaceholder extends StatelessWidget {
 /// 보여주지 않고, 몇 개가 남았는지만 물음표 타일로 알려준다. 탭해도 아무 일도 하지
 /// 않는다 — 잠긴 스팟은 [SpotDetailScreen]도 정보 없이 "밝혀지지 않았다"는 안내만
 /// 보여주므로, 여기서 굳이 그 화면을 또 열게 할 이유가 없다.
+///
+/// 🔴 **타일은 [maxTiles] 개까지만 그린다.** 부모가 스크롤하는 `ListView` 안이라
+/// `shrinkWrap` 을 쓰는데, 그러면 화면 밖 타일까지 전부 한 번에 만든다. 시/군/구 단위일
+/// 때는 수십 개라 괜찮았지만 시/도 단위(#217)에서는 경기도만 해도 수천 개다. 물음표
+/// 타일이 몇천 개여도 전하는 정보는 «남은 개수» 하나라, 개수는 글자로 알리고 타일은 자른다.
 class _LockedSpotGrid extends StatelessWidget {
   const _LockedSpotGrid({required this.count});
 
   final int count;
 
+  /// 5열 × 6행. 한 화면에 들어오고, «아직 많이 남았다»는 인상은 충분히 준다.
+  static const maxTiles = 30;
+
   @override
   Widget build(BuildContext context) {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: count,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 5,
-        mainAxisSpacing: AppSpacing.xs,
-        crossAxisSpacing: AppSpacing.xs,
-        childAspectRatio: 1,
-      ),
-      itemBuilder: (context, index) => DecoratedBox(
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(AppRadii.sm),
-          border: Border.all(color: AppColors.hairline),
+    final theme = Theme.of(context);
+    final shown = count < maxTiles ? count : maxTiles;
+    final hidden = count - shown;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: shown,
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 5,
+            mainAxisSpacing: AppSpacing.xs,
+            crossAxisSpacing: AppSpacing.xs,
+            childAspectRatio: 1,
+          ),
+          itemBuilder: (context, index) => DecoratedBox(
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(AppRadii.sm),
+              border: Border.all(color: AppColors.hairline),
+            ),
+            child: const Icon(Icons.help_outline, color: AppColors.inkFaint, size: 20),
+          ),
         ),
-        child: const Icon(Icons.help_outline, color: AppColors.inkFaint, size: 20),
-      ),
+        if (hidden > 0)
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpacing.xs),
+            child: Text(
+              '외 $hidden곳이 더 안개 속에 있어요',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall?.copyWith(color: AppColors.inkMuted),
+            ),
+          ),
+      ],
     );
   }
 }
