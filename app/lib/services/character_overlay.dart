@@ -81,20 +81,22 @@ class _CharacterPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final width = size.width;
     final height = size.height;
-    final center = Offset(width / 2, height * 0.62);
-    final radius = width * 0.2;
+    // 원이 몸통, 삼각형은 그 위에 얹힌 작은 방향 표시 — 처음엔 삼각형이 원만큼 커서
+    // 「화살표」로 읽혔다(시진, 09-14). 원 지름 ≈ 아이콘 폭의 56%, 삼각형 폭 ≈ 26%.
+    final center = Offset(width / 2, height * 0.6);
+    final radius = width * 0.28;
 
     // 위(북쪽)를 향한 삼각형 — 회전은 SDK 가 bearing 으로 처리한다.
     final arrow = Path()
-      ..moveTo(width / 2, height * 0.1)
-      ..lineTo(width * 0.72, height * 0.46)
-      ..lineTo(width * 0.28, height * 0.46)
+      ..moveTo(width / 2, height * 0.06)
+      ..lineTo(width * 0.63, height * 0.33)
+      ..lineTo(width * 0.37, height * 0.33)
       ..close();
 
     final outline = Paint()
       ..color = _outlineColor
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 4
+      ..strokeWidth = 3
       ..strokeJoin = StrokeJoin.round;
     canvas.drawPath(arrow, outline);
     canvas.drawCircle(center, radius, outline);
