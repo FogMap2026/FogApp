@@ -116,10 +116,12 @@ class _ConquestRegionScreenState extends ConsumerState<ConquestRegionScreen> {
 
                   final muted = theme.textTheme.bodyMedium?.copyWith(color: AppColors.inkMuted);
                   final query = _query.trim();
-                  // 검색 중이면 접기를 풀고 이름으로 거른 평평한 목록. 시/도당 1000개를
-                  // 스크롤로 훑게 하지 않는다(시진, 09-14).
-                  final matched =
-                      query.isEmpty ? const <Spot>[] : locked.where((s) => s.title.contains(query)).toList();
+                  // 검색은 밝힌 것·안 밝힌 것 «둘 다» 거른다. 검색 중이면 시/군/구 접기를
+                  // 풀고 이름으로 거른 평평한 목록 — 시/도당 1000개를 스크롤로 훑게 하지
+                  // 않는다(시진, 09-14).
+                  bool hit(Spot s) => query.isEmpty || s.title.contains(query);
+                  final shownUnlocked = unlocked.where(hit).toList();
+                  final shownLocked = locked.where(hit).toList();
                   final groups = query.isEmpty ? _groupBySigungu(locked) : const <_SigunguGroup>[];
 
                   return CustomScrollView(
@@ -128,24 +130,7 @@ class _ConquestRegionScreenState extends ConsumerState<ConquestRegionScreen> {
                         padding: const EdgeInsets.all(AppSpacing.md),
                         sliver: SliverList.list(
                           children: [
-                            Text('밝힌 스팟 (${unlocked.length})', style: theme.textTheme.titleMedium),
-                            const SizedBox(height: AppSpacing.xs),
-                            if (unlocked.isEmpty)
-                              Padding(
-                                padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-                                child: Text('아직 밝힌 스팟이 없어요.', style: muted),
-                              )
-                            else
-                              ...unlocked.map((s) => _UnlockedSpotTile(spot: s)),
-                            const SizedBox(height: AppSpacing.lg),
-                            Text('밝혀지지 않은 스팟 (${locked.length})', style: theme.textTheme.titleMedium),
-                            const SizedBox(height: AppSpacing.xs),
-                            if (locked.isEmpty)
-                              Padding(
-                                padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-                                child: Text('이 지역 스팟을 전부 밝혔어요 🎉', style: muted),
-                              )
-                            else ...[
+                            if (spots.isNotEmpty) ...[
                               TextField(
                                 onChanged: (v) => setState(() => _query = v),
                                 decoration: InputDecoration(
@@ -160,13 +145,31 @@ class _ConquestRegionScreenState extends ConsumerState<ConquestRegionScreen> {
                                   ),
                                 ),
                               ),
-                              const SizedBox(height: AppSpacing.xs),
-                              if (query.isNotEmpty && matched.isEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-                                  child: Text('「$query」에 맞는 스팟이 없어요.', style: muted),
-                                ),
+                              const SizedBox(height: AppSpacing.md),
                             ],
+                            Text(
+                              query.isEmpty ? '밝힌 스팟 (${unlocked.length})' : '밝힌 스팟 (${shownUnlocked.length})',
+                              style: theme.textTheme.titleMedium,
+                            ),
+                            const SizedBox(height: AppSpacing.xs),
+                            if (shownUnlocked.isEmpty)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+                                child: Text(query.isEmpty ? '아직 밝힌 스팟이 없어요.' : '맞는 스팟이 없어요.', style: muted),
+                              )
+                            else
+                              ...shownUnlocked.map((s) => _UnlockedSpotTile(spot: s)),
+                            const SizedBox(height: AppSpacing.lg),
+                            Text(
+                              query.isEmpty ? '밝혀지지 않은 스팟 (${locked.length})' : '밝혀지지 않은 스팟 (${shownLocked.length})',
+                              style: theme.textTheme.titleMedium,
+                            ),
+                            const SizedBox(height: AppSpacing.xs),
+                            if (shownLocked.isEmpty)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+                                child: Text(query.isEmpty ? '이 지역 스팟을 전부 밝혔어요 🎉' : '맞는 스팟이 없어요.', style: muted),
+                              ),
                           ],
                         ),
                       ),
@@ -174,8 +177,8 @@ class _ConquestRegionScreenState extends ConsumerState<ConquestRegionScreen> {
                         SliverPadding(
                           padding: const EdgeInsets.fromLTRB(AppSpacing.md, 0, AppSpacing.md, AppSpacing.lg),
                           sliver: SliverList.builder(
-                            itemCount: matched.length,
-                            itemBuilder: (context, i) => _LockedSpotTile(spot: matched[i]),
+                            itemCount: shownLocked.length,
+                            itemBuilder: (context, i) => _LockedSpotTile(spot: shownLocked[i]),
                           ),
                         )
                       else
