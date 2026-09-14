@@ -70,7 +70,7 @@ void main() {
 
     // 15m 격자에서는 다른 칸
     expect(fogTrailKey(p, 15), isNot(fogTrailKey(seoul, 15)));
-    // 150m 격자(인증 반경)에서는 같은 칸 — 반경이 곧 칸 크기라는 관계를 고정한다
+    // 150m 격자에서는 같은 칸
     expect(fogTrailKey(p, 150), fogTrailKey(seoul, 150));
   });
 

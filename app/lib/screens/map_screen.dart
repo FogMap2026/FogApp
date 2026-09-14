@@ -171,7 +171,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
 
   /// 이미 인증한 스팟 id 목록(#46) — 이 스팟들은 반경에 들어와도 알리지 않는다.
   Set<int> _visitedSpotIds = const {};
-  /// 이미 인증한 스팟의 좌표(#117) — 해금된 스팟 반경(150m) 안에 있는지 판정해
+  /// 이미 인증한 스팟의 좌표(#117) — 해금된 스팟의 안개 걷힘 반경 안에 있는지 판정해
   /// 발자취 조회 반경을 넓히는 데 쓴다.
   Map<int, NLatLng> _visitedSpotCoords = const {};
   /// 이번 앱 실행 세션에서 이미 알림을 띄운 스팟(#46) — 같은 스팟에 재진입해도
@@ -319,7 +319,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       // (FogLocationTracker.locationSettings) 갱신마다 15m 원을 뚫으면 원들이
       // 맞닿아 끊기지 않는 길이 된다.
       //
-      // ⚠️ 인증(150m)과 «다른 축»이다 — 이건 지나간 자리 표시일 뿐 정복률에는
+      // ⚠️ 인증(스팟 반경)과 «다른 축»이다 — 이건 지나간 자리 표시일 뿐 정복률에는
       //    영향이 없다. 걸어서 걷힌 안개가 정복으로 세어지면 사진 인증을 할 이유가
       //    없어진다(planning.md 3장 「도달 → 인증 → 해제」).
       //
@@ -353,9 +353,10 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     });
   }
 
-  /// 해금된(방문 인증한) 스팟의 안개 걷힘 반경(150m) 안에 있는지(#117) — 발자취
-  /// 조회 반경을 50m에서 150m로 넓힐지 판단하는 데 쓴다(문서 3-3).
-  static const _unlockedSpotRadiusMeters = 150.0;
+  /// 해금된(방문 인증한) 스팟의 안개 걷힘 반경 안에 있는지(#117) — 발자취 조회 반경을
+  /// 50m에서 넓힐지 판단하는 데 쓴다(문서 3-3). 안개가 걷힌 곳과 같은 값을 쓴다 —
+  /// 「밝힌 동네」 안이면 발자취도 넓게 보인다.
+  static const _unlockedSpotRadiusMeters = FogOverlayController.spotRadiusMeters;
 
   bool _isInsideUnlockedSpot(double lat, double lng) {
     for (final coord in _visitedSpotCoords.values) {

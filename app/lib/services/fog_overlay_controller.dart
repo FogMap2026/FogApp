@@ -111,17 +111,22 @@ class FogOverlayController {
   /// 눈금도 같이 커져 점 사이가 벌어지고 길이 끊긴다.
   static const trailCellMeters = 15.0;
 
-  /// 걸어온 자리를 걷어낼 반경. 15m 점마다 50m 원을 뚫으면 원들이 크게 겹쳐
-  /// 폭 100m 의 띠가 된다 — 걸은 길뿐 아니라 그 양옆 건물 한 줄까지 보인다.
+  /// 걸어온 자리를 걷어낼 반경. 15m 점마다 100m 원을 뚫으면 원들이 크게 겹쳐
+  /// 폭 200m 의 띠가 된다 — 걸은 길뿐 아니라 그 양옆 블록까지 보인다. 50m 로 시작했는데
+  /// 실기기에서 「지나간 길만 실처럼 걷힌다」고 느껴져 두 배로(시진, 09-15).
   ///
   /// 겹침은 [_Landmass] 가 격자 합집합으로 풀어 «구멍의 구멍»이 생기지 않는다 —
   /// 원을 구멍으로 그대로 뚫으면 폴리곤이 짝홀(even-odd)로 채워져 겹친 자리가
   /// 도로 안개가 된다.
-  static const trailRadiusMeters = 50.0;
+  static const trailRadiusMeters = 100.0;
+
+  /// 방문 인증한 스팟 둘레를 걷어낼 반경. 인증은 스팟 100m 안에서만 되니 이 원은
+  /// 「그 동네를 밝혔다」는 보상이다 — 150m 는 스팟 마당만 보여 500m 로(시진, 09-15).
+  static const spotRadiusMeters = 500.0;
 
   /// 걸어온 자리의 안개를 걷어낸다.
   ///
-  /// **인증(150m)과 다른 축이다.** 이건 「지나간 자리」 표시일 뿐이고 **정복률에는
+  /// **인증([spotRadiusMeters])과 다른 축이다.** 이건 「지나간 자리」 표시일 뿐이고 **정복률에는
   /// 영향이 없다** — 정복률은 서버가 `visits` 로 계산한다(`GET /api/conquest`).
   /// 걸어서 걷힌 안개가 정복으로 세어지면 사진 인증을 할 이유가 없어진다.
   ///
@@ -168,7 +173,7 @@ class FogOverlayController {
   ///
   /// [center]를 포함하는 landmass 폴리곤을 찾아 그 폴리곤에만 구멍을 낸다.
   /// 어떤 landmass에도 속하지 않으면(예: 좌표 오차로 해안선 바로 바깥) 아무 일도 하지 않는다.
-  void clearCircle(String spotId, NLatLng center, {double radiusMeters = 150}) {
+  void clearCircle(String spotId, NLatLng center, {double radiusMeters = spotRadiusMeters}) {
     final landmass = _landmassFor(center);
     landmass._addHole(spotId, center, radiusMeters: radiusMeters);
     landmass._applyHoles();
@@ -181,7 +186,7 @@ class FogOverlayController {
   /// 목록을 다시 지도에 보내므로(`setHoles`), 스팟이 많아질수록(수백 개) 총 비용이
   /// O(n²)로 늘어난다. 여기서는 구멍을 모두 계산해 landmass별로 모아둔 뒤,
   /// landmass 하나당 `setHoles`를 **한 번만** 호출해 O(n)으로 끝낸다.
-  void clearCircles(Map<String, NLatLng> spots, {double radiusMeters = 150}) {
+  void clearCircles(Map<String, NLatLng> spots, {double radiusMeters = spotRadiusMeters}) {
     final touched = <_Landmass>{};
     for (final entry in spots.entries) {
       final landmass = _landmassFor(entry.value);
@@ -201,7 +206,7 @@ class FogOverlayController {
   Future<void> clearCircleAnimated(
     String spotId,
     NLatLng center, {
-    double radiusMeters = 150,
+    double radiusMeters = spotRadiusMeters,
     Duration duration = const Duration(milliseconds: 600),
     int steps = 12,
   }) async {
