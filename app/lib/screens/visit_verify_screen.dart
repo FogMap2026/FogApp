@@ -294,9 +294,11 @@ class _VisitVerifyScreenState extends ConsumerState<VisitVerifyScreen> {
               Expanded(
                 child: OutlinedButton(
                   onPressed: _retake,
-                  // 검은 바탕 위라 기본(파란 글자·회색 테두리)은 묻힌다 — 흰 글자·흰 테두리.
+                  // 검은 바탕 위라 테마 기본(흰 바탕·검정 글자)은 흰 덩어리로만 보인다 —
+                  // 바탕을 비우고 흰 글자·흰 테두리로(시진, 실기기 09-15).
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.white,
+                    backgroundColor: Colors.transparent,
                     side: const BorderSide(color: Colors.white70),
                   ),
                   child: const Text('다시 찍기'),
