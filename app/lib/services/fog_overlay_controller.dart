@@ -54,8 +54,7 @@ const double trailMaxAccuracyMeters = 50.0;
 ///
 /// 화면 표시(지오펜스·발자취 마커)는 이 판정 «밖»이다 — 그건 튀어도 다음 갱신에
 /// 되돌아오지만, 저장되는 것은 안 되돌아온다.
-bool isTrailWorthyAccuracy(double accuracyMeters) =>
-    accuracyMeters > 0 && accuracyMeters <= trailMaxAccuracyMeters;
+bool isTrailWorthyAccuracy(double accuracyMeters) => accuracyMeters > 0 && accuracyMeters <= trailMaxAccuracyMeters;
 
 /// 대한민국 해안선 모양을 따라가는 안개 오버레이를 관리한다.
 ///
@@ -85,29 +84,31 @@ class FogOverlayController {
   static Future<FogOverlayController> attach(NaverMapController mapController) async {
     final raw = await rootBundle.loadString(_boundaryAssetPath);
     final rings = (jsonDecode(raw) as List).cast<List>().map((ring) {
-      return ring
-          .cast<List>()
-          .map((p) => NLatLng((p[0] as num).toDouble(), (p[1] as num).toDouble()))
-          .toList();
+      return ring.cast<List>().map((p) => NLatLng((p[0] as num).toDouble(), (p[1] as num).toDouble())).toList();
     }).toList();
 
     final landmasses = [
-      for (var i = 0; i < rings.length; i++) _Landmass(index: i, outerRing: rings[i]),
+      for (var i = 0; i < rings.length; i++) _Landmass(index: i, outerRing: rings[i], mapController: mapController),
     ];
 
     await mapController.addOverlayAll(landmasses.map((l) => l.overlay).toSet());
     return FogOverlayController._(mapController, landmasses);
   }
 
-  /// 걸어온 자리를 걷어낼 반경. 위치 스트림의 `distanceFilter`(15m)와 «같은 값»이다 —
-  /// 갱신마다 15m 원을 뚫으면 원들이 서로 맞닿아 끊기지 않는 길이 된다. 더 작으면
-  /// 점선이 되고, 더 크면 걷지 않은 골목까지 걷힌다.
-  static const trailRadiusMeters = 15.0;
+  /// 궤적 점을 «같은 자리»로 묶는 격자 크기. 위치 스트림의 `distanceFilter`(15m)와
+  /// 같은 값이다 — 스트림이 15m 마다 한 점을 주므로, 15m 칸이면 같은 자리를 두 번 밟아도
+  /// 점이 하나다([fogTrailKey]). [trailRadiusMeters] 와는 «다른 값»이다: 이건 중복을
+  /// 거르는 눈금이고, 저건 얼마나 넓게 걷어낼지다. 둘을 같은 값으로 두면 반경을 키울 때
+  /// 눈금도 같이 커져 점 사이가 벌어지고 길이 끊긴다.
+  static const trailCellMeters = 15.0;
 
-  /// 궤적 원의 분할 수. 인증 원(48)보다 성기게 잡는다 — 반경 15m 에서 12분할이면
-  /// 실제 원과의 오차가 **0.5m** 라 화면에서 구분되지 않는데, 좌표 수는 1/4 이다.
-  /// 궤적은 개수가 계속 늘어나므로 하나당 비용이 그대로 총량이 된다.
-  static const _trailSegments = 12;
+  /// 걸어온 자리를 걷어낼 반경. 15m 점마다 50m 원을 뚫으면 원들이 크게 겹쳐
+  /// 폭 100m 의 띠가 된다 — 걸은 길뿐 아니라 그 양옆 건물 한 줄까지 보인다.
+  ///
+  /// 겹침은 [_Landmass] 가 격자 합집합으로 풀어 «구멍의 구멍»이 생기지 않는다 —
+  /// 원을 구멍으로 그대로 뚫으면 폴리곤이 짝홀(even-odd)로 채워져 겹친 자리가
+  /// 도로 안개가 된다.
+  static const trailRadiusMeters = 50.0;
 
   /// 걸어온 자리의 안개를 걷어낸다.
   ///
@@ -128,9 +129,9 @@ class FogOverlayController {
   /// 여기서 업로드까지 하면 복원 경로(`clearTrails`)가 방금 받은 점을 도로 올린다.
   void clearTrail(NLatLng center, {double radiusMeters = trailRadiusMeters}) {
     final landmass = _landmassFor(center);
-    final key = fogTrailKey(center, radiusMeters);
+    final key = fogTrailKey(center, trailCellMeters);
     if (landmass._hasHole(key)) return;
-    landmass._addHole(key, center, radiusMeters: radiusMeters, segments: _trailSegments);
+    landmass._addHole(key, center, radiusMeters: radiusMeters);
     landmass._applyHoles();
   }
 
@@ -144,9 +145,9 @@ class FogOverlayController {
     final touched = <_Landmass>{};
     for (final center in centers) {
       final landmass = _landmassFor(center);
-      final key = fogTrailKey(center, radiusMeters);
+      final key = fogTrailKey(center, trailCellMeters);
       if (landmass._hasHole(key)) continue;
-      landmass._addHole(key, center, radiusMeters: radiusMeters, segments: _trailSegments);
+      landmass._addHole(key, center, radiusMeters: radiusMeters);
       touched.add(landmass);
     }
     for (final landmass in touched) {
@@ -158,9 +159,9 @@ class FogOverlayController {
   ///
   /// [center]를 포함하는 landmass 폴리곤을 찾아 그 폴리곤에만 구멍을 낸다.
   /// 어떤 landmass에도 속하지 않으면(예: 좌표 오차로 해안선 바로 바깥) 아무 일도 하지 않는다.
-  void clearCircle(String spotId, NLatLng center, {double radiusMeters = 150, int segments = 48}) {
+  void clearCircle(String spotId, NLatLng center, {double radiusMeters = 150}) {
     final landmass = _landmassFor(center);
-    landmass._addHole(spotId, center, radiusMeters: radiusMeters, segments: segments);
+    landmass._addHole(spotId, center, radiusMeters: radiusMeters);
     landmass._applyHoles();
   }
 
@@ -171,11 +172,11 @@ class FogOverlayController {
   /// 목록을 다시 지도에 보내므로(`setHoles`), 스팟이 많아질수록(수백 개) 총 비용이
   /// O(n²)로 늘어난다. 여기서는 구멍을 모두 계산해 landmass별로 모아둔 뒤,
   /// landmass 하나당 `setHoles`를 **한 번만** 호출해 O(n)으로 끝낸다.
-  void clearCircles(Map<String, NLatLng> spots, {double radiusMeters = 150, int segments = 48}) {
+  void clearCircles(Map<String, NLatLng> spots, {double radiusMeters = 150}) {
     final touched = <_Landmass>{};
     for (final entry in spots.entries) {
       final landmass = _landmassFor(entry.value);
-      landmass._addHole(entry.key, entry.value, radiusMeters: radiusMeters, segments: segments);
+      landmass._addHole(entry.key, entry.value, radiusMeters: radiusMeters);
       touched.add(landmass);
     }
     for (final landmass in touched) {
@@ -192,7 +193,6 @@ class FogOverlayController {
     String spotId,
     NLatLng center, {
     double radiusMeters = 150,
-    int segments = 48,
     Duration duration = const Duration(milliseconds: 600),
     int steps = 12,
   }) async {
@@ -200,7 +200,7 @@ class FogOverlayController {
     final stepDelay = duration ~/ steps;
     for (var i = 1; i <= steps; i++) {
       if (_disposed) return;
-      landmass._addHole(spotId, center, radiusMeters: radiusMeters * i / steps, segments: segments);
+      landmass._addHole(spotId, center, radiusMeters: radiusMeters * i / steps);
       landmass._applyHoles();
       if (i < steps) await Future.delayed(stepDelay);
     }
@@ -235,11 +235,31 @@ class FogOverlayController {
 }
 
 class _Landmass {
-  _Landmass({required this.index, required this.outerRing});
+  _Landmass({required this.index, required this.outerRing, required NaverMapController mapController})
+      : _mapController = mapController;
 
   final int index;
   final List<NLatLng> outerRing;
-  final Map<String, List<NLatLng>> _clearedHoles = {};
+  final NaverMapController _mapController;
+
+  /// 걷힌 자리 — «격자 셀의 합집합». 셀 키 → 그 셀을 덮는 원의 수(참조 카운트).
+  ///
+  /// 원마다 구멍을 하나씩 뚫지 않는 이유: 폴리곤은 구멍을 짝홀(even-odd)로 채워서
+  /// **구멍 둘이 겹친 자리는 도로 안개가 된다**(구멍의 구멍). 15m 마다 50m 원을
+  /// 뚫으면 거의 전부 겹치므로 길이 통째로 안개가 됐다. 합집합으로 들고 외곽선만
+  /// 구멍으로 내면 겹침 자체가 없다.
+  final Map<int, int> _cellCount = {};
+
+  /// 지웠다 되돌릴 수 있어야 하는 것(스팟 — 인증 연출 중 반경이 자라고 [reFog] 가
+  /// 있다)만 어느 셀을 덮었는지 기억한다. 궤적은 되돌릴 일이 없어 키만 남긴다 —
+  /// 하루치 궤적 수천 점의 셀 목록을 다 들고 있으면 메모리가 수십 MB 다.
+  final Map<String, List<int>> _spotCells = {};
+  final Set<String> _trailKeys = {};
+
+  /// 안개 «섬» — 걷힌 띠가 고리를 이루면 그 안쪽은 안개로 남아야 하는데, 폴리곤은
+  /// 「구멍 안의 채움」을 표현하지 못한다. 그런 섬은 따로 작은 안개 폴리곤으로 올린다.
+  final List<NPolygonOverlay> _islands = [];
+  int _islandSerial = 0;
 
   late final NPolygonOverlay overlay = NPolygonOverlay(
     id: 'fog-landmass-$index',
@@ -247,36 +267,72 @@ class _Landmass {
     color: FogOverlayController.fogColor,
   );
 
-  bool _hasHole(String key) => _clearedHoles.containsKey(key);
+  bool _hasHole(String key) => _trailKeys.contains(key) || _spotCells.containsKey(key);
 
-  /// 구멍을 계산해 저장만 한다 — 지도에는 반영하지 않는다. 여러 스팟을 모아 한 번에
-  /// [_applyHoles]하려는 호출자([FogOverlayController.clearCircles])를 위한 분리.
-  void _addHole(String spotId, NLatLng center, {required double radiusMeters, required int segments}) {
-    _clearedHoles[spotId] = _circleRing(center, radiusMeters, segments);
+  /// 원을 격자에 굽는다(저장만). 같은 [key] 가 있으면 그 원을 먼저 걷어낸다 —
+  /// 인증 연출([FogOverlayController.clearCircleAnimated])이 반경을 키우며 다시 부른다.
+  void _addHole(String key, NLatLng center, {required double radiusMeters}) {
+    if (key.startsWith('trail:')) {
+      _trailKeys.add(key);
+      for (final cell in FogGrid.cellsInCircle(center, radiusMeters)) {
+        _cellCount.update(cell, (n) => n + 1, ifAbsent: () => 1);
+      }
+      return;
+    }
+    _releaseSpot(key);
+    final cells = FogGrid.cellsInCircle(center, radiusMeters);
+    for (final cell in cells) {
+      _cellCount.update(cell, (n) => n + 1, ifAbsent: () => 1);
+    }
+    _spotCells[key] = cells;
   }
 
-  /// [_addHole]로 쌓인 구멍 전체를 지도에 한 번에 반영한다.
-  ///
-  /// ⚠️ **`.toList()`를 빼지 말 것.** `setHoles`의 시그니처는 `Iterable`을 받지만,
-  /// 플러그인 내부 직렬화(`NPayload.convertToMessageable`)는 `List`만 처리하고 그 밖의
-  /// `Iterable`은 `ArgumentError`로 던진다. `Map.values`는 지연 뷰
-  /// (`_CompactValuesIterable`)라 여기에 걸린다.
-  ///
-  /// 그런데 `setHoles` → `_set`이 `void ... async`라 **그 예외가 앱을 죽이지도, 화면에
-  /// 드러나지도 않는다.** 안개가 그냥 안 걷히기만 한다 — 실기기 로그를 보기 전까지
-  /// 원인을 알 수 없었다.
-  void _applyHoles() {
-    overlay.setHoles(_clearedHoles.values.toList());
-  }
-
-  void reFog(String spotId) {
-    if (_clearedHoles.remove(spotId) != null) {
-      // 위와 같은 이유로 .toList()가 필요하다.
-      overlay.setHoles(_clearedHoles.values.toList());
+  void _releaseSpot(String key) {
+    final cells = _spotCells.remove(key);
+    if (cells == null) return;
+    for (final cell in cells) {
+      final n = _cellCount[cell];
+      if (n == null) continue;
+      if (n <= 1) {
+        _cellCount.remove(cell);
+      } else {
+        _cellCount[cell] = n - 1;
+      }
     }
   }
 
-  /// 좌표가 이 landmass 폴리곤 내부에 있는지 레이 캐스팅(ray casting)으로 판정한다.
+  /// 합집합의 외곽선을 구멍으로 보낸다. 안쪽에 남은 안개 섬은 별도 폴리곤으로.
+  ///
+  /// ⚠️ `setHoles` 에는 **`List`** 를 넘겨야 한다 — 플러그인 직렬화가 `Iterable` 을
+  /// 받지 못하고, 그 예외는 `void async` 안에서 삼켜져 안개가 «그냥 안 걷힌다».
+  void _applyHoles() {
+    final outlines = FogGrid.outlines(_cellCount);
+    overlay.setHoles(outlines.holes);
+    _syncIslands(outlines.islands);
+  }
+
+  void _syncIslands(List<List<NLatLng>> rings) {
+    for (final island in _islands) {
+      _mapController.deleteOverlay(island.info);
+    }
+    _islands.clear();
+    for (final ring in rings) {
+      final island = NPolygonOverlay(
+        id: 'fog-island-$index-${_islandSerial++}',
+        coords: ring,
+        color: FogOverlayController.fogColor,
+      );
+      _islands.add(island);
+      _mapController.addOverlay(island);
+    }
+  }
+
+  void reFog(String spotId) {
+    if (!_spotCells.containsKey(spotId)) return;
+    _releaseSpot(spotId);
+    _applyHoles();
+  }
+
   bool _containsPoint(NLatLng point) {
     var inside = false;
     for (var i = 0, j = outerRing.length - 1; i < outerRing.length; j = i++) {
@@ -284,9 +340,7 @@ class _Landmass {
       final pj = outerRing[j];
       final intersects = (pi.longitude > point.longitude) != (pj.longitude > point.longitude) &&
           point.latitude <
-              (pj.latitude - pi.latitude) *
-                      (point.longitude - pi.longitude) /
-                      (pj.longitude - pi.longitude) +
+              (pj.latitude - pi.latitude) * (point.longitude - pi.longitude) / (pj.longitude - pi.longitude) +
                   pi.latitude;
       if (intersects) inside = !inside;
     }
@@ -303,19 +357,144 @@ class _Landmass {
   ///
   /// 구멍(holes)은 바깥 다각형([outerRing])과 **반대 방향**으로 나열되어야 하므로,
   /// 시계 방향으로 생성한 뒤 뒤집는다.
-  List<NLatLng> _circleRing(NLatLng center, double radiusMeters, int segments) {
-    const metersPerDegreeLat = 111320.0;
-    final latRadius = radiusMeters / metersPerDegreeLat;
-    final lngRadius = radiusMeters / (metersPerDegreeLat * cos(center.latitude * pi / 180));
+}
 
-    final clockwise = List<NLatLng>.generate(segments, (i) {
-      final angle = 2 * pi * i / segments;
-      return NLatLng(
-        center.latitude + latRadius * cos(angle),
-        center.longitude + lngRadius * sin(angle),
-      );
-    });
-    final ring = [...clockwise, clockwise.first];
-    return ring.reversed.toList();
+/// 걷힌 자리를 굽는 격자와, 그 합집합의 외곽선 추적.
+///
+/// 격자는 위·경도에 고정된다(셀 = [cellMeters] 남북 × 약 [cellMeters] 동서). 동서
+/// 폭은 위도 36° 기준으로 잡아 한반도 안에서 ±4% 차이가 난다 — 이건 «굽는 눈금»일
+/// 뿐이라 상관없다. 원이 셀에 들어가는지는 원 중심 위도의 실제 미터로 판정한다.
+///
+/// [FogOverlayController] 밖에 두는 것은 지도 컨트롤러 없이 검증하기 위해서다
+/// (`fog_grid_test.dart`).
+class FogGrid {
+  /// 굽는 눈금. 작을수록 원이 둥글게 나오지만 셀·꼭짓점 수가 제곱으로 는다.
+  /// 3m 면 줌 15(3.8m/px)에서 계단이 1px 이 안 돼 보이지 않고, 최대 줌(≈0.15m/px)에서
+  /// 20px 계단이 드러난다. 6m 로 해봤더니 최대 줌에서 40px 계단이 눈에 띄어 반으로 줄였다
+  /// (실기기, 09-14). 5km 걸어도 셀은 5만 개 남짓이라 갱신마다 외곽선을 다시 긋는 비용은
+  /// 수 ms 다.
+  static const cellMeters = 3.0;
+
+  static const _metersPerDegreeLat = 111320.0;
+  static const double _latStep = cellMeters / _metersPerDegreeLat;
+  static final double _lngStep = cellMeters / (_metersPerDegreeLat * cos(36 * pi / 180));
+
+  /// 셀·꼭짓점 키 = 행 << 26 | 열. 한반도 열 번호는 200만 안쪽이라 26비트(6,700만)면 된다.
+  static const _colBits = 26;
+  static const _colMask = (1 << _colBits) - 1;
+
+  static int _key(int row, int col) => (row << _colBits) | col;
+  static int _row(int key) => key >> _colBits;
+  static int _col(int key) => key & _colMask;
+
+  /// [center] 중심 반경 [radiusMeters] 원이 «중심을 덮는» 셀들.
+  static List<int> cellsInCircle(NLatLng center, double radiusMeters) {
+    final metersPerDegreeLng = _metersPerDegreeLat * cos(center.latitude * pi / 180);
+    final r2 = radiusMeters * radiusMeters;
+    final rowMin = ((center.latitude - radiusMeters / _metersPerDegreeLat) / _latStep).floor();
+    final rowMax = ((center.latitude + radiusMeters / _metersPerDegreeLat) / _latStep).ceil();
+    final cells = <int>[];
+    for (var row = rowMin; row <= rowMax; row++) {
+      final dy = ((row + 0.5) * _latStep - center.latitude) * _metersPerDegreeLat;
+      if (dy * dy > r2) continue;
+      final dx = sqrt(r2 - dy * dy);
+      final colMin = ((center.longitude - dx / metersPerDegreeLng) / _lngStep).floor();
+      final colMax = ((center.longitude + dx / metersPerDegreeLng) / _lngStep).ceil();
+      for (var col = colMin; col <= colMax; col++) {
+        final cx = ((col + 0.5) * _lngStep - center.longitude) * metersPerDegreeLng;
+        if (cx * cx + dy * dy <= r2) cells.add(_key(row, col));
+      }
+    }
+    return cells;
   }
+
+  /// 셀 합집합의 경계를 닫힌 고리들로 만든다.
+  ///
+  /// 셀마다 이웃이 없는 변을 **반시계**(동→북→서→남 순으로 도는 방향)로 나열하고,
+  /// 끝점이 맞는 변끼리 이어 고리를 만든다. 그러면 걷힌 영역의 바깥 둘레는
+  /// 반시계(= 구멍 방향, 바깥 고리와 반대), 그 안에 남은 안개 섬의 둘레는
+  /// 시계가 된다 — 부호 있는 넓이로 둘을 가른다.
+  ///
+  /// 같은 꼭짓점에서 변이 둘 나갈 수 있다(셀이 대각선으로만 맞닿을 때). 어느 쪽을
+  /// 따라가도 닫힌 고리가 나오고 짝홀 채움 결과는 같다.
+  static FogOutlines outlines(Map<int, int> cells) {
+    final next = <int, List<int>>{};
+    void edge(int from, int to) => next.putIfAbsent(from, () => []).add(to);
+    // 꼭짓점 (r, c) = 셀 (r, c) 의 남서 모서리.
+    for (final cell in cells.keys) {
+      final r = _row(cell);
+      final c = _col(cell);
+      if (!cells.containsKey(_key(r, c + 1))) edge(_key(r, c + 1), _key(r + 1, c + 1)); // 동변 ↑
+      if (!cells.containsKey(_key(r + 1, c))) edge(_key(r + 1, c + 1), _key(r + 1, c)); // 북변 ←
+      if (!cells.containsKey(_key(r, c - 1))) edge(_key(r + 1, c), _key(r, c)); // 서변 ↓
+      if (!cells.containsKey(_key(r - 1, c))) edge(_key(r, c), _key(r, c + 1)); // 남변 →
+    }
+
+    final holes = <List<NLatLng>>[];
+    final islands = <List<NLatLng>>[];
+    while (next.isNotEmpty) {
+      final start = next.keys.first;
+      final loop = <int>[start];
+      var current = start;
+      while (true) {
+        final outgoing = next[current];
+        // 끊긴 고리는 있을 수 없지만, 있더라도 무한루프는 막는다.
+        if (outgoing == null || outgoing.isEmpty) break;
+        final to = outgoing.removeLast();
+        if (outgoing.isEmpty) next.remove(current);
+        if (to == start) break;
+        loop.add(to);
+        current = to;
+      }
+      if (loop.length < 4) continue;
+      final ring = _simplify(loop);
+      final area = _signedArea(ring);
+      if (area == 0) continue;
+      final coords = [for (final v in ring) _vertex(v), _vertex(ring.first)];
+      (area > 0 ? holes : islands).add(coords);
+    }
+    return FogOutlines(holes: holes, islands: islands);
+  }
+
+  /// 한 방향으로 이어지는 꼭짓점을 지운다 — 계단이 아닌 직선 구간은 양 끝만 남긴다.
+  static List<int> _simplify(List<int> loop) {
+    final out = <int>[];
+    final n = loop.length;
+    for (var i = 0; i < n; i++) {
+      final prev = loop[(i + n - 1) % n];
+      final cur = loop[i];
+      final nxt = loop[(i + 1) % n];
+      final d1r = _row(cur) - _row(prev);
+      final d1c = _col(cur) - _col(prev);
+      final d2r = _row(nxt) - _row(cur);
+      final d2c = _col(nxt) - _col(cur);
+      if (d1r == d2r && d1c == d2c) continue;
+      out.add(cur);
+    }
+    return out;
+  }
+
+  /// 신발끈 공식(격자 단위). 양수면 반시계.
+  static int _signedArea(List<int> ring) {
+    var area = 0;
+    for (var i = 0; i < ring.length; i++) {
+      final p = ring[i];
+      final q = ring[(i + 1) % ring.length];
+      area += _col(p) * _row(q) - _col(q) * _row(p);
+    }
+    return area;
+  }
+
+  static NLatLng _vertex(int key) => NLatLng(_row(key) * _latStep, _col(key) * _lngStep);
+}
+
+/// [FogGrid.outlines] 의 결과.
+class FogOutlines {
+  const FogOutlines({required this.holes, required this.islands});
+
+  /// 걷힌 영역의 바깥 둘레 — 안개 폴리곤의 구멍(반시계).
+  final List<List<NLatLng>> holes;
+
+  /// 걷힌 띠에 둘러싸여 남은 안개 — 별도 폴리곤(시계).
+  final List<List<NLatLng>> islands;
 }
