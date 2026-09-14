@@ -51,10 +51,17 @@ class SpotMarkerController {
   /// 로 둔다 — 그래야 줌 15 이상에서 예전과 픽셀 단위로 같다.
   static const _baseSize = Size(38, 50);
 
-  /// 이 줌 이상이면 마커를 원래 크기로, 이 줌에서 [_minScaleZoom] 까지는 선형으로 줄인다.
-  static const _fullScaleZoom = 15.0;
-  static const _minScaleZoom = 12.0;
-  static const _minScale = 0.4;
+  /// 줌 → 마커 배율. 줌 15(내 위치 줌) 이상은 원래 크기, 그 아래는 한 단계마다 줄이되
+  /// 12 이하는 50% 에서 멈춘다 — 그보다 작으면 손가락으로 못 누른다. 사이 값은 선형 보간.
+  ///
+  /// 첫 값은 90(15→14 는 -10)이고 그다음은 -20 씩이다 — 줌 14 는 아직 동네 단위라
+  /// 마커가 크게 보여야 하고, 13 부터는 구 단위라 겹침이 급격히 는다(시진, 09-14).
+  static const _scaleByZoom = <(double zoom, double scale)>[
+    (15, 1.0),
+    (14, 0.9),
+    (13, 0.7),
+    (12, 0.5),
+  ];
 
   /// 지금 마커에 적용된 배율. 0.05 단위로 끊어 핀치 줌 중에 매 프레임 갱신하지 않는다.
   double _scale = 1.0;
@@ -144,15 +151,31 @@ class SpotMarkerController {
   /// 카메라가 멈추기 전(핀치 중)에도 부르지만 배율이 0.05 이상 바뀔 때만 실제로
   /// 마커를 건드린다 — 마커 수십 개에 매 프레임 `setSize` 를 보내지 않기 위해서다.
   void setZoom(double zoom) {
-    final raw = ((zoom - _minScaleZoom) / (_fullScaleZoom - _minScaleZoom)).clamp(0.0, 1.0);
-    // ⚠️ 괄호 주의 — 배율 전체를 20배 해서 반올림해야 한다. 배율이 0 이 되면 SDK 는
-    //    「기본 크기」(NMarker.autoSize) 로 읽어 안 줄어든 것처럼 보인다.
-    final scale = ((_minScale + (1 - _minScale) * raw) * 20).round() / 20;
+    // 0.05 단위로 끊는다. ⚠️ 배율 전체를 20배 해서 반올림할 것 — 배율이 0 이 되면
+    // SDK 는 「기본 크기」(NMarker.autoSize) 로 읽어 안 줄어든 것처럼 보인다.
+    final scale = (scaleForZoom(zoom) * 20).round() / 20;
     if (scale == _scale) return;
     _scale = scale;
     for (final marker in _markersBySpotId.values) {
       marker.setSize(_sizeForScale());
     }
+  }
+
+  /// [_scaleByZoom] 을 선형 보간한다. 표 밖(15 초과 / 12 미만)은 양 끝 값.
+  ///
+  /// 순수 함수로 두어 지도 없이 검증한다(`spot_marker_scale_test.dart`).
+  static double scaleForZoom(double zoom) {
+    const table = _scaleByZoom;
+    if (zoom >= table.first.$1) return table.first.$2;
+    if (zoom <= table.last.$1) return table.last.$2;
+    for (var i = 0; i < table.length - 1; i++) {
+      final (hi, hiScale) = table[i];
+      final (lo, loScale) = table[i + 1];
+      if (zoom <= hi && zoom >= lo) {
+        return loScale + (hiScale - loScale) * (zoom - lo) / (hi - lo);
+      }
+    }
+    return table.last.$2;
   }
 
   Size _sizeForScale() =>
