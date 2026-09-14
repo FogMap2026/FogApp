@@ -1,4 +1,4 @@
-// 지도 우하단 근접 아이콘 — «!» 원이 카드로 펼쳐지고, 인증 단계에서는 누르면 곧바로 인증으로 간다.
+// 지도 우하단 근접 아이콘 — «!» 원이 카드로 펼쳐지고, 인증 단계에서는 카메라가 인증으로, 카드가 스팟 상세로 간다.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fogapp/models/spot.dart';
@@ -12,10 +12,11 @@ SpotProximity _proximity(ProximityLevel level, {double distance = 230}) =>
 
 /// 상위 상태(펼침 여부)를 흉내 내는 호스트 — 실제로는 [MapScreen] 이 들고 있다.
 class _Host extends StatefulWidget {
-  const _Host({required this.proximity, required this.onVerify});
+  const _Host({required this.proximity, required this.onVerify, this.onOpenSpot});
 
   final SpotProximity proximity;
   final VoidCallback onVerify;
+  final VoidCallback? onOpenSpot;
 
   @override
   State<_Host> createState() => _HostState();
@@ -40,6 +41,7 @@ class _HostState extends State<_Host> {
                 onExpand: () => setState(() => expanded = true),
                 onCollapse: () => setState(() => expanded = false),
                 onVerify: widget.onVerify,
+                onOpenSpot: widget.onOpenSpot ?? () {},
               ),
             ),
           ),
@@ -83,10 +85,15 @@ void main() {
     expect(verified, isFalse);
   });
 
-  testWidgets('인증 가능 — 「경복궁 인증 가능」처럼 스팟 이름이 뜨고, 누르면 곧바로 인증으로 간다', (tester) async {
+  testWidgets('인증 가능 — 「경복궁 인증 가능」처럼 스팟 이름이 뜨고, 카메라는 인증으로·카드는 스팟 상세로 간다', (tester) async {
     var verified = 0;
+    var opened = 0;
     await tester.pumpWidget(
-      _Host(proximity: _proximity(ProximityLevel.verifiable, distance: 60), onVerify: () => verified++),
+      _Host(
+        proximity: _proximity(ProximityLevel.verifiable, distance: 60),
+        onVerify: () => verified++,
+        onOpenSpot: () => opened++,
+      ),
     );
     // 맥박 애니메이션이 계속 돌아 pumpAndSettle 은 끝나지 않는다 — 등장 전환 시간만큼만 흘린다.
     await tester.pump(const Duration(milliseconds: 500));
@@ -96,6 +103,11 @@ void main() {
     expect(find.text('!'), findsNothing);
 
     await tester.tap(find.byIcon(Icons.photo_camera_rounded));
+    expect(verified, 1);
+    expect(opened, 0);
+
+    await tester.tap(find.text('경복궁 인증 가능'));
+    expect(opened, 1);
     expect(verified, 1);
   });
 }

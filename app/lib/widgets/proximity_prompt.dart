@@ -23,6 +23,7 @@ class ProximityPrompt extends StatelessWidget {
     required this.onExpand,
     required this.onCollapse,
     required this.onVerify,
+    required this.onOpenSpot,
     this.showVerifyLabel = true,
     super.key,
   });
@@ -34,6 +35,10 @@ class ProximityPrompt extends StatelessWidget {
   final VoidCallback onExpand;
   final VoidCallback onCollapse;
   final VoidCallback onVerify;
+
+  /// 인증 단계의 «○○ 인증 가능» 카드를 누르면 — 스팟 상세로 간다(시진, 09-15).
+  /// 카메라(맥박 원)는 인증 화면, 카드는 스팟 페이지: 둘이 다른 곳으로 간다.
+  final VoidCallback onOpenSpot;
 
   /// 인증 아이콘 옆 글자. 좌하단 메뉴를 펼쳤을 때는 겹치지 않게 끈다.
   final bool showVerifyLabel;
@@ -60,6 +65,7 @@ class ProximityPrompt extends StatelessWidget {
               spotTitle: proximity.spot.title,
               distanceMeters: proximity.distanceMeters,
               onTap: onVerify,
+              onCardTap: onOpenSpot,
               showLabel: showVerifyLabel,
             )
           : _NearMorph(
@@ -242,6 +248,7 @@ class _VerifyBeacon extends StatefulWidget {
     required this.spotTitle,
     required this.distanceMeters,
     required this.onTap,
+    required this.onCardTap,
     required this.showLabel,
     super.key,
   });
@@ -249,6 +256,7 @@ class _VerifyBeacon extends StatefulWidget {
   final String spotTitle;
   final double distanceMeters;
   final VoidCallback onTap;
+  final VoidCallback onCardTap;
   final bool showLabel;
 
   @override
@@ -273,7 +281,8 @@ class _VerifyBeaconState extends State<_VerifyBeacon> with SingleTickerProviderS
   Widget build(BuildContext context) {
     // 카메라(맥박 원)가 위, 카드가 아래 — 카드는 «근처» 카드와 같은 자리·같은 폭에 놓인다
     // (시진, 09-14). 옆으로 붙이면 카드가 왼쪽으로 자라 좌하단 메뉴를 덮고, 300m 카드와
-    // 다른 자리에 뜬다. **누르는 건 카메라만** — 카드는 설명이다.
+    // 다른 자리에 뜬다. 카메라는 인증 화면으로, 카드는 스팟 상세로 — 상세에도 인증 버튼이
+    // 있으니(100m 안일 때) 어느 쪽을 눌러도 인증에 닿는다(시진, 09-15).
     return LayoutBuilder(
       builder: (context, constraints) {
         final cardWidth = min(constraints.maxWidth, 420.0);
@@ -292,47 +301,57 @@ class _VerifyBeaconState extends State<_VerifyBeacon> with SingleTickerProviderS
               // 두 단계가 같은 카드의 문구만 바뀐 것으로 읽히게.
               // 폭은 문구만큼만 — 화면 폭으로 늘리면 글 오른쪽이 비어 보인다(시진, 09-14).
               // 오른쪽 끝(카메라 아래)에 붙는 건 Column 의 end 정렬이 한다.
-              Container(
-                constraints: BoxConstraints(maxWidth: cardWidth),
-                height: _cardHeight,
-                padding: const EdgeInsets.fromLTRB(AppSpacing.sm, 6, AppSpacing.sm, 6),
-                decoration: BoxDecoration(
-                  color: AppColors.infoContainer,
-                  borderRadius: BorderRadius.circular(AppRadii.lg),
-                  border: Border.all(color: AppColors.primary),
-                  boxShadow: AppShadows.soft,
-                ),
-                // 카드 안에는 아이콘을 두지 않는다 — 카메라는 바로 위 맥박 원이 이미 하나다.
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Flexible(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // 근처 카드와 같은 규칙 — 길면 글자를 줄여 한 줄.
-                          FittedBox(
-                            fit: BoxFit.scaleDown,
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              '${widget.spotTitle} 인증 가능',
-                              style: Theme.of(context).textTheme.titleSmall,
-                              maxLines: 1,
-                            ),
-                          ),
-                          Text(
-                            '약 ${widget.distanceMeters.round()}m · 눌러서 인증하기',
-                            style:
-                                Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.inkMuted, height: 1.3),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
+              Semantics(
+                button: true,
+                label: '${widget.spotTitle} 상세 보기',
+                child: GestureDetector(
+                  onTap: widget.onCardTap,
+                  behavior: HitTestBehavior.opaque,
+                  child: Container(
+                    constraints: BoxConstraints(maxWidth: cardWidth),
+                    height: _cardHeight,
+                    padding: const EdgeInsets.fromLTRB(AppSpacing.sm, 6, AppSpacing.sm, 6),
+                    decoration: BoxDecoration(
+                      color: AppColors.infoContainer,
+                      borderRadius: BorderRadius.circular(AppRadii.lg),
+                      border: Border.all(color: AppColors.primary),
+                      boxShadow: AppShadows.soft,
                     ),
-                  ],
+                    // 카드 안에는 아이콘을 두지 않는다 — 카메라는 바로 위 맥박 원이 이미 하나다.
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // 근처 카드와 같은 규칙 — 길면 글자를 줄여 한 줄.
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  '${widget.spotTitle} 인증 가능',
+                                  style: Theme.of(context).textTheme.titleSmall,
+                                  maxLines: 1,
+                                ),
+                              ),
+                              Text(
+                                '약 ${widget.distanceMeters.round()}m · 눌러서 스팟 보기',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(color: AppColors.inkMuted, height: 1.3),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ],
