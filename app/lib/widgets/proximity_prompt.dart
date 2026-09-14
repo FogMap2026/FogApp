@@ -208,8 +208,7 @@ class _NearCardContent extends StatelessWidget {
                 ),
                 // 거리 뒤에서 줄을 바꾼다 — 한 줄에 넣으면 좁은 폰에서 「인증할…」로 잘렸다(시진, 09-14).
                 Text(
-                  '약 ${distance}m
-${verifyMeters}m 안으로 가면 인증할 수 있어요',
+                  '약 ${distance}m\n${verifyMeters}m 안으로 가면 인증할 수 있어요',
                   style: theme.textTheme.bodySmall?.copyWith(color: AppColors.inkMuted, height: 1.3),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
