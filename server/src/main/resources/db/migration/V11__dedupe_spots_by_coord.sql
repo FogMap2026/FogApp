@@ -58,5 +58,7 @@ DELETE FROM spots s
 
 DROP TABLE spot_dupes;
 
--- 다시 생기지 않게. 수집기(SpotUpserter)는 같은 좌표가 이미 있으면 새로 만들지 않는다.
-CREATE UNIQUE INDEX uq_spots_lat_lng ON spots (lat, lng) WHERE lat IS NOT NULL AND lng IS NOT NULL;
+-- 유니크 인덱스는 걸지 않는다. 다시 생기는 것은 수집기(SpotUpserter)가 막는다 — 같은 좌표가
+-- 이미 있으면 새로 만들지 않는다. DB 제약으로 걸면 좌표가 같은 스팟을 만드는 테스트 픽스처
+-- (ConquestServiceIT·SpotQueryServiceIT 등) 열 개가 깨지고, 한 건물의 다른 시설처럼 같은
+-- 좌표가 정당한 경우도 막는다.
