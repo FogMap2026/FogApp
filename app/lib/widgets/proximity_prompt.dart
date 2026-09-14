@@ -274,72 +274,66 @@ class _VerifyBeaconState extends State<_VerifyBeacon> with SingleTickerProviderS
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: '${widget.spotTitle} 인증할 수 있어요. 눌러서 인증하기',
-      child: GestureDetector(
-        onTap: widget.onTap,
-        behavior: HitTestBehavior.opaque,
-        // 카메라(맥박 원)가 위, 카드가 아래 — 카드는 «근처» 카드와 같은 자리·같은 폭에 놓인다
-        // (시진, 09-14). 옆으로 붙이면 카드가 왼쪽으로 자라 좌하단 메뉴를 덮고, 300m 카드와
-        // 다른 자리에 뜬다.
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final cardWidth = min(constraints.maxWidth, 420.0);
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                _beacon(),
-                if (widget.showLabel) ...[
-                  const SizedBox(height: AppSpacing.xxs),
-                  // «근처» 카드(_NearCardContent)와 같은 옷 — 연파랑 바탕·파란 테두리·같은 높이.
-                  // 두 단계가 같은 카드의 문구만 바뀐 것으로 읽히게.
-                  Container(
-                    width: cardWidth,
-                    height: _cardHeight,
-                    padding: const EdgeInsets.fromLTRB(AppSpacing.sm, 6, AppSpacing.sm, 6),
-                    decoration: BoxDecoration(
-                      color: AppColors.infoContainer,
-                      borderRadius: BorderRadius.circular(AppRadii.lg),
-                      border: Border.all(color: AppColors.primary),
-                      boxShadow: AppShadows.soft,
-                    ),
-                    // 카드 안에는 아이콘을 두지 않는다 — 카메라는 바로 위 맥박 원이 이미 하나다.
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '${widget.spotTitle} 인증 가능',
-                                style: Theme.of(context).textTheme.titleSmall,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              Text(
-                                '약 ${widget.distanceMeters.round()}m · 눌러서 인증하기',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.copyWith(color: AppColors.inkMuted, height: 1.3),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
+    // 카메라(맥박 원)가 위, 카드가 아래 — 카드는 «근처» 카드와 같은 자리·같은 폭에 놓인다
+    // (시진, 09-14). 옆으로 붙이면 카드가 왼쪽으로 자라 좌하단 메뉴를 덮고, 300m 카드와
+    // 다른 자리에 뜬다. **누르는 건 카메라만** — 카드는 설명이다.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cardWidth = min(constraints.maxWidth, 420.0);
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Semantics(
+              button: true,
+              label: '${widget.spotTitle} 인증할 수 있어요. 눌러서 인증하기',
+              child: GestureDetector(onTap: widget.onTap, behavior: HitTestBehavior.opaque, child: _beacon()),
+            ),
+            if (widget.showLabel) ...[
+              const SizedBox(height: AppSpacing.xxs),
+              // «근처» 카드(_NearCardContent)와 같은 옷 — 연파랑 바탕·파란 테두리·같은 높이.
+              // 두 단계가 같은 카드의 문구만 바뀐 것으로 읽히게.
+              Container(
+                width: cardWidth,
+                height: _cardHeight,
+                padding: const EdgeInsets.fromLTRB(AppSpacing.sm, 6, AppSpacing.sm, 6),
+                decoration: BoxDecoration(
+                  color: AppColors.infoContainer,
+                  borderRadius: BorderRadius.circular(AppRadii.lg),
+                  border: Border.all(color: AppColors.primary),
+                  boxShadow: AppShadows.soft,
+                ),
+                // 카드 안에는 아이콘을 두지 않는다 — 카메라는 바로 위 맥박 원이 이미 하나다.
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${widget.spotTitle} 인증 가능',
+                            style: Theme.of(context).textTheme.titleSmall,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                        ),
-                      ],
+                          Text(
+                            '약 ${widget.distanceMeters.round()}m · 눌러서 인증하기',
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.inkMuted, height: 1.3),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
-              ],
-            );
-          },
-        ),
-      ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        );
+      },
     );
   }
 
@@ -348,15 +342,17 @@ class _VerifyBeaconState extends State<_VerifyBeacon> with SingleTickerProviderS
 
   Widget _beacon() {
     return SizedBox(
-      // 퍼지는 고리가 잘리지 않도록 원보다 넉넉한 칸을 잡는다.
-      width: _size * 1.5,
-      height: _size * 1.5,
+      // 칸은 원 크기 그대로 — 넉넉히 잡으면 그만큼 카드보다 왼쪽에 뜬다(오른쪽 여백).
+      // 퍼지는 고리는 Stack 밖으로 넘치게 둔다(clipBehavior none).
+      width: _size,
+      height: _size,
       child: AnimatedBuilder(
         animation: _pulse,
         builder: (context, child) {
           final t = _pulse.value;
           return Stack(
             alignment: Alignment.center,
+            clipBehavior: Clip.none,
             children: [
               _ring(t),
               _ring((t + 0.5) % 1),
