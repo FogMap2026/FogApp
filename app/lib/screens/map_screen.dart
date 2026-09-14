@@ -698,6 +698,9 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
         _visitedSpotCoords = {..._visitedSpotCoords, spot.id: NLatLng(spot.lat, spot.lng)};
       });
       unawaited(_refreshConquest());
+      // 마커도 바로 «밝힌» 색으로 — 마커는 서버가 준 unlocked 로 그리므로 같은 자리를 다시
+      // 불러온다(300m 움직여야 다시 부르던 것을 기다리면 인증하고도 한참 잠긴 색이다, 시진 09-15).
+      if (_lastLoadCenter case final center?) _loadSpotsAt(center);
       // 안개 걷힘 연출(#49) — 스팟 좌표 기준 반경을 퍼지듯 넓혀가며 걷어낸다.
       unawaited(_fogOverlay?.clearCircleAnimated(spot.id.toString(), NLatLng(spot.lat, spot.lng)));
       unawaited(_openUnlockedSpotDetail(spot));
