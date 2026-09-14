@@ -30,6 +30,7 @@ import '../services/visit_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/footprint_card.dart';
 import '../widgets/map_controls.dart';
+import 'conquest_screen.dart';
 import 'footprint_nearby_create_screen.dart';
 import 'match_candidates_screen.dart';
 import 'match_list_screen.dart';
@@ -1026,6 +1027,9 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                     regionName: _regionName,
                     regionLookupFailed: _regionLookupFailed,
                     conquestRate: _currentConquest?.rate,
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const ConquestScreen()),
+                    ),
                   ),
                   if (locationIssue != null)
                     Padding(
@@ -1204,11 +1208,15 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
 }
 
 /// 지도 상단 정보 바. 현재 지역(시/도)과 정복률(#51)을 보여준다.
+///
+/// 누르면 전국 정복 현황([ConquestScreen])으로 들어간다 — 여기 보이는 숫자 하나
+/// (지금 보고 있는 지역의 정복률)를 전체·지역별로 펼친 화면이다.
 class _TopInfoBar extends StatelessWidget {
   const _TopInfoBar({
     required this.regionName,
     required this.regionLookupFailed,
     required this.conquestRate,
+    required this.onTap,
   });
 
   final String? regionName;
@@ -1216,6 +1224,8 @@ class _TopInfoBar extends StatelessWidget {
 
   /// 0.0~1.0. 아직 못 구했으면(스팟 미로드·API 실패 등) null — 플레이스홀더로 표시한다.
   final double? conquestRate;
+
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1228,24 +1238,30 @@ class _TopInfoBar extends StatelessWidget {
       color: theme.colorScheme.surface.withValues(alpha: 0.92),
       elevation: 2,
       borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        child: Row(
-          children: [
-            const Icon(Icons.place_outlined, size: 20),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                label,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodyMedium,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            children: [
+              const Icon(Icons.place_outlined, size: 20),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium,
+                ),
               ),
-            ),
-            Chip(
-              label: Text(rateLabel),
-              visualDensity: VisualDensity.compact,
-            ),
-          ],
+              Chip(
+                label: Text(rateLabel),
+                visualDensity: VisualDensity.compact,
+              ),
+              const SizedBox(width: 2),
+              const Icon(Icons.chevron_right, size: 18, color: AppColors.inkFaint),
+            ],
+          ),
         ),
       ),
     );

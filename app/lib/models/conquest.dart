@@ -30,3 +30,13 @@ class ConquestRegion {
 String regionCodeFor({required String areaCode, String? sigunguCode}) {
   return '$areaCode-${sigunguCode ?? ''}';
 }
+
+/// [regionCodeFor]의 반대 — [ConquestRegion.regionCode]를 시/도 코드와 시/군/구
+/// 코드로 나눈다. 시/군/구 코드가 없던 그룹은 규칙대로 빈 문자열이 되는데, 스팟
+/// 조회 쪽(`Spot.sigunguCode`)에서는 그 자리가 `null`이므로 여기서도 `null`로 맞춘다.
+({String areaCode, String? sigunguCode}) splitRegionCode(String regionCode) {
+  final i = regionCode.indexOf('-');
+  if (i < 0) return (areaCode: regionCode, sigunguCode: null);
+  final sigungu = regionCode.substring(i + 1);
+  return (areaCode: regionCode.substring(0, i), sigunguCode: sigungu.isEmpty ? null : sigungu);
+}
