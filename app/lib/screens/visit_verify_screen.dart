@@ -189,7 +189,10 @@ class _VisitVerifyScreenState extends ConsumerState<VisitVerifyScreen> {
         title: Text(widget.spot.title),
         backgroundColor: dark ? Colors.black : null,
         foregroundColor: dark ? Colors.white : null,
+        // 테마가 제목 글꼴을 검정으로 못 박아 두어 foregroundColor 만으로는 제목이 검은 바탕에 묻힌다.
+        titleTextStyle: dark ? Theme.of(context).appBarTheme.titleTextStyle?.copyWith(color: Colors.white) : null,
         surfaceTintColor: dark ? Colors.black : null,
+        shape: dark ? const Border() : null,
       ),
       body: SafeArea(
         child: switch (_stage) {
