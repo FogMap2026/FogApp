@@ -99,6 +99,25 @@ void main() {
       expect(_at(220, [a, b], previous: previous)!.spot.id, 1);
     });
 
+    test('인증 단계에서는 확실히 더 가까운 스팟으로 바꾼다 — 인증은 지금 서 있는 곳이어야 한다', () {
+      // 시청 앞처럼 두 스팟이 100m 안에 겹친다: A 기준점, B 북쪽 80m.
+      final a = _spot(1);
+      final b = _spot(2, northMeters: 80);
+      final previous = _at(10, [a, b]); // A 10m · B 70m → A 인증 가능
+      expect(previous!.spot.id, 1);
+      expect(previous.level, ProximityLevel.verifiable);
+      // 북쪽 70m 로 이동 → A 70m · B 10m. 60m 차이는 여유(20m)를 넘으므로 B 로 바꾼다.
+      expect(_at(70, [a, b], previous: previous)!.spot.id, 2);
+    });
+
+    test('인증 단계라도 몇 m 차이로는 바꾸지 않는다 — GPS 가 튀어도 문구가 흔들리지 않게', () {
+      final a = _spot(1);
+      final b = _spot(2, northMeters: 80);
+      final previous = _at(10, [a, b]); // A
+      // 북쪽 45m → A 45m · B 35m. 10m 차이는 여유(20m) 안이라 A 유지.
+      expect(_at(45, [a, b], previous: previous)!.spot.id, 1);
+    });
+
     test('알리던 스팟이 후보에서 빠지면 조용히 사라진다', () {
       final previous = _at(50, [spot]);
       expect(_at(50, [], previous: previous), isNull);

@@ -35,14 +35,23 @@ class SpotProximity {
 
   /// 인증 단계 이탈 반경 — 예전 `SpotGeofenceController` 의 130m 를 그대로 잇는다.
   static const verifyExitMeters = 130.0;
+
+  /// 인증 단계에서 알리던 스팟을 **바꾸는** 기준 — 다른 스팟이 이만큼 더 가까워야 바꾼다.
+  ///
+  /// 인천시청 앞처럼 스팟 셋이 100m 안에 겹치면, 처음 잡은 스팟이 그대로 남아 「인천애뜰 인증
+  /// 가능」인데 실제로는 한복사랑 앞에 서 있는 일이 났다(시진, 실기기 09-14). 인증은 «지금 서
+  /// 있는 곳»이 중요하니 가까운 쪽으로 바꾸되, GPS 가 튀는 몇 m 로 왔다 갔다 하지 않게 여유를 둔다.
+  static const verifySwitchMarginMeters = 20.0;
 }
 
 /// [candidates] 가운데 지금 알릴 스팟을 고른다. 알릴 것이 없으면 `null`.
 ///
 /// - 이미 인증한 스팟([visitedSpotIds])은 알리지 않는다.
 /// - **단계가 높은 쪽이 이긴다** — 인증할 수 있는 스팟이 있으면 더 가까운 «근처» 스팟보다 먼저다.
-/// - 같은 단계면 **지금 알리고 있던 스팟([previous])을 유지한다.** 두 스팟 사이를 걸을 때
+/// - 같은 «근처» 단계면 **지금 알리고 있던 스팟([previous])을 유지한다.** 두 스팟 사이를 걸을 때
 ///   15m 마다 대상이 번갈아 바뀌면 펼쳐 둔 알림 문구가 계속 바뀐다. 처음 고를 때만 가까운 쪽.
+/// - «인증 가능» 단계는 예외 — 다른 스팟이 [SpotProximity.verifySwitchMarginMeters] 이상 더
+///   가까우면 그쪽으로 바꾼다. 인증은 지금 서 있는 스팟이어야 한다.
 /// - 이탈은 [previous] 로 판정한다 — 이미 알리던 스팟은 이탈 반경까지 붙잡아 둔다.
 ///
 /// 후보에서 빠진 스팟(지도를 멀리 옮겨 목록이 바뀐 경우)은 조용히 사라진다. 실제로 멀어졌다고
@@ -81,6 +90,13 @@ ProximityLevel? _levelFor(double distance, ProximityLevel? wasLevel) {
 
 bool _outranks(SpotProximity a, SpotProximity b, int? previousSpotId) {
   if (a.level != b.level) return a.level.index > b.level.index;
+  if (a.level == ProximityLevel.verifiable) {
+    // 인증 단계: 알리던 스팟이라도 다른 스팟이 여유(20m) 이상 더 가까우면 넘겨준다.
+    const margin = SpotProximity.verifySwitchMarginMeters;
+    if (b.spot.id == previousSpotId) return a.distanceMeters + margin < b.distanceMeters;
+    if (a.spot.id == previousSpotId) return b.distanceMeters + margin >= a.distanceMeters;
+    return a.distanceMeters < b.distanceMeters;
+  }
   if (b.spot.id == previousSpotId) return false;
   if (a.spot.id == previousSpotId) return true;
   return a.distanceMeters < b.distanceMeters;
