@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 
@@ -88,10 +90,18 @@ class _CharacterPainter extends CustomPainter {
     final radius = width * 0.2;
 
     // 위(북쪽)를 향한 삼각형 — 회전은 SDK 가 bearing 으로 처리한다.
+    // 삼각형 밑변은 원과 «동심원 호» — 원 둘레를 따라 휘어 있어 원에서 떨어져 있어도
+    // 한 몸으로 읽힌다(시진, 09-14). 밑변 두 끝은 원 중심에서 반경 arcRadius, 북쪽 기준
+    // ±22° 지점.
+    final arcRadius = width * 0.34;
+    const halfAngle = 22 * pi / 180;
+    final baseRight = center + Offset(arcRadius * sin(halfAngle), -arcRadius * cos(halfAngle));
+    final baseLeft = center + Offset(-arcRadius * sin(halfAngle), -arcRadius * cos(halfAngle));
     final arrow = Path()
       ..moveTo(width / 2, height * 0.04)
-      ..lineTo(width * 0.62, height * 0.26)
-      ..lineTo(width * 0.38, height * 0.26)
+      ..lineTo(baseRight.dx, baseRight.dy)
+      // 오른쪽 끝 → 위쪽(원 중심 반대편)을 지나 왼쪽 끝. 화면 기준 반시계.
+      ..arcToPoint(baseLeft, radius: Radius.circular(arcRadius), clockwise: false)
       ..close();
 
     final outline = Paint()
