@@ -58,6 +58,7 @@ class ProximityPrompt extends StatelessWidget {
           ? _VerifyBeacon(
               key: ValueKey('verify-${proximity.spot.id}'),
               spotTitle: proximity.spot.title,
+              distanceMeters: proximity.distanceMeters,
               onTap: onVerify,
               showLabel: showVerifyLabel,
             )
@@ -114,59 +115,59 @@ class _NearMorph extends StatelessWidget {
               // 접힌 원의 글자 «!» 만으로는 스크린 리더가 뜻을 못 읽는다.
               label: expanded ? null : '근처에 스팟이 있어요. 눌러서 자세히 보기',
               child: InkWell(
-              onTap: expanded ? null : onExpand,
-              child: Stack(
-                children: [
-                  // 카드 내용은 «다 펼친 폭»으로 미리 배치해 두고 상자가 자라며 드러나게 한다 —
-                  // 자라는 폭에 맞춰 줄바꿈하면 중간 프레임마다 글자가 넘쳐 오류가 난다.
-                  Positioned.fill(
-                    child: OverflowBox(
-                      alignment: Alignment.centerRight,
-                      minWidth: cardWidth,
-                      maxWidth: cardWidth,
-                      minHeight: _cardHeight,
-                      maxHeight: _cardHeight,
-                      child: AnimatedOpacity(
-                        opacity: expanded ? 1 : 0,
-                        // 상자가 어느 정도 자란 뒤에 글자가 나타나야 «늘어난 원이 카드가 된다».
-                        duration: expanded ? const Duration(milliseconds: 420) : const Duration(milliseconds: 120),
-                        curve: expanded ? const Interval(0.45, 1) : Curves.linear,
-                        child: IgnorePointer(
-                          ignoring: !expanded,
-                          child: _NearCardContent(proximity: proximity, onClose: onCollapse),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    right: 0,
-                    top: 0,
-                    bottom: 0,
-                    width: _circle,
-                    // 🔴 IgnorePointer 를 빼지 말 것. 펼친 뒤 이 «!» 는 투명해질 뿐 그 자리에 남는데,
-                    // 카드의 닫기 버튼이 바로 그 오른쪽 끝에 있어 탭을 가로챈다 — 닫기가 안 먹었다.
-                    // 원을 누르는 탭은 바깥 InkWell 이 받으므로 여기서 받을 필요가 없다.
-                    child: IgnorePointer(
-                      child: AnimatedOpacity(
-                      opacity: expanded ? 0 : 1,
-                      duration: const Duration(milliseconds: 160),
-                      child: const Center(
-                        child: Text(
-                          '!',
-                          style: TextStyle(
-                            fontSize: 26,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.primary,
-                            height: 1,
+                onTap: expanded ? null : onExpand,
+                child: Stack(
+                  children: [
+                    // 카드 내용은 «다 펼친 폭»으로 미리 배치해 두고 상자가 자라며 드러나게 한다 —
+                    // 자라는 폭에 맞춰 줄바꿈하면 중간 프레임마다 글자가 넘쳐 오류가 난다.
+                    Positioned.fill(
+                      child: OverflowBox(
+                        alignment: Alignment.centerRight,
+                        minWidth: cardWidth,
+                        maxWidth: cardWidth,
+                        minHeight: _cardHeight,
+                        maxHeight: _cardHeight,
+                        child: AnimatedOpacity(
+                          opacity: expanded ? 1 : 0,
+                          // 상자가 어느 정도 자란 뒤에 글자가 나타나야 «늘어난 원이 카드가 된다».
+                          duration: expanded ? const Duration(milliseconds: 420) : const Duration(milliseconds: 120),
+                          curve: expanded ? const Interval(0.45, 1) : Curves.linear,
+                          child: IgnorePointer(
+                            ignoring: !expanded,
+                            child: _NearCardContent(proximity: proximity, onClose: onCollapse),
                           ),
                         ),
                       ),
                     ),
+                    Positioned(
+                      right: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: _circle,
+                      // 🔴 IgnorePointer 를 빼지 말 것. 펼친 뒤 이 «!» 는 투명해질 뿐 그 자리에 남는데,
+                      // 카드의 닫기 버튼이 바로 그 오른쪽 끝에 있어 탭을 가로챈다 — 닫기가 안 먹었다.
+                      // 원을 누르는 탭은 바깥 InkWell 이 받으므로 여기서 받을 필요가 없다.
+                      child: IgnorePointer(
+                        child: AnimatedOpacity(
+                          opacity: expanded ? 0 : 1,
+                          duration: const Duration(milliseconds: 160),
+                          child: const Center(
+                            child: Text(
+                              '!',
+                              style: TextStyle(
+                                fontSize: 26,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.primary,
+                                height: 1,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
             ),
           ),
         );
@@ -240,9 +241,16 @@ class _NearCardContent extends StatelessWidget {
 /// 「지도 위에서 지금 당장 해야 할 일」이 뜨는 유일한 자리라 일부러 어긋난다 — 파랑(주요 행동)으로
 /// 칠하면 지도 컨트롤·정보 바와 구분되지 않는다.
 class _VerifyBeacon extends StatefulWidget {
-  const _VerifyBeacon({required this.spotTitle, required this.onTap, required this.showLabel, super.key});
+  const _VerifyBeacon({
+    required this.spotTitle,
+    required this.distanceMeters,
+    required this.onTap,
+    required this.showLabel,
+    super.key,
+  });
 
   final String spotTitle;
+  final double distanceMeters;
   final VoidCallback onTap;
   final bool showLabel;
 
@@ -276,20 +284,36 @@ class _VerifyBeaconState extends State<_VerifyBeacon> with SingleTickerProviderS
           mainAxisSize: MainAxisSize.min,
           children: [
             if (widget.showLabel) ...[
+              // «근처» 카드(_NearCardContent)와 같은 옷 — 연파랑 바탕·파란 테두리·제목/부제 두 줄.
+              // 두 단계가 같은 카드의 문구만 바뀐 것으로 읽히게(시진, 09-14). 검은 알약은 혼자
+              // 다른 물건처럼 보였다.
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+                padding: const EdgeInsets.fromLTRB(AppSpacing.sm, 6, AppSpacing.sm, 6),
+                // 이름이 길어도 카드가 왼쪽으로 너무 자라 좌하단 메뉴를 덮지 않게.
+                constraints: const BoxConstraints(maxWidth: 220),
                 decoration: BoxDecoration(
-                  color: AppColors.ink,
-                  borderRadius: BorderRadius.circular(999),
+                  color: AppColors.infoContainer,
+                  borderRadius: BorderRadius.circular(AppRadii.lg),
+                  border: Border.all(color: AppColors.primary),
                   boxShadow: AppShadows.soft,
                 ),
-                // 이름이 길어도 한 줄 — 카드가 왼쪽으로 자라 좌하단 메뉴를 덮지 않게.
-                constraints: const BoxConstraints(maxWidth: 220),
-                child: Text(
-                  '${widget.spotTitle} 인증 가능',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${widget.spotTitle} 인증 가능',
+                      style: Theme.of(context).textTheme.titleSmall,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      '약 ${widget.distanceMeters.round()}m · 눌러서 인증하기',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.inkMuted, height: 1.3),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(width: AppSpacing.xs),
