@@ -29,6 +29,9 @@ dependencies:
   # 네트워크
   dio: ^5.5.0
 
+  # 기기 로컬 저장 — 찜한 스팟(#218)·즐겨찾기 시/도(#217) 같은 «이 폰에서만» 유효한 설정
+  shared_preferences: ^2.3.0
+
   # Firebase (Auth / Firestore / Messaging)
   # Storage는 쓰지 않는다 — 인증 사진은 서버가 직접 보관한다(#48, 팀 결정 B안:
   # Firebase Storage가 무료 요금제에서 버킷 생성이 막혀 채택 불가).

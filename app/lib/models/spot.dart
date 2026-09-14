@@ -52,4 +52,22 @@ class Spot {
   final double lat;
   final double lng;
   final bool unlocked;
+
+  /// [fromJson] 의 역 — 찜한 스팟을 기기에 저장할 때 쓴다(`FavoriteSpots`). 서버 응답과
+  /// 같은 키라 저장본을 [fromJson] 으로 그대로 되읽는다.
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'contentId': contentId,
+        'contentTypeId': contentTypeId,
+        'title': title,
+        'addr1': addr1,
+        'addr2': addr2,
+        'areaCode': areaCode,
+        'sigunguCode': sigunguCode,
+        'firstImage': firstImage,
+        'overview': overview,
+        'lat': lat,
+        'lng': lng,
+        'unlocked': unlocked,
+      };
 }

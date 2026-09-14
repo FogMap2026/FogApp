@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 
 import '../models/spot.dart';
+import '../theme/app_theme.dart';
 import 'spot_service.dart';
 
 /// 안개 아래 숨겨진 탐험 포인트(스팟)를 지도에 마커로 배치한다(#28).
@@ -73,6 +74,17 @@ class SpotMarkerController {
   /// 해금 전 스팟 마커에 입히는 톤. 이름/캡션 없이 "여기 무언가 있다" 정도만 알려준다.
   static const _hiddenTint = Color(0xFF3A4454);
 
+  /// 찜한 스팟 마커의 톤 — 기본 마커와 한눈에 갈리는 주황. 잠김 여부와 무관하게 이 색이다:
+  /// 「가 볼 곳」이라는 표시가 「밝혔나」보다 먼저 읽혀야 한다.
+  static const _favoriteTint = AppColors.accentOrange;
+
+  /// 찜한 스팟(`FavoriteSpots`). 조회 결과와 무관하게 **항상** 지도에 둔다 — 내 위치
+  /// 3km 밖이어도, 📍 로 다른 곳을 보고 있어도. 마지막 조회 결과([_loaded])와 합쳐 그린다.
+  final Map<int, Spot> _favorites = {};
+
+  /// 마지막 조회 결과. 찜이 바뀌었을 때 다시 조회하지 않고 이것과 합쳐 다시 그린다.
+  List<Spot> _loaded = const [];
+
   bool _loading = false;
 
   /// 지금 지도에 떠 있는 스팟 마커와, 그릴 때 쓴 해금 여부.
@@ -82,7 +94,9 @@ class SpotMarkerController {
   /// 지워진다.** 이제 사라진 스팟만 골라 지운다 — 화면을 조금 움직였을 때 대부분의
   /// 마커가 그대로 남으므로 다시 그리는 비용도 줄어든다.
   final Map<int, NMarker> _markersBySpotId = {};
-  final Map<int, bool> _unlockedBySpotId = {};
+
+  /// 마커를 그릴 때 쓴 모양 키(`잠김·찜`). 어느 쪽이든 바뀌면 다시 그린다.
+  final Map<int, String> _styleBySpotId = {};
 
   /// 조회 중에 새 요청이 오면 여기 둔다 — 버리지 않고 끝난 뒤 «마지막 것»만 실행한다.
   ///
@@ -107,7 +121,8 @@ class SpotMarkerController {
         radiusMeters: radius,
       );
       onSpotsLoaded?.call(spots);
-      await _syncMarkers(spots);
+      _loaded = spots;
+      await _syncMarkers();
     } catch (e) {
       // 실패를 삼켜 지도 자체는 계속 쓸 수 있게 두되(#117·#130과 같은 원칙),
       // 화면에는 알린다 — 아무에게도 안 알리는 것이 #146이었다.
@@ -123,25 +138,37 @@ class SpotMarkerController {
     }
   }
 
-  /// 반경을 벗어난 스팟의 마커는 지우고, 새로 들어온 스팟만 그린다.
-  /// 해금 여부가 바뀐 스팟(방문 인증 직후)은 톤이 달라져야 하므로 다시 그린다.
-  Future<void> _syncMarkers(List<Spot> spots) async {
-    final next = {for (final spot in spots) spot.id: spot};
+  /// 찜 목록이 바뀌었다. 조회 없이 마지막 결과와 합쳐 다시 그린다.
+  Future<void> setFavorites(List<Spot> favorites) async {
+    _favorites
+      ..clear()
+      ..addEntries(favorites.map((s) => MapEntry(s.id, s)));
+    await _syncMarkers();
+  }
+
+  /// 반경을 벗어난 스팟의 마커는 지우고, 새로 들어온 스팟만 그린다. 찜한 스팟은 조회
+  /// 결과에 없어도 남긴다. 모양(잠김·찜)이 바뀐 스팟은 톤이 달라져야 하므로 다시 그린다.
+  ///
+  /// 같은 스팟이 조회 결과와 찜 양쪽에 있으면 **조회 결과가 앞선다** — 서버가 준 최신
+  /// 잠김 여부를 쓴다. 찜 저장본은 찜한 시점의 것이다.
+  Future<void> _syncMarkers() async {
+    final next = <int, Spot>{..._favorites, for (final spot in _loaded) spot.id: spot};
+    String styleOf(Spot spot) => '${spot.unlocked}-${_favorites.containsKey(spot.id)}';
 
     for (final id in _markersBySpotId.keys.toList()) {
       final spot = next[id];
-      if (spot != null && spot.unlocked == _unlockedBySpotId[id]) continue;
+      if (spot != null && styleOf(spot) == _styleBySpotId[id]) continue;
       final marker = _markersBySpotId.remove(id);
-      _unlockedBySpotId.remove(id);
+      _styleBySpotId.remove(id);
       if (marker != null) await _mapController.deleteOverlay(marker.info);
     }
 
     final added = <NMarker>{};
     for (final entry in next.entries) {
       if (_markersBySpotId.containsKey(entry.key)) continue;
-      final marker = _toMarker(entry.value);
+      final marker = _toMarker(entry.value, favorite: _favorites.containsKey(entry.key));
       _markersBySpotId[entry.key] = marker;
-      _unlockedBySpotId[entry.key] = entry.value.unlocked;
+      _styleBySpotId[entry.key] = styleOf(entry.value);
       added.add(marker);
     }
     if (added.isNotEmpty) {
@@ -185,14 +212,18 @@ class SpotMarkerController {
   Size _sizeForScale() =>
       _scale >= 1.0 ? NMarker.autoSize : Size(_baseSize.width * _scale, _baseSize.height * _scale);
 
-  NMarker _toMarker(Spot spot) {
+  NMarker _toMarker(Spot spot, {required bool favorite}) {
     final marker = NMarker(
       id: 'spot-${spot.id}',
       position: NLatLng(spot.lat, spot.lng),
       size: _sizeForScale(),
-      // unlocked 스팟은 Phase 3에서 실제 정보를 담은 마커로 대체될 예정이라
-      // 지금은 항상 숨김 톤으로 그린다 (서버도 현재 unlocked=false만 내려준다).
-      iconTintColor: spot.unlocked ? Colors.transparent : _hiddenTint,
+      // 찜이 먼저, 그다음 잠김. unlocked 스팟은 Phase 3에서 실제 정보를 담은 마커로
+      // 대체될 예정이라 지금은 숨김 톤으로 그린다 (서버도 현재 unlocked=false만 내려준다).
+      iconTintColor: favorite
+          ? _favoriteTint
+          : spot.unlocked
+              ? Colors.transparent
+              : _hiddenTint,
     );
     final onTapped = onSpotTapped;
     if (onTapped != null) {
@@ -207,6 +238,6 @@ class SpotMarkerController {
       _mapController.deleteOverlay(marker.info);
     }
     _markersBySpotId.clear();
-    _unlockedBySpotId.clear();
+    _styleBySpotId.clear();
   }
 }

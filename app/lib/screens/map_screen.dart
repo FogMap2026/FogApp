@@ -12,6 +12,7 @@ import '../models/nearby_traveler.dart';
 import '../models/spot.dart';
 import '../services/character_overlay.dart';
 import '../services/conquest_service.dart';
+import '../services/favorite_spot_store.dart';
 import '../services/fog_location_tracker.dart';
 import '../services/fog_overlay_controller.dart';
 import '../services/journey_service.dart';
@@ -787,6 +788,9 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       },
       onSpotTapped: _onSpotTapped,
     );
+    // 찜한 스팟은 조회와 무관하게 항상 지도에 둔다 — 컨트롤러가 생기자마자 넘기고,
+    // 이후 변경은 build 의 ref.listen 이 넘긴다.
+    unawaited(_spotMarkers!.setFavorites(ref.read(favoriteSpotsProvider)));
     // 발자취 아이콘은 위젯을 이미지로 구워 만든다 — 마커마다 만들지 않고 한 번만 만들어
     // 공유한다. 앞선 await 이후라 context를 쓰기 전에 mounted를 확인한다.
     if (!mounted) return;
@@ -1053,6 +1057,10 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
 
   @override
   Widget build(BuildContext context) {
+    // 스팟 상세에서 찜을 켜고 돌아오면 마커 색이 바로 바뀌어야 한다 — 조회 없이 합친다.
+    ref.listen(favoriteSpotsProvider, (_, favorites) {
+      unawaited(_spotMarkers?.setFavorites(favorites));
+    });
     final safeAreaPadding = MediaQuery.paddingOf(context);
     final locationIssue = _locationIssue;
 

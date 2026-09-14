@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/footprint.dart';
 import '../models/spot.dart';
+import '../services/favorite_spot_store.dart';
 import '../services/footprint_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/footprint_card.dart';
@@ -57,8 +58,21 @@ class _SpotDetailScreenState extends ConsumerState<SpotDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final spot = widget.spot;
+    final favorite = ref.watch(favoriteSpotsProvider.select((list) => list.any((s) => s.id == spot.id)));
     return Scaffold(
-      appBar: AppBar(title: Text(spot.title)),
+      appBar: AppBar(
+        title: Text(spot.title),
+        actions: [
+          // 찜 — 켜면 지도에 항상 뜨고(내 주변 3km 밖이어도) 주황 마커로 갈린다.
+          // 잠긴 스팟도 찜할 수 있다: 「가 볼 곳」 표시가 이 기능의 목적이다.
+          IconButton(
+            onPressed: () => ref.read(favoriteSpotsProvider.notifier).toggle(spot),
+            icon: Icon(favorite ? Icons.bookmark : Icons.bookmark_border),
+            color: favorite ? AppColors.accentOrange : null,
+            tooltip: favorite ? '찜 해제' : '찜',
+          ),
+        ],
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
@@ -123,7 +137,7 @@ class _SpotDetailScreenState extends ConsumerState<SpotDetailScreen> {
             padding: const EdgeInsets.symmetric(vertical: 24),
             child: Center(
               child: Text(
-                '첫 발자취를 남겨보세요',
+                widget.spot.unlocked ? '첫 발자취를 남겨보세요' : '아직 발자취가 없어요',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
