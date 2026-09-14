@@ -1422,7 +1422,7 @@ class _EmptyAreaNotice extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    '이 근처에는 아직 탐험할 곳이 없어요',
+                    '이 근처에는 탐험할 곳이 없어요',
                     style: theme.textTheme.titleSmall,
                   ),
                 ),
@@ -1434,18 +1434,8 @@ class _EmptyAreaNotice extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 2),
-            // ⚠️ "서울·부산·제주"는 서버의 TOUR_COLLECT_AREA_CODES(1,6,39)와 묶여 있다.
-            //    수집 지역을 넓히면(#144 1번) 이 문구도 함께 고칠 것 — 안 고치면
-            //    스팟이 있는 지역인데도 "없는 지역"이라고 잘못 안내하게 된다.
-            Text(
-              'FogApp은 실제로 그 장소에 도착해야 안개가 걷히는 앱이에요. '
-              '지금은 서울·부산·제주의 관광 스팟이 준비돼 있어요 — '
-              '그 지역에서 열면 주변에 숨겨진 스팟이 나타납니다.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
+            // 설명 문단은 뺐다(시진, 09-14) — 「서울·부산·제주만 준비」는 전국 수집 뒤 낡은
+            // 정보였고, 한 줄 제목으로 충분하다.
           ],
         ),
       ),
