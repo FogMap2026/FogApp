@@ -27,6 +27,7 @@ import '../services/spot_marker_controller.dart';
 import '../services/spot_service.dart';
 import '../services/traveler_marker_controller.dart';
 import '../services/traveler_service.dart';
+import '../services/traveler_sharing.dart';
 import '../services/visit_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/footprint_card.dart';
@@ -217,11 +218,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
 
   TravelerMarkerController? _travelerMarkers;
 
-  /// 내 위치 공유(#133) 여부. **기본값 꺼짐** — 신고 접수본의 opt-in 요건이다.
-  /// "주변 여행자 보기"와는 별개다 — 그건 공유 여부와 무관하게 항상 켜져 있다.
-  bool _travelerSharingEnabled = false;
-
-  /// 30분마다 위치를 다시 게시하는 타이머. 공유가 꺼져 있으면 null이다.
+  /// 내 위치 공유(#133) 게시 타이머. 스위치는 프로필 화면에 있고([travelerSharingProvider]),
+  /// 여기는 켜져 있을 때 [_travelerSharePeriod]마다 내 위치를 올리는 쪽이다. 꺼져 있으면 null.
   Timer? _travelerShareTimer;
 
   @override
@@ -275,7 +273,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
         controller.setLocationTrackingMode(NLocationTrackingMode.follow);
         _startGeofenceTracking();
       }
-      if (_travelerSharingEnabled) {
+      if (ref.read(travelerSharingProvider)) {
         _startTravelerShareTimer();
       }
     } else if (state == AppLifecycleState.paused) {
@@ -924,34 +922,24 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     );
   }
 
-  /// 내 위치 공유(#133) 토글. 기본값 꺼짐 — 켤 때만 [_travelerSharePeriod]마다 위치를 게시한다.
-  Future<void> _toggleTravelerSharing() async {
-    if (_travelerSharingEnabled) {
-      _travelerShareTimer?.cancel();
-      _travelerShareTimer = null;
-      if (mounted) setState(() => _travelerSharingEnabled = false);
-      try {
-        await ref.read(travelerServiceProvider).stopSharing();
-      } catch (e) {
-        // 로컬 상태는 이미 껐다 — 서버 쪽이 실패해도 사용자에게는 꺼진 것으로 보이는
-        // 게 맞다(다시 켤 때 UPSERT가 갱신하므로 오래 남을 걱정은 없다).
-        debugPrint('[MapScreen] 위치 공유 끄기 실패: $e');
-      }
+  /// 프로필의 「내 위치 공유」 스위치가 바뀌면 여기로 온다([travelerSharingProvider]).
+  /// 켜지면 바로 한 번 올리고 타이머를 돌린다 — 아직 위치를 모르면 [_shareMyPosition] 이
+  /// 조용히 건너뛰고 다음 주기에 올린다. 꺼지면 타이머를 멈추고 서버 행을 지운다.
+  Future<void> _onTravelerSharingChanged(bool enabled) async {
+    if (enabled) {
+      unawaited(_shareMyPosition());
+      _startTravelerShareTimer();
       return;
     }
-
-    final lat = _myLat;
-    final lng = _myLng;
-    if (lat == null || lng == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('위치를 확인한 뒤 다시 시도해주세요.')),
-      );
-      return;
+    _travelerShareTimer?.cancel();
+    _travelerShareTimer = null;
+    try {
+      await ref.read(travelerServiceProvider).stopSharing();
+    } catch (e) {
+      // 스위치는 이미 꺼졌다 — 서버 쪽이 실패해도 사용자에게는 꺼진 것으로 보이는 게
+      // 맞다(다시 켤 때 UPSERT가 갱신하므로 오래 남을 걱정은 없다).
+      debugPrint('[MapScreen] 위치 공유 끄기 실패: $e');
     }
-
-    setState(() => _travelerSharingEnabled = true);
-    unawaited(_shareMyPosition());
-    _startTravelerShareTimer();
   }
 
   /// 게시 주기 — **서버 컷오프(30분, `TravelerService.DELAY_MINUTES`)보다 반드시
@@ -1061,6 +1049,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     ref.listen(favoriteSpotsProvider, (_, favorites) {
       unawaited(_spotMarkers?.setFavorites(favorites));
     });
+    // 프로필의 「내 위치 공유」 스위치 — 게시는 내 위치를 아는 여기서 한다.
+    ref.listen(travelerSharingProvider, (_, enabled) => unawaited(_onTravelerSharingChanged(enabled)));
     final safeAreaPadding = MediaQuery.paddingOf(context);
     final locationIssue = _locationIssue;
 
@@ -1257,18 +1247,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                                     ),
                                   ),
                                 const SizedBox(height: 8),
-                                // 내 위치 공유(#133). 기본값 꺼짐 — "주변 여행자 보기"
-                                // 자체는 이 토글과 무관하게 항상 동작한다.
-                                FilledButton.tonalIcon(
-                                  onPressed: _toggleTravelerSharing,
-                                  icon: Icon(
-                                    _travelerSharingEnabled ? Icons.people : Icons.people_outline,
-                                  ),
-                                  label: Text(
-                                    _travelerSharingEnabled ? '내 위치 공유 중 (끄기)' : '내 위치 공유하기',
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
+                                // 내 위치 공유(#133) 스위치는 프로필 화면으로 옮겼다(시진, 09-14) —
+                                // 지도 메뉴는 «지금 할 행동»만 남긴다.
                               ],
                             )
                           : const SizedBox.shrink(),

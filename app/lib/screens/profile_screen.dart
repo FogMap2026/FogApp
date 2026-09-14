@@ -7,6 +7,7 @@ import '../models/profile.dart';
 import '../services/auth_service.dart';
 import '../services/footprint_service.dart';
 import '../services/profile_service.dart';
+import '../services/traveler_sharing.dart';
 import '../theme/app_theme.dart';
 import '../widgets/footprint_card.dart';
 import '../widgets/personality_axis_bar.dart';
@@ -151,6 +152,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 _buildFootprintList(profile.id),
                 const SizedBox(height: 24),
                 const Divider(),
+                // 내 위치 공유(#133). 기본값 꺼짐 — 신고 접수본의 opt-in 요건. 지도 메뉴에
+                // 있던 것을 여기로 옮겼다(시진, 09-14): 「지금 할 행동」이 아니라 «설정»이라서.
+                // 게시 자체는 지도 화면이 한다(내 위치를 아는 곳) — travelerSharingProvider 로 잇는다.
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  secondary: const Icon(Icons.people_outline),
+                  title: const Text('내 위치 공유'),
+                  subtitle: const Text('가까운 스팟 단위로, 30분 뒤에 다른 여행자에게 익명으로 보여요'),
+                  value: ref.watch(travelerSharingProvider),
+                  onChanged: (v) => ref.read(travelerSharingProvider.notifier).set(v),
+                ),
                 // 동의 화면(#152)에서 한 번만 보고 지나가는 처리방침을 여기서도
                 // 다시 볼 수 있게 한다 — 이슈의 "다시 볼 수 있는 경로" 요구사항.
                 ListTile(
