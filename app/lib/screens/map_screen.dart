@@ -1171,7 +1171,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                                   Padding(
                                     padding: const EdgeInsets.only(top: 4, left: 4),
                                     child: Text(
-                                      '스팟을 정복하면 다시 채워집니다',
+                                      '스팟을 탐험하면 다시 채워집니다',
                                       style: Theme.of(context).textTheme.bodySmall,
                                     ),
                                   ),
@@ -1239,7 +1239,7 @@ class _TopInfoBar extends StatelessWidget {
     final theme = Theme.of(context);
     final label = regionName ?? (regionLookupFailed ? '지역 정보를 가져올 수 없어요' : '지역 확인 중…');
     final rate = conquestRate;
-    final rateLabel = rate == null ? '정복률 --%' : '정복률 ${(rate * 100).round()}%';
+    final rateLabel = rate == null ? '탐험률 --%' : '탐험률 ${(rate * 100).round()}%';
 
     return Material(
       color: theme.colorScheme.surface.withValues(alpha: 0.92),

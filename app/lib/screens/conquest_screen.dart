@@ -55,7 +55,7 @@ class _ConquestScreenState extends ConsumerState<ConquestScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.canvasSoft,
-      appBar: AppBar(title: const Text('정복 현황')),
+      appBar: AppBar(title: const Text('탐험 현황')),
       body: SafeArea(
         child: FutureBuilder<_ConquestData>(
           future: _future,
@@ -68,7 +68,7 @@ class _ConquestScreenState extends ConsumerState<ConquestScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('정복 현황을 불러오지 못했어요.', style: Theme.of(context).textTheme.bodyMedium),
+                    Text('탐험 현황을 불러오지 못했어요.', style: Theme.of(context).textTheme.bodyMedium),
                     const SizedBox(height: 8),
                     TextButton(onPressed: _retry, child: const Text('다시 시도')),
                   ],
@@ -112,7 +112,7 @@ class _ConquestBody extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.lg),
           child: Text(
-            '아직 정복 데이터가 없어요.\n지도를 탐험하며 스팟을 밝혀보세요.',
+            '아직 탐험 기록이 없어요.\n지도를 돌아다니며 스팟을 밝혀보세요.',
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyMedium?.copyWith(color: AppColors.inkMuted),
           ),
