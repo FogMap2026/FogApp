@@ -32,7 +32,8 @@ class ProvinceBoundaryOverlay {
     var i = 0;
     for (final p in json['provinces'] as List) {
       for (final ring in p['rings'] as List) {
-        final coords = [for (final c in ring as List) NLatLng((c[0] as num).toDouble(), (c[1] as num).toDouble())];
+        // 에셋은 GeoJSON 순서 — [경도, 위도]. NLatLng 은 (위도, 경도)라 뒤집어 넣는다.
+        final coords = [for (final c in ring as List) NLatLng((c[1] as num).toDouble(), (c[0] as num).toDouble())];
         if (coords.length < 2) continue;
         lines.add(
           NPolylineOverlay(id: 'province-boundary-${i++}', coords: coords, color: _lineColor, width: _lineWidth)
