@@ -364,6 +364,9 @@ class _SigunguTile extends StatelessWidget {
         // ExpansionTile 이 펼쳐질 때 넣는 위아래 구분선을 뺀다 — 카드 안에서는 군더더기다.
         data: theme.copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
+          // 펼침 애니메이션을 끈다 — 스팟 100개가 «주르륵» 늘어나는 게 어색하다(시진, 09-14).
+          // 누르면 바로 펼쳐지고 바로 접힌다.
+          expansionAnimationStyle: AnimationStyle.noAnimation,
           title: Text(group.name, style: theme.textTheme.bodyLarge),
           subtitle:
               Text('${group.spots.length}곳', style: theme.textTheme.bodySmall?.copyWith(color: AppColors.inkMuted)),
