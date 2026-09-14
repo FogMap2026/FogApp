@@ -315,19 +315,24 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
         _didZoomToFirstFix = true;
         _moveToMyLocation(position.latitude, position.longitude);
       }
-      // 걸어온 자리의 안개를 걷는다. 스트림이 15m 이상 움직였을 때만 오므로
-      // (FogLocationTracker.locationSettings) 갱신마다 15m 원을 뚫으면 원들이
-      // 맞닿아 끊기지 않는 길이 된다.
+      // 내 시야(40m 반투명)를 옮기고, 걸어온 자리의 안개를 걷는다. 스트림이 15m
+      // 이상 움직였을 때만 오므로(FogLocationTracker.locationSettings) 갱신마다 15m
+      // 원을 뚫으면 원들이 맞닿아 끊기지 않는 길이 된다.
       //
-      // ⚠️ 인증(150m)과 «다른 축»이다 — 이건 지나간 자리 표시일 뿐 정복률에는
+      // ⚠️ 스팟 인증(걷힘 50m)과 «다른 축»이다 — 이건 지나간 자리 표시일 뿐 정복률에는
       //    영향이 없다. 걸어서 걷힌 안개가 정복으로 세어지면 사진 인증을 할 이유가
       //    없어진다(planning.md 3장 「도달 → 인증 → 해제」).
       //
       // 🔴 정확도부터 본다. distanceFilter 는 «움직였나»만 말하고 «진짜 움직였나»는
       //    안 말한다 — 콜드 스타트 첫 fix 는 오차가 수백 m 라 그 자체로 15m 를
       //    만든다. 궤적 구멍은 지우는 길이 없어서, 튄 점 하나가 영영 남는다.
-      if (isTrailWorthyAccuracy(position.accuracy)) {
-        _fogOverlay?.clearTrail(NLatLng(position.latitude, position.longitude));
+      //    시야는 화면 표시라 정확도와 무관하게 옮긴다 — 다음 갱신에 되돌아온다.
+      final trailWorthy = isTrailWorthyAccuracy(position.accuracy);
+      _fogOverlay?.updatePosition(
+        NLatLng(position.latitude, position.longitude),
+        recordTrail: trailWorthy,
+      );
+      if (trailWorthy) {
         // 화면에는 바로 반영하고(위), 서버에는 모아서 올린다(#131) — 앱을 다시 켜도
         // 걸어온 자리가 남아야 한다. 인증 안개가 GET /api/visits 로 복원되는 것과 같다.
         _journeyBuffer.add(
@@ -353,8 +358,12 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     });
   }
 
-  /// 해금된(방문 인증한) 스팟의 안개 걷힘 반경(150m) 안에 있는지(#117) — 발자취
-  /// 조회 반경을 50m에서 150m로 넓힐지 판단하는 데 쓴다(문서 3-3).
+  /// 해금된(방문 인증한) 스팟 150m 안에 있는지(#117) — 발자취 조회 반경을 50m에서
+  /// 150m로 넓힐지 판단하는 데 쓴다(문서 3-3).
+  ///
+  /// ⚠️ 원래 안개 걷힘 반경과 같은 값이었지만, 안개 걷힘이 50m
+  /// (`FogOverlayController.spotClearRadiusMeters`)로 줄면서 **따로 간다** — 발자취
+  /// 조회 규칙은 그대로 둔다.
   static const _unlockedSpotRadiusMeters = 150.0;
 
   bool _isInsideUnlockedSpot(double lat, double lng) {
@@ -492,7 +501,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     try {
       final points = await ref.read(journeyServiceProvider).fetchMine();
       if (!mounted || points.isEmpty) return;
-      // 점마다 부르지 않는다 — landmass 하나당 setHoles 한 번으로 끝낸다.
+      // 점마다 부르지 않는다 — setHoles 한 번으로 끝낸다.
       _fogOverlay?.clearTrails(points);
     } catch (e) {
       debugPrint('[Journey] 궤적 복원 실패: $e');
@@ -619,7 +628,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
         _visitedSpotCoords = {..._visitedSpotCoords, spot.id: NLatLng(spot.lat, spot.lng)};
       });
       unawaited(_refreshConquest());
-      // 안개 걷힘 연출(#49) — 스팟 좌표 기준 반경을 퍼지듯 넓혀가며 걷어낸다.
+      // 안개 걷힘 연출(#49) — 스팟 좌표 기준 50m 를 퍼지듯 넓혀가며 걷어낸다.
       unawaited(_fogOverlay?.clearCircleAnimated(spot.id.toString(), NLatLng(spot.lat, spot.lng)));
       unawaited(_openUnlockedSpotDetail(spot));
     }
@@ -679,6 +688,13 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     final locationTracker = FogLocationTracker();
     controller.setMyLocationTracker(locationTracker);
     _fogOverlay = await FogOverlayController.attach(controller);
+    // 오버레이가 붙기 «전»에 이미 위치를 받았다면 시야를 바로 띄운다 — 안 그러면
+    // 다음 15m 이동까지 내 주변도 짙은 안개에 잠겨 있다. 궤적은 버퍼가 따로 그린다.
+    final lat = _myLat;
+    final lng = _myLng;
+    if (lat != null && lng != null) {
+      _fogOverlay?.updatePosition(NLatLng(lat, lng), recordTrail: false);
+    }
     // 걸어온 자리를 서버에서 되살린다(#131). 인증 안개를 GET /api/visits 로 복원하는
     // 것(_loadVisitedSpots)과 같은 자리다 — 오버레이가 붙은 «뒤»라야 구멍을 낼 수 있다.
     unawaited(_restoreJourney());
