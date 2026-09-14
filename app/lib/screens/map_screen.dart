@@ -34,7 +34,6 @@ import 'footprint_nearby_create_screen.dart';
 import 'match_candidates_screen.dart';
 import 'match_list_screen.dart';
 import 'profile_screen.dart';
-import 'social/personality_test_screen.dart';
 import 'spot_detail_screen.dart';
 import 'visit_verify_screen.dart';
 
@@ -1193,17 +1192,10 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                               mainAxisSize: MainAxisSize.min,
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                FilledButton.tonal(
-                                  // 지도 위 탐험 UI가 준비될 때까지 성향 테스트(#31)로 가는 임시 진입점.
-                                  onPressed: () => Navigator.of(context).push(
-                                    MaterialPageRoute(builder: (_) => const PersonalityTestScreen()),
-                                  ),
-                                  child: const Text('여행 성향 테스트 하기'),
-                                ),
-                                const SizedBox(height: 8),
+                                // 성향 테스트(#31) 진입점은 프로필 화면에 있다 — 지도 메뉴에 또 두면
+                                // 같은 화면으로 가는 버튼이 둘이라 뺐다(시진, 09-14).
                                 FilledButton.tonalIcon(
-                                  // 제대로 된 네비게이션(하단 바 등)이 붙기 전까지의 최소 진입점(#73) —
-                                  // 성향 테스트 버튼과 같은 임시 성격이다.
+                                  // 제대로 된 네비게이션(하단 바 등)이 붙기 전까지의 최소 진입점(#73).
                                   onPressed: () => Navigator.of(context).push(
                                     MaterialPageRoute(builder: (_) => const ProfileScreen()),
                                   ),
