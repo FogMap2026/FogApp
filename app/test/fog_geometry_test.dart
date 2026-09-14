@@ -44,13 +44,12 @@ void main() {
   });
 
   group('안개 색', () {
-    test('짙은 안개는 완전 불투명이다 — 아래 지도가 비치면 «아예 가린» 게 아니다', () {
-      // 결(청회색)은 시야 안개와 같고 알파만 FF 다.
-      expect(FogOverlayController.fogColor, const Color(0xFF48566B));
+    test('짙은 안개는 예전 전역 안개와 같은 85% 반투명이다 — 아래 지도가 은은히 비친다', () {
+      expect(FogOverlayController.fogColor, const Color(0xD948566B));
     });
 
-    test('내 시야는 예전 반투명 안개(85%) 그대로다', () {
-      expect(FogOverlayController.visionFogColor, const Color(0xD948566B));
+    test('내 시야는 짙은 안개보다 옅다 — «곁은 확실히 더 잘 보인다»', () {
+      expect(FogOverlayController.visionFogColor.alpha, lessThan(FogOverlayController.fogColor.alpha));
     });
 
     test('짙은 안개는 지명 라벨 위, 마커(200000)·내 위치(300000) 아래에 그린다', () {
