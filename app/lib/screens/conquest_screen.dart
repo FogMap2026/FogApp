@@ -2,18 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/conquest.dart';
-import '../models/visit.dart';
 import '../services/conquest_service.dart';
-import '../services/visit_service.dart';
 import '../theme/app_theme.dart';
-import '../widgets/korea_dot_map.dart';
+import '../widgets/korea_choropleth_map.dart';
 import 'conquest_region_screen.dart';
 
 /// 전국 정복 현황 — 지도 상단 정보 바(지역명·정복률)를 누르면 들어온다.
 ///
-/// 「발자취」 앱의 배지 화면을 참고했다: 한반도를 점으로 깔아 두고 실제 인증한
-/// 좌표만 짙게 찍어("[KoreaDotMap]") 얼마나 밝혔는지 한눈에 보여준 뒤, 그 아래
-/// 전체 스팟 밝힘 비율과 **시/도별 배지 17개**를 이어 붙인다.
+/// 「발자취」 앱의 배지 화면을 참고했다: 시/도 경계 지도를 탐험률로 칠해
+/// ([KoreaChoroplethMap]) 어디를 얼마나 밝혔는지 한눈에 보여준 뒤, 그 아래
+/// 전체 스팟 밝힘 비율과 **시/도별 배지**를 이어 붙인다. 지도와 배지는 같은 숫자다.
 ///
 /// 배지 단위가 시/도인 이유: 정복률 API(#51)는 시/군/구로 내려주는데 그대로 늘어놓으면
 /// 전국 250개 안팎이고, 내가 밝힌 곳은 한두 개라 나머지 0% 타일을 한없이 스크롤하게
@@ -28,7 +26,7 @@ class ConquestScreen extends ConsumerStatefulWidget {
 }
 
 class _ConquestScreenState extends ConsumerState<ConquestScreen> {
-  late Future<_ConquestData> _future;
+  late Future<List<ConquestRegion>> _future;
 
   @override
   void initState() {
@@ -36,18 +34,8 @@ class _ConquestScreenState extends ConsumerState<ConquestScreen> {
     _future = _load();
   }
 
-  /// 정복률 목록(지역별 집계)과 방문 인증 좌표(점 지도용)를 함께 받는다 — 둘 다
-  /// 같은 근거(`visits`)에서 나오지만 API가 갈려 있어 따로 부른다.
-  Future<_ConquestData> _load() async {
-    final results = await Future.wait([
-      ref.read(conquestServiceProvider).myConquest(),
-      ref.read(visitServiceProvider).myVisits(),
-    ]);
-    return _ConquestData(
-      regions: results[0] as List<ConquestRegion>,
-      visits: results[1] as List<Visit>,
-    );
-  }
+  /// 정복률 목록(시/군/구 집계) 하나면 된다 — 지도도 배지도 여기서 합산한 시/도 값을 쓴다.
+  Future<List<ConquestRegion>> _load() => ref.read(conquestServiceProvider).myConquest();
 
   void _retry() => setState(() => _future = _load());
 
@@ -57,7 +45,7 @@ class _ConquestScreenState extends ConsumerState<ConquestScreen> {
       backgroundColor: AppColors.canvasSoft,
       appBar: AppBar(title: const Text('탐험 현황')),
       body: SafeArea(
-        child: FutureBuilder<_ConquestData>(
+        child: FutureBuilder<List<ConquestRegion>>(
           future: _future,
           builder: (context, snapshot) {
             if (snapshot.connectionState != ConnectionState.done) {
@@ -75,7 +63,7 @@ class _ConquestScreenState extends ConsumerState<ConquestScreen> {
                 ),
               );
             }
-            return _ConquestBody(data: snapshot.data!);
+            return _ConquestBody(regions: snapshot.data!);
           },
         ),
       ),
@@ -83,22 +71,14 @@ class _ConquestScreenState extends ConsumerState<ConquestScreen> {
   }
 }
 
-class _ConquestData {
-  const _ConquestData({required this.regions, required this.visits});
+class _ConquestBody extends StatelessWidget {
+  const _ConquestBody({required this.regions});
 
   final List<ConquestRegion> regions;
-  final List<Visit> visits;
-}
-
-class _ConquestBody extends StatelessWidget {
-  const _ConquestBody({required this.data});
-
-  final _ConquestData data;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final regions = data.regions;
     final totalSpots = regions.fold<int>(0, (sum, r) => sum + r.totalSpots);
     final visitedSpots = regions.fold<int>(0, (sum, r) => sum + r.visitedSpots);
     final percent = totalSpots == 0 ? 0 : (visitedSpots / totalSpots * 100).round();
@@ -125,7 +105,7 @@ class _ConquestBody extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-          child: KoreaDotMap(visits: data.visits),
+          child: KoreaChoroplethMap(sidos: sidos),
         ),
         const SizedBox(height: AppSpacing.lg),
         Center(

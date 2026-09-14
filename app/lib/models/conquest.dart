@@ -142,3 +142,30 @@ ConquestSido? findSidoConquest(List<ConquestSido> sidos, {String? regionName, St
   }
   return null;
 }
+
+/// 경계 데이터의 시/도 이름(2013 통계청 — 「광주광역시」·「전라남도」)을 배지에 맞춘다.
+///
+/// 이름이 같으면 그대로. 통합된 시/도(「전남광주통합특별시」)는 옛 이름 둘이 하나의 배지에
+/// 들어가야 하므로, 배지 이름이 옛 이름의 **줄임말**(광주 · 전남)을 품고 있으면 그 배지다.
+/// 이러면 경계 데이터를 행정구역 개편 때마다 다시 그리지 않아도 된다 — 옛 폴리곤 둘을
+/// 같은 색으로 칠하면 된다.
+ConquestSido? matchSidoForProvince(List<ConquestSido> sidos, String provinceName) {
+  final wanted = normalizeSidoName(provinceName);
+  for (final sido in sidos) {
+    if (sido.sidoName.isNotEmpty && normalizeSidoName(sido.sidoName) == wanted) return sido;
+  }
+  final short = _shortSidoName(wanted);
+  for (final sido in sidos) {
+    if (sido.sidoName.isEmpty) continue;
+    final badge = normalizeSidoName(sido.sidoName);
+    // 배지 이름이 옛 이름보다 길고(통합), 그 안에 옛 이름의 줄임말이 들어 있다.
+    if (badge.length > short.length && badge.contains(short)) return sido;
+  }
+  return null;
+}
+
+/// 「전라남」→「전남」처럼 정규화된 이름의 줄임말. 줄임말이 없으면 그대로.
+String _shortSidoName(String normalized) {
+  const shorts = {'전라북': '전북', '전라남': '전남', '경상북': '경북', '경상남': '경남', '충청북': '충북', '충청남': '충남'};
+  return shorts[normalized] ?? normalized;
+}

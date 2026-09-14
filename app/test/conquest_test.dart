@@ -28,6 +28,7 @@ void main() {
   });
 
   _sidoTests();
+  _provinceTests();
 }
 
 ConquestRegion _region(String code, String name, int total, int visited) => ConquestRegion(
@@ -103,5 +104,33 @@ void _sidoTests() {
     expect(findSidoConquest(sidos, regionName: '알 수 없음', areaCode: '31')?.areaCodes, ['31']);
     expect(findSidoConquest(sidos, regionName: null, areaCode: '31')?.areaCodes, ['31']);
     expect(findSidoConquest(sidos, regionName: '알 수 없음', areaCode: null), isNull);
+  });
+}
+
+void _provinceTests() {
+  final sidos = aggregateBySido([
+    _region('31-1', '경기도 부천시', 10, 1),
+    _region('5-1', '전남광주통합특별시 동구', 100, 10),
+    _region('38-3', '전남광주통합특별시 순천시', 200, 0),
+    _region('32-1', '강원특별자치도 춘천시', 50, 5),
+  ]);
+
+  test('경계 데이터의 시/도 이름이 배지와 같으면 그대로 맞는다', () {
+    expect(matchSidoForProvince(sidos, '경기도')?.sidoName, '경기도');
+    // 2013 경계는 「강원도」, 배지는 「강원특별자치도」 — 접미어 차이는 흡수한다.
+    expect(matchSidoForProvince(sidos, '강원도')?.sidoName, '강원특별자치도');
+  });
+
+  test('통합된 시/도는 옛 폴리곤 둘이 같은 배지에 맞는다 — 광주 · 전남 → 전남광주통합특별시', () {
+    final gwangju = matchSidoForProvince(sidos, '광주광역시');
+    final jeonnam = matchSidoForProvince(sidos, '전라남도');
+    expect(gwangju?.sidoName, '전남광주통합특별시');
+    expect(jeonnam, same(gwangju));
+  });
+
+  test('배지에 없는 시/도는 null — 빈 색으로 남긴다', () {
+    expect(matchSidoForProvince(sidos, '제주특별자치도'), isNull);
+    // 「경상남도」의 줄임말 「경남」이 다른 배지 이름에 우연히 들어 있지 않다.
+    expect(matchSidoForProvince(sidos, '경상남도'), isNull);
   });
 }
