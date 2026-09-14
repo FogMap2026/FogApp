@@ -423,9 +423,11 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       // 구역 없이도 지도는 돈다 — 궤적 원은 그대로 걷힌다.
       debugPrint('[FogRegions] 구역 생성 실패: $e');
       if (_fogRegionsRetries++ < 3 && mounted) {
-        unawaited(Future<void>.delayed(const Duration(seconds: 20), () {
-          if (mounted && _fogRegions == null) unawaited(_buildFogRegions());
-        }));
+        unawaited(
+          Future<void>.delayed(const Duration(seconds: 20), () {
+            if (mounted && _fogRegions == null) unawaited(_buildFogRegions());
+          }),
+        );
       }
     }
   }
