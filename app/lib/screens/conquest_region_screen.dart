@@ -7,16 +7,16 @@ import '../services/spot_service.dart';
 import '../theme/app_theme.dart';
 import 'spot_detail_screen.dart';
 
-/// 지역(시/군/구) 상세 — [ConquestScreen] 목록에서 지역 하나를 누르면 들어온다.
+/// 시/도 상세 — [ConquestScreen] 의 배지 하나를 누르면 들어온다.
 ///
 /// **밝혀지지 않은 스팟은 이름·사진을 보여주지 않는다.** [SpotDetailScreen]이 잠긴
 /// 스팟에서 지키는 규칙과 같다 — 서버가 `overview`만 가리는 게 아니라, 앱도 "탐험의
 /// 보상"이 스포일러 없이 유지되도록 이름까지 감춘다. 이 화면이 값을 갖고 있어도
 /// (서버는 title·addr를 잠긴 스팟에도 내려준다) 화면에 옮기지 않는다.
 class ConquestRegionScreen extends ConsumerStatefulWidget {
-  const ConquestRegionScreen({required this.region, super.key});
+  const ConquestRegionScreen({required this.sido, super.key});
 
-  final ConquestRegion region;
+  final ConquestSido sido;
 
   @override
   ConsumerState<ConquestRegionScreen> createState() => _ConquestRegionScreenState();
@@ -31,26 +31,22 @@ class _ConquestRegionScreenState extends ConsumerState<ConquestRegionScreen> {
     _future = _load();
   }
 
-  Future<List<Spot>> _load() {
-    final code = splitRegionCode(widget.region.regionCode);
-    return ref.read(spotServiceProvider).fetchBySigungu(
-          areaCode: code.areaCode,
-          sigunguCode: code.sigunguCode,
-          expectedCount: widget.region.totalSpots,
-        );
-  }
+  /// 서버 `GET /api/spots?region=` 이 시/도(`areaCode`) 단위로 걸러 준다 — 배지가
+  /// 시/도라서 그대로 맞는다. 페이지를 끝까지 받는다(스팟 목록은 밝힌/안 밝힌 개수를
+  /// 세는 데 쓰이므로 일부만 받으면 숫자가 틀린다).
+  Future<List<Spot>> _load() => ref.read(spotServiceProvider).fetchAllByRegion(widget.sido.areaCode);
 
   void _retry() => setState(() => _future = _load());
 
   @override
   Widget build(BuildContext context) {
-    final region = widget.region;
+    final sido = widget.sido;
     final theme = Theme.of(context);
-    final percent = (region.rate * 100).round();
+    final percent = (sido.rate * 100).round();
 
     return Scaffold(
       backgroundColor: AppColors.canvasSoft,
-      appBar: AppBar(title: Text(region.regionName)),
+      appBar: AppBar(title: Text(sido.sidoName.isEmpty ? '지역 ${sido.areaCode}' : sido.sidoName)),
       body: SafeArea(
         child: Column(
           children: [
@@ -67,7 +63,7 @@ class _ConquestRegionScreenState extends ConsumerState<ConquestRegionScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('${region.visitedSpots} / ${region.totalSpots} 스팟 밝힘', style: theme.textTheme.titleSmall),
+                      Text('${sido.visitedSpots} / ${sido.totalSpots} 스팟 밝힘', style: theme.textTheme.titleSmall),
                       Text('$percent%', style: theme.textTheme.titleSmall?.copyWith(color: AppColors.primary)),
                     ],
                   ),
@@ -75,7 +71,7 @@ class _ConquestRegionScreenState extends ConsumerState<ConquestRegionScreen> {
                   ClipRRect(
                     borderRadius: BorderRadius.circular(AppRadii.xs),
                     child: LinearProgressIndicator(
-                      value: region.totalSpots == 0 ? 0 : region.visitedSpots / region.totalSpots,
+                      value: sido.rate,
                       minHeight: 6,
                       backgroundColor: AppColors.hairline,
                       color: AppColors.primary,

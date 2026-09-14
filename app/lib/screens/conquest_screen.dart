@@ -13,8 +13,13 @@ import 'conquest_region_screen.dart';
 ///
 /// 「발자취」 앱의 배지 화면을 참고했다: 한반도를 점으로 깔아 두고 실제 인증한
 /// 좌표만 짙게 찍어("[KoreaDotMap]") 얼마나 밝혔는지 한눈에 보여준 뒤, 그 아래
-/// 전체 스팟 밝힘 비율과 지역별(시/군/구) 목록을 이어 붙인다. 지역 목록은 정복률
-/// API(#51)를 그대로 쓴다 — 지도 상단이 쓰는 것과 같은 데이터·같은 지역 단위다.
+/// 전체 스팟 밝힘 비율과 **시/도별 배지 17개**를 이어 붙인다.
+///
+/// 배지 단위가 시/도인 이유: 정복률 API(#51)는 시/군/구로 내려주는데 그대로 늘어놓으면
+/// 전국 250개 안팎이고, 내가 밝힌 곳은 한두 개라 나머지 0% 타일을 한없이 스크롤하게
+/// 된다 — 「모아 놓고 하나씩 채우는」 배지의 맛이 사라진다. 지도 상단 바가 보여주는
+/// 지역도 시/도라, 여기 「경기도 3%」가 그 바의 숫자와 같은 것을 가리킨다
+/// ([aggregateBySido] — 시/군/구 비율의 평균이 아니라 합산 후 나눈 값).
 class ConquestScreen extends ConsumerStatefulWidget {
   const ConquestScreen({super.key});
 
@@ -98,15 +103,9 @@ class _ConquestBody extends StatelessWidget {
     final visitedSpots = regions.fold<int>(0, (sum, r) => sum + r.visitedSpots);
     final percent = totalSpots == 0 ? 0 : (visitedSpots / totalSpots * 100).round();
 
-    // regionName이 "경상북도 경주시" 형태라 첫 토큰이 시/도다 — 그걸로 묶어 헤더를
-    // 만든다. 서버가 이름을 못 지은(주소 품질 문제) 그룹은 regionCode로 폴백하므로
-    // 그런 그룹은 자기 혼자만의 "헤더"가 된다 — 드물지만 틀린 그룹으로 섞이는 것보다 낫다.
-    final grouped = <String, List<ConquestRegion>>{};
-    for (final region in regions) {
-      final sido = region.regionName.split(' ').first;
-      grouped.putIfAbsent(sido, () => []).add(region);
-    }
-    final sidoNames = grouped.keys.toList()..sort();
+    // 시/도로 합산한다. 이름을 못 만든 시/도(주소 품질 문제로 서버가 코드로 폴백)는
+    // 이름이 비므로 코드를 대신 보여준다 — 드물지만 다른 시/도에 섞이는 것보다 낫다.
+    final sidos = aggregateBySido(regions)..sort((a, b) => _badgeLabel(a).compareTo(_badgeLabel(b)));
 
     if (totalSpots == 0) {
       return Center(
@@ -153,41 +152,33 @@ class _ConquestBody extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.xxl),
         Text('지역별 배지', style: theme.textTheme.titleMedium),
-        for (final sido in sidoNames) ...[
-          Padding(
-            padding: const EdgeInsets.only(top: AppSpacing.sm, bottom: AppSpacing.xxs),
-            child: Text(
-              sido,
-              style: theme.textTheme.labelLarge?.copyWith(color: AppColors.inkMuted, fontWeight: FontWeight.w600),
-            ),
-          ),
-          ...grouped[sido]!.map((region) => _RegionTile(region: region)),
-        ],
+        const SizedBox(height: AppSpacing.xs),
+        ...sidos.map((sido) => _SidoTile(sido: sido)),
       ],
     );
   }
 }
 
-class _RegionTile extends StatelessWidget {
-  const _RegionTile({required this.region});
+/// 배지에 쓸 시/도 이름. 서버가 이름을 못 만든 시/도는 코드라도 보여준다.
+String _badgeLabel(ConquestSido sido) => sido.sidoName.isEmpty ? '지역 ${sido.areaCode}' : sido.sidoName;
 
-  final ConquestRegion region;
+class _SidoTile extends StatelessWidget {
+  const _SidoTile({required this.sido});
+
+  final ConquestSido sido;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final percent = (region.rate * 100).round();
-    // 시/도 접두어는 바로 위 그룹 헤더가 이미 보여주니, 남는 부분(시/군/구)만 보여준다.
-    // 시/군/구를 못 뽑은(regionName == regionCode 폴백) 경우는 자를 게 없으니 그대로 둔다.
-    final rest = region.regionName.split(' ').skip(1).join(' ');
-    final displayName = rest.isEmpty ? region.regionName : rest;
+    final percent = (sido.rate * 100).round();
+    final displayName = _badgeLabel(sido);
 
     return Card(
       clipBehavior: Clip.antiAlias,
       margin: const EdgeInsets.only(bottom: AppSpacing.xxs),
       child: InkWell(
         onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => ConquestRegionScreen(region: region)),
+          MaterialPageRoute(builder: (_) => ConquestRegionScreen(sido: sido)),
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
@@ -200,7 +191,7 @@ class _RegionTile extends StatelessWidget {
                     Text(displayName, style: theme.textTheme.bodyLarge),
                     const SizedBox(height: 2),
                     Text(
-                      '${region.visitedSpots} / ${region.totalSpots}',
+                      '${sido.visitedSpots} / ${sido.totalSpots}',
                       style: theme.textTheme.bodySmall?.copyWith(color: AppColors.inkMuted),
                     ),
                   ],
