@@ -139,7 +139,7 @@ class _SpotDetailScreenState extends ConsumerState<SpotDetailScreen> {
       const SizedBox(height: 4),
       Center(
         child: Text(
-          '현장에서 방문 인증을 하면 사진·주소·소개가 열려요.',
+          '현장에서 방문 인증을 하면 소개가 열려요.',
           style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           textAlign: TextAlign.center,
         ),
