@@ -394,6 +394,9 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
 
   /// 전국 스팟 좌표(`GET /api/spots/coords`, 기기 캐시)와 시/도 경계로 구역을 만든다. 지도가
   /// 준비되면 한 번. 만들어지면 그때까지 받아 둔 방문 목록·궤적으로 걷힌 구역을 센다.
+  ///
+  /// 실패하면 조금 있다 다시 한다([_fogRegionsRetries]) — 첫 실행은 좌표를 받아야 해서 잠깐의
+  /// 연결 끊김(터널 재접속 등)에 통째로 걸리고, 그러면 이번 세션 내내 구역 없는 지도가 된다.
   Future<void> _buildFogRegions() async {
     try {
       final coords = await ref.read(spotServiceProvider).fetchAllCoords();
@@ -417,10 +420,17 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       }
       _applyRegionHoles();
     } catch (e) {
-      // 구역 없이도 지도는 돈다 — 궤적 원은 그대로 걷힌다. 다음 실행에 다시 받는다.
+      // 구역 없이도 지도는 돈다 — 궤적 원은 그대로 걷힌다.
       debugPrint('[FogRegions] 구역 생성 실패: $e');
+      if (_fogRegionsRetries++ < 3 && mounted) {
+        unawaited(Future<void>.delayed(const Duration(seconds: 20), () {
+          if (mounted && _fogRegions == null) unawaited(_buildFogRegions());
+        }));
+      }
     }
   }
+
+  int _fogRegionsRetries = 0;
 
   /// [lat],[lng] 가 빈 땅 구역이면 «들어간 구역»에 넣는다. 스팟 구역은 넣지 않는다 —
   /// 그건 인증해야 걷힌다(시진, 09-15). 새로 들어간 구역이면 true.
