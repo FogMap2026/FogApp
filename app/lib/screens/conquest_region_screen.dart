@@ -32,9 +32,17 @@ class _ConquestRegionScreenState extends ConsumerState<ConquestRegionScreen> {
   }
 
   /// 서버 `GET /api/spots?region=` 이 시/도(`areaCode`) 단위로 걸러 준다 — 배지가
-  /// 시/도라서 그대로 맞는다. 페이지를 끝까지 받는다(스팟 목록은 밝힌/안 밝힌 개수를
-  /// 세는 데 쓰이므로 일부만 받으면 숫자가 틀린다).
-  Future<List<Spot>> _load() => ref.read(spotServiceProvider).fetchAllByRegion(widget.sido.areaCode);
+  /// 시/도라서 그대로 맞는다. 통합된 시/도는 코드가 여럿이라([ConquestSido.areaCodes])
+  /// 전부 받아 잇는다. 페이지를 끝까지 받는다(밝힌/안 밝힌 개수를 세므로 일부만
+  /// 받으면 숫자가 틀린다).
+  Future<List<Spot>> _load() async {
+    final service = ref.read(spotServiceProvider);
+    final all = <Spot>[];
+    for (final code in widget.sido.areaCodes) {
+      all.addAll(await service.fetchAllByRegion(code));
+    }
+    return all;
+  }
 
   void _retry() => setState(() => _future = _load());
 
@@ -46,7 +54,7 @@ class _ConquestRegionScreenState extends ConsumerState<ConquestRegionScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.canvasSoft,
-      appBar: AppBar(title: Text(sido.sidoName.isEmpty ? '지역 ${sido.areaCode}' : sido.sidoName)),
+      appBar: AppBar(title: Text(sido.sidoName.isEmpty ? '지역 ${sido.areaCodes.join('·')}' : sido.sidoName)),
       body: SafeArea(
         child: Column(
           children: [

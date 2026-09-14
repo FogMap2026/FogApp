@@ -160,7 +160,7 @@ class _ConquestBody extends StatelessWidget {
 }
 
 /// 배지에 쓸 시/도 이름. 서버가 이름을 못 만든 시/도는 코드라도 보여준다.
-String _badgeLabel(ConquestSido sido) => sido.sidoName.isEmpty ? '지역 ${sido.areaCode}' : sido.sidoName;
+String _badgeLabel(ConquestSido sido) => sido.sidoName.isEmpty ? '지역 ${sido.areaCodes.join('·')}' : sido.sidoName;
 
 class _SidoTile extends StatelessWidget {
   const _SidoTile({required this.sido});

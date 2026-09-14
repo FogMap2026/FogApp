@@ -31,12 +31,12 @@ void main() {
 }
 
 ConquestRegion _region(String code, String name, int total, int visited) => ConquestRegion(
-      regionCode: code,
-      regionName: name,
-      totalSpots: total,
-      visitedSpots: visited,
-      rate: total == 0 ? 0 : visited / total,
-    );
+  regionCode: code,
+  regionName: name,
+  totalSpots: total,
+  visitedSpots: visited,
+  rate: total == 0 ? 0 : visited / total,
+);
 
 void _sidoTests() {
   test('시/군/구를 시/도로 합산한다 — 비율의 평균이 아니라 합산 후 나눈 값', () {
@@ -46,12 +46,25 @@ void _sidoTests() {
       _region('31-2', '경기도 수원시', 300, 0),
       _region('2-1', '인천광역시 남동구', 10, 5),
     ]);
-    final gyeonggi = sidos.singleWhere((s) => s.areaCode == '31');
+    final gyeonggi = sidos.singleWhere((s) => s.areaCodes.contains('31'));
     expect(gyeonggi.sidoName, '경기도');
     expect(gyeonggi.totalSpots, 303);
     expect(gyeonggi.visitedSpots, 3);
     expect(gyeonggi.rate, closeTo(0.0099, 0.0001));
-    expect(sidos.singleWhere((s) => s.areaCode == '2').rate, 0.5);
+    expect(sidos.singleWhere((s) => s.areaCodes.contains('2')).rate, 0.5);
+  });
+
+  test('통합된 시/도는 코드가 둘이어도 배지 하나다 — 광주(5)·전남(38) → 전남광주통합특별시', () {
+    final sidos = aggregateBySido([
+      _region('5-1', '전남광주통합특별시 동구', 100, 10),
+      _region('38-3', '전남광주통합특별시 순천시', 200, 0),
+      _region('38-4', '전남광주통합특별시 여수시', 100, 10),
+    ]);
+    final merged = sidos.single;
+    expect(merged.areaCodes, ['5', '38']);
+    expect(merged.totalSpots, 400);
+    expect(merged.visitedSpots, 20);
+    expect(findSidoConquest(sidos, areaCode: '38'), same(merged));
   });
 
   test('이름을 못 만든 지역(코드 폴백)은 시/도 이름을 더럽히지 않는다', () {
@@ -59,9 +72,11 @@ void _sidoTests() {
       _region('35-9', '35-9', 4, 0), // addr1 이 비어 서버가 코드로 폴백한 지역
       _region('35-2', '경상북도 경주시', 20, 2),
     ]);
-    final gyeongbuk = sidos.single;
-    expect(gyeongbuk.sidoName, '경상북도');
-    expect(gyeongbuk.totalSpots, 24);
+    // 어느 시/도인지 모르는 코드 폴백 지역은 이름 그룹에 섞지 않고 따로 둔다.
+    expect(sidos, hasLength(2));
+    final gyeongbuk = sidos.singleWhere((s) => s.sidoName == '경상북도');
+    expect(gyeongbuk.totalSpots, 20);
+    expect(sidos.singleWhere((s) => s.sidoName.isEmpty).areaCodes, ['35']);
   });
 
   test('역지오코딩과 관광공사 주소가 다르게 부르는 시/도를 같은 것으로 본다', () {
@@ -73,15 +88,12 @@ void _sidoTests() {
   });
 
   test('상단 바 이름으로 먼저 찾고, 안 맞으면 스팟 areaCode 로 찾는다', () {
-    final sidos = aggregateBySido([
-      _region('31-1', '경기도 부천시', 10, 1),
-      _region('2-1', '인천광역시 남동구', 10, 5),
-    ]);
+    final sidos = aggregateBySido([_region('31-1', '경기도 부천시', 10, 1), _region('2-1', '인천광역시 남동구', 10, 5)]);
     // 이름이 맞으면 스팟이 다른 시/도를 가리켜도 이름을 따른다 — 바에 뜬 것이 기준이다.
-    expect(findSidoConquest(sidos, regionName: '인천광역시', areaCode: '31')?.areaCode, '2');
+    expect(findSidoConquest(sidos, regionName: '인천광역시', areaCode: '31')?.areaCodes, ['2']);
     // 이름을 못 찾으면(주소 품질 문제 등) 스팟 코드가 안전망.
-    expect(findSidoConquest(sidos, regionName: '알 수 없음', areaCode: '31')?.areaCode, '31');
-    expect(findSidoConquest(sidos, regionName: null, areaCode: '31')?.areaCode, '31');
+    expect(findSidoConquest(sidos, regionName: '알 수 없음', areaCode: '31')?.areaCodes, ['31']);
+    expect(findSidoConquest(sidos, regionName: null, areaCode: '31')?.areaCodes, ['31']);
     expect(findSidoConquest(sidos, regionName: '알 수 없음', areaCode: null), isNull);
   });
 }

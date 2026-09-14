@@ -9,12 +9,12 @@ class ConquestRegion {
   });
 
   factory ConquestRegion.fromJson(Map<String, dynamic> json) => ConquestRegion(
-        regionCode: json['regionCode'] as String,
-        regionName: json['regionName'] as String,
-        totalSpots: json['totalSpots'] as int,
-        visitedSpots: json['visitedSpots'] as int,
-        rate: (json['rate'] as num).toDouble(),
-      );
+    regionCode: json['regionCode'] as String,
+    regionName: json['regionName'] as String,
+    totalSpots: json['totalSpots'] as int,
+    visitedSpots: json['visitedSpots'] as int,
+    rate: (json['rate'] as num).toDouble(),
+  );
 
   final String regionCode;
   final String regionName;
@@ -41,14 +41,19 @@ String regionCodeFor({required String areaCode, String? sigunguCode}) {
 /// 시/군/구 목록은 그대로 둔다 — 전국 정복 현황 화면(#215)이 그 단위로 쓴다.
 class ConquestSido {
   const ConquestSido({
-    required this.areaCode,
+    required this.areaCodes,
     required this.sidoName,
     required this.totalSpots,
     required this.visitedSpots,
   });
 
-  /// 관광공사 지역 코드(`Spot.areaCode`). `regionCode` 의 `-` 앞부분과 같다.
-  final String areaCode;
+  /// 이 시/도에 속한 관광공사 지역 코드(`Spot.areaCode`) — **여럿일 수 있다.**
+  ///
+  /// 관광공사 코드는 옛 행정구역이고 주소는 현재 행정구역이다. 2026 광주·전남 통합 뒤
+  /// 주소는 둘 다 「전남광주통합특별시」인데 코드는 광주(5)·전남(38)로 남아 있어,
+  /// 코드로 묶으면 같은 이름 배지가 둘 뜬다(실기기, 09-14). 그래서 **이름으로 묶고**
+  /// 코드는 목록으로 들고 있다 — 상세 화면이 스팟을 부를 때 전부 돈다.
+  final List<String> areaCodes;
 
   /// 서버 `regionName`(「경기도 부천시」)의 첫 토큰. 이름을 못 만든 지역(코드 폴백)은 빈 문자열.
   final String sidoName;
@@ -61,21 +66,28 @@ class ConquestSido {
 }
 
 /// 시/군/구 목록을 시/도별로 합산한다. 순서는 입력에 처음 나타난 시/도 순.
+///
+/// **이름([normalizeSidoName])으로 묶는다** — 코드로 묶으면 통합된 시/도가 둘로 갈라진다
+/// ([ConquestSido.areaCodes]). 이름을 못 만든 지역(주소 품질 문제로 서버가 코드로 폴백)만
+/// 코드로 묶는다 — 어느 시/도인지 모르는 것을 아무 데나 섞을 수는 없다.
 List<ConquestSido> aggregateBySido(List<ConquestRegion> regions) {
-  final byArea = <String, ConquestSido>{};
+  final byKey = <String, ConquestSido>{};
   for (final region in regions) {
     final areaCode = region.regionCode.split('-').first;
     // 이름을 못 만든 지역은 regionName 이 코드(「35-2」)라 첫 토큰이 시/도가 아니다.
     final sidoName = region.regionName == region.regionCode ? '' : region.regionName.split(' ').first;
-    final prev = byArea[areaCode];
-    byArea[areaCode] = ConquestSido(
-      areaCode: areaCode,
-      sidoName: (prev == null || prev.sidoName.isEmpty) ? sidoName : prev.sidoName,
+    final key = sidoName.isEmpty ? 'code:$areaCode' : 'name:${normalizeSidoName(sidoName)}';
+    final prev = byKey[key];
+    byKey[key] = ConquestSido(
+      areaCodes: prev == null
+          ? [areaCode]
+          : (prev.areaCodes.contains(areaCode) ? prev.areaCodes : [...prev.areaCodes, areaCode]),
+      sidoName: prev?.sidoName ?? sidoName,
       totalSpots: (prev?.totalSpots ?? 0) + region.totalSpots,
       visitedSpots: (prev?.visitedSpots ?? 0) + region.visitedSpots,
     );
   }
-  return byArea.values.toList();
+  return byKey.values.toList();
 }
 
 /// 시/도 이름 비교용 정규화. 역지오코딩과 관광공사 주소가 같은 곳을 다르게 부른다 —
@@ -105,7 +117,7 @@ ConquestSido? findSidoConquest(List<ConquestSido> sidos, {String? regionName, St
   }
   if (areaCode != null) {
     for (final sido in sidos) {
-      if (sido.areaCode == areaCode) return sido;
+      if (sido.areaCodes.contains(areaCode)) return sido;
     }
   }
   return null;
