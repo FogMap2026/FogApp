@@ -9,9 +9,13 @@ import 'spot_service.dart';
 /// 해금 전 스팟은 이름·주소 등 정보를 노출하지 않고, 캡션 없는 어두운 톤 마커로만
 /// 표시한다. 방문 인증 후 실제 정보를 드러내는 처리는 Phase 3(안개 걷힘)에서 붙는다.
 ///
-/// 지도 중심이 바뀔 때마다(카메라 idle) 다시 불러오는 단순한 뷰포트 로딩이다.
-/// 스팟이 매우 밀집한 지역에서 마커 수가 많아지면 클러스터링이 필요할 수 있다 —
-/// 지금은 반경([_radiusMeters])으로 요청량을 제한하는 선에서 대응한다.
+/// 어디를 중심으로 불러올지는 호출부([loadAround])가 정한다 — 기본은 «내 위치»이고,
+/// 지도 컨트롤의 📍 버튼이 «화면 중심»으로 바꾼다(`map_screen.dart`). 예전에는
+/// 카메라가 멈출 때마다 그 중심으로 불러왔는데, 그러면 지도를 밀 때마다 요청이 나가고
+/// 내 주변 스팟이 화면에서 사라졌다.
+///
+/// 스팟이 밀집한 지역에서는 마커가 겹친다 — 줌을 빼면 마커를 함께 줄여([setZoom])
+/// 덜 겹치게 한다. 클러스터링까지는 안 한다.
 class SpotMarkerController {
   SpotMarkerController(
     this._mapController,
@@ -38,7 +42,22 @@ class SpotMarkerController {
   /// 마커를 탭했을 때 호출된다(#70 발자취 작성 진입점).
   final void Function(Spot spot)? onSpotTapped;
 
-  static const _radiusMeters = 5000.0;
+  /// 조회 반경 기본값. 내 위치 기준 3km — 걸어서 갈 만한 거리이고, 서버 기본값
+  /// (`SpotController` 의 `radius` 기본 3000)과도 같다.
+  static const radiusMeters = 3000.0;
+
+  /// 네이버 기본 마커 아이콘 크기(dp) — 줄일 때의 기준. Galaxy S25(480dpi) 캡처에서
+  /// 114×149px 로 실측한 값이다. 배율 1.0 에서는 이 값을 쓰지 않고 [NMarker.autoSize]
+  /// 로 둔다 — 그래야 줌 15 이상에서 예전과 픽셀 단위로 같다.
+  static const _baseSize = Size(38, 50);
+
+  /// 이 줌 이상이면 마커를 원래 크기로, 이 줌에서 [_minScaleZoom] 까지는 선형으로 줄인다.
+  static const _fullScaleZoom = 15.0;
+  static const _minScaleZoom = 12.0;
+  static const _minScale = 0.4;
+
+  /// 지금 마커에 적용된 배율. 0.05 단위로 끊어 핀치 줌 중에 매 프레임 갱신하지 않는다.
+  double _scale = 1.0;
 
   /// 해금 전 스팟 마커에 입히는 톤. 이름/캡션 없이 "여기 무언가 있다" 정도만 알려준다.
   static const _hiddenTint = Color(0xFF3A4454);
@@ -54,15 +73,27 @@ class SpotMarkerController {
   final Map<int, NMarker> _markersBySpotId = {};
   final Map<int, bool> _unlockedBySpotId = {};
 
-  /// [center] 주변 스팟을 다시 불러와 마커를 갱신한다.
-  Future<void> loadAround(NLatLng center) async {
-    if (_loading) return;
+  /// 조회 중에 새 요청이 오면 여기 둔다 — 버리지 않고 끝난 뒤 «마지막 것»만 실행한다.
+  ///
+  /// 지도가 준비되며 임시로 한 번 부르고, 곧바로 첫 측위가 내 위치로 다시 부른다.
+  /// 앞 요청이 아직 서버를 기다리는 중이면 뒤 요청이 겹치는데, 그걸 버리면 **내 주변
+  /// 스팟이 영영 안 뜬다** — 호출부는 「이미 불러왔다」고 믿고 300m 걸을 때까지 다시
+  /// 부르지 않기 때문이다. 카메라가 멈출 때마다 부르던 시절엔 하나쯤 버려도 다음
+  /// 호출이 메웠지만, 이제는 그 다음 호출이 없다.
+  ({NLatLng center, double radius})? _pending;
+
+  /// [center] 주변 [radius] 안 스팟을 다시 불러와 마커를 갱신한다.
+  Future<void> loadAround(NLatLng center, {double radius = radiusMeters}) async {
+    if (_loading) {
+      _pending = (center: center, radius: radius);
+      return;
+    }
     _loading = true;
     try {
       final spots = await _spotService.fetchNearby(
         lat: center.latitude,
         lng: center.longitude,
-        radiusMeters: _radiusMeters,
+        radiusMeters: radius,
       );
       onSpotsLoaded?.call(spots);
       await _syncMarkers(spots);
@@ -73,6 +104,11 @@ class SpotMarkerController {
       onLoadFailed?.call(e);
     } finally {
       _loading = false;
+    }
+    final pending = _pending;
+    if (pending != null) {
+      _pending = null;
+      await loadAround(pending.center, radius: pending.radius);
     }
   }
 
@@ -102,10 +138,31 @@ class SpotMarkerController {
     }
   }
 
+  /// 줌에 맞춰 마커 크기를 바꾼다. 줌을 빼면 같은 화면에 스팟이 많아져 겹치는데,
+  /// 마커를 함께 줄이면 «어디에 몰려 있는지»는 보이면서 서로 덮지는 않는다.
+  ///
+  /// 카메라가 멈추기 전(핀치 중)에도 부르지만 배율이 0.05 이상 바뀔 때만 실제로
+  /// 마커를 건드린다 — 마커 수십 개에 매 프레임 `setSize` 를 보내지 않기 위해서다.
+  void setZoom(double zoom) {
+    final raw = ((zoom - _minScaleZoom) / (_fullScaleZoom - _minScaleZoom)).clamp(0.0, 1.0);
+    // ⚠️ 괄호 주의 — 배율 전체를 20배 해서 반올림해야 한다. 배율이 0 이 되면 SDK 는
+    //    「기본 크기」(NMarker.autoSize) 로 읽어 안 줄어든 것처럼 보인다.
+    final scale = ((_minScale + (1 - _minScale) * raw) * 20).round() / 20;
+    if (scale == _scale) return;
+    _scale = scale;
+    for (final marker in _markersBySpotId.values) {
+      marker.setSize(_sizeForScale());
+    }
+  }
+
+  Size _sizeForScale() =>
+      _scale >= 1.0 ? NMarker.autoSize : Size(_baseSize.width * _scale, _baseSize.height * _scale);
+
   NMarker _toMarker(Spot spot) {
     final marker = NMarker(
       id: 'spot-${spot.id}',
       position: NLatLng(spot.lat, spot.lng),
+      size: _sizeForScale(),
       // unlocked 스팟은 Phase 3에서 실제 정보를 담은 마커로 대체될 예정이라
       // 지금은 항상 숨김 톤으로 그린다 (서버도 현재 unlocked=false만 내려준다).
       iconTintColor: spot.unlocked ? Colors.transparent : _hiddenTint,

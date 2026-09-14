@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// 지도 우측 상단 컨트롤(확대·축소·내 위치). 세로로 쌓인 아이콘 버튼 한 줄이다.
+/// 지도 우측 상단 컨트롤(확대·축소·내 위치·이 지역 스팟). 세로로 쌓인 아이콘 버튼 한 줄이다.
 ///
 /// **폭을 [_width] 로 고정한다.** 안 그러면 화면 전체를 덮는다 —
 /// [Divider] 는 고유 폭이 없어 주어진 최대 폭까지 늘어나고, `Column` 의
@@ -18,6 +18,7 @@ class MapControls extends StatelessWidget {
     required this.onZoomIn,
     required this.onZoomOut,
     required this.onRecenter,
+    required this.onSearchHere,
   });
 
   /// 패널 폭. 아이콘(20) + 좌우 여백이 들어가는 최소치다.
@@ -27,7 +28,7 @@ class MapControls extends StatelessWidget {
   /// 무리가 없는 선이면서 지도 시야를 덜 먹는다.
   static const double _width = 40;
 
-  /// 버튼 하나의 높이. 정사각형으로 두어 세 개가 40×120 한 덩어리가 된다.
+  /// 버튼 하나의 높이. 정사각형으로 두어 네 개가 40×160 한 덩어리가 된다.
   static const double _buttonSize = 40;
 
   /// 기본값(24)보다 작게 — 패널이 작아진 만큼 아이콘도 같이 줄여야 답답해 보이지 않는다.
@@ -38,6 +39,10 @@ class MapControls extends StatelessWidget {
 
   /// 아직 내 위치를 모르면 null — 버튼이 비활성화된다.
   final VoidCallback? onRecenter;
+
+  /// 「이 지역 스팟 보기」 — 스팟은 평소 내 위치 주변만 불러오는데, 지도를 멀리 밀어
+  /// 보고 있을 때 그 화면 중심 주변을 불러온다. 지도가 아직 준비 전이면 null.
+  final VoidCallback? onSearchHere;
 
   @override
   Widget build(BuildContext context) {
@@ -55,6 +60,8 @@ class MapControls extends StatelessWidget {
             _button(icon: Icons.remove, onPressed: onZoomOut, tooltip: '축소'),
             const Divider(height: 1),
             _button(icon: Icons.my_location, onPressed: onRecenter, tooltip: '내 위치로'),
+            const Divider(height: 1),
+            _button(icon: Icons.location_on_outlined, onPressed: onSearchHere, tooltip: '이 지역 스팟 보기'),
           ],
         ),
       ),
@@ -62,7 +69,7 @@ class MapControls extends StatelessWidget {
   }
 
   /// `IconButton` 은 기본 패딩이 8이라 그대로 두면 40×40 을 넘긴다.
-  /// 패딩을 지우고 [_buttonSize] 로 제약을 걸어 세 개가 정확히 맞물리게 한다.
+  /// 패딩을 지우고 [_buttonSize] 로 제약을 걸어 네 개가 정확히 맞물리게 한다.
   Widget _button({
     required IconData icon,
     required VoidCallback? onPressed,
