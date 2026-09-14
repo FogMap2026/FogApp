@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/personality.dart';
 import '../../services/personality_scorer.dart';
+import '../../theme/app_theme.dart';
 import 'personality_result_screen.dart';
 
 /// 여행 성향 설문 화면(#31). 12문항에 모두 응답하면 채점 후 결과 화면으로 이동한다.
@@ -78,8 +79,8 @@ class _QuestionTile extends StatelessWidget {
         const Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('전혀 아니다', style: TextStyle(fontSize: 11, color: Colors.grey)),
-            Text('매우 그렇다', style: TextStyle(fontSize: 11, color: Colors.grey)),
+            Text('전혀 아니다', style: TextStyle(fontSize: 12, color: AppColors.inkFaint)),
+            Text('매우 그렇다', style: TextStyle(fontSize: 12, color: AppColors.inkFaint)),
           ],
         ),
         RadioGroup<int>(

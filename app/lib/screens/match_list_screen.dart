@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/match.dart';
 import '../services/match_service.dart';
+import '../theme/app_theme.dart';
 
 /// 내 매칭 목록 화면(5-2). 보낸 요청·받은 요청을 함께 보여주고, 받은 요청은
 /// 수락·거절을, 대기 중인 요청은 취소를 할 수 있다.
@@ -154,7 +155,7 @@ class _MatchCard extends StatelessWidget {
             CircleAvatar(
               radius: 20,
               backgroundColor: theme.colorScheme.surfaceContainerHighest,
-              child: const Icon(Icons.person_outline, color: Colors.black45),
+              child: const Icon(Icons.person_outline, color: AppColors.inkMuted),
             ),
             const SizedBox(width: 12),
             Expanded(

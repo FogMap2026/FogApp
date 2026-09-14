@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/spot.dart';
 import '../services/visit_photo_service.dart';
 import '../services/visit_service.dart';
+import '../theme/app_theme.dart';
 
 enum _Stage { capturing, preview, uploading, success, error }
 
@@ -272,7 +273,7 @@ class _VisitVerifyScreenState extends ConsumerState<VisitVerifyScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.check_circle, color: Colors.green, size: 64),
+            const Icon(Icons.check_circle, color: AppColors.accentGreen, size: 64),
             const SizedBox(height: 16),
             Text('${widget.spot.title} 인증 완료!', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 24),

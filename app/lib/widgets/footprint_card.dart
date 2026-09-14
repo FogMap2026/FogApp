@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/footprint.dart';
 import '../services/api_client.dart';
 import '../services/footprint_service.dart';
+import '../theme/app_theme.dart';
 
 enum _CardAction { edit, delete }
 
@@ -195,7 +196,7 @@ class _AuthorAvatar extends StatelessWidget {
       return CircleAvatar(
         radius: 16,
         backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-        child: const Icon(Icons.person_outline, size: 18, color: Colors.black45),
+        child: const Icon(Icons.person_outline, size: 18, color: AppColors.inkMuted),
       );
     }
     return CircleAvatar(

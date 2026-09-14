@@ -7,6 +7,7 @@ import '../models/profile.dart';
 import '../services/auth_service.dart';
 import '../services/footprint_service.dart';
 import '../services/profile_service.dart';
+import '../theme/app_theme.dart';
 import '../widgets/footprint_card.dart';
 import '../widgets/personality_axis_bar.dart';
 import 'privacy_policy_screen.dart';
@@ -307,7 +308,7 @@ class _ProfileHeader extends StatelessWidget {
           backgroundImage: (imageUrl != null && imageUrl.isNotEmpty) ? NetworkImage(imageUrl) : null,
           onBackgroundImageError: (imageUrl != null && imageUrl.isNotEmpty) ? (_, __) {} : null,
           child: (imageUrl == null || imageUrl.isEmpty)
-              ? const Icon(Icons.person_outline, size: 28, color: Colors.black45)
+              ? const Icon(Icons.person_outline, size: 28, color: AppColors.inkMuted)
               : null,
         ),
         const SizedBox(width: 12),

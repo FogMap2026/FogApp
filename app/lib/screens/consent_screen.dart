@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/auth_service.dart';
 import '../services/profile_service.dart';
+import '../theme/app_theme.dart';
 import 'privacy_policy_screen.dart';
 
 /// 최초 로그인 후 띄우는 개인정보·위치정보 수집 동의 화면(#152).
@@ -199,6 +200,8 @@ class _ConsentScreenState extends ConsumerState<ConsentScreen> {
                         : const Text('동의하고 시작하기'),
                   ),
                   TextButton(
+                    // 거절은 권장 행동이 아니다 — 파랑(주요 행동·링크)이 아니라 흐린 잉크로 둔다.
+                    style: TextButton.styleFrom(foregroundColor: AppColors.inkMuted),
                     onPressed: _submitting ? null : _decline,
                     child: const Text('동의하지 않음'),
                   ),
