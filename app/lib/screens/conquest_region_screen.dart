@@ -74,7 +74,7 @@ class _ConquestRegionScreenState extends ConsumerState<ConquestRegionScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('${sido.visitedSpots} / ${sido.totalSpots} 스팟 밝힘', style: theme.textTheme.titleSmall),
+                      Text('${sido.visitedSpots} / ${sido.totalSpots}', style: theme.textTheme.titleSmall),
                       Text('$percent%', style: theme.textTheme.titleSmall?.copyWith(color: AppColors.primary)),
                     ],
                   ),
