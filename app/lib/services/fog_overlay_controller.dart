@@ -77,15 +77,24 @@ class FogOverlayController {
   /// 스토어 그래픽·스크린샷의 안개색과 어긋난다.
   static const fogColor = Color(0xD948566B);
 
-  static const _boundaryAssetPath = 'assets/geo/kr_boundary.json';
+  /// 통계청 2013 시/도 경계 — 지도 위 시/도 경계선(`ProvinceBoundaryOverlay`)·탐험 현황의
+  /// 단계구분도와 **같은 파일**이다. 안개가 다른 해안선(Natural Earth)을 쓰면 시/도
+  /// 경계선과 어긋나 보였다(실기기, 09-14). 같은 폴리곤을 쓰면 안개 가장자리가 경계선에
+  /// 정확히 붙고, 매립지(송도)처럼 옛 해안선에 없던 땅도 안개에 들어온다.
+  static const _boundaryAssetPath = 'assets/geo/kr_provinces.json';
 
   /// 지도가 준비된 뒤 호출한다. 국경 데이터를 읽어 landmass별 폴리곤 오버레이를
   /// 만들고 한 번에 지도에 추가한다.
   static Future<FogOverlayController> attach(NaverMapController mapController) async {
     final raw = await rootBundle.loadString(_boundaryAssetPath);
-    final rings = (jsonDecode(raw) as List).cast<List>().map((ring) {
-      return ring.cast<List>().map((p) => NLatLng((p[0] as num).toDouble(), (p[1] as num).toDouble())).toList();
-    }).toList();
+    // 시/도마다 고리가 여럿(본토 조각 + 섬). 안개는 시/도를 가리지 않으므로 전부 펴서
+    // landmass 하나씩으로 둔다. 좌표는 GeoJSON 순서 [경도, 위도] — 뒤집어 넣는다.
+    final json = jsonDecode(raw) as Map<String, dynamic>;
+    final rings = <List<NLatLng>>[
+      for (final province in json['provinces'] as List)
+        for (final ring in province['rings'] as List)
+          [for (final c in ring as List) NLatLng((c[1] as num).toDouble(), (c[0] as num).toDouble())],
+    ];
 
     final landmasses = [
       for (var i = 0; i < rings.length; i++) _Landmass(index: i, outerRing: rings[i], mapController: mapController),
