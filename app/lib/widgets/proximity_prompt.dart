@@ -89,7 +89,9 @@ class _NearMorph extends StatelessWidget {
   final VoidCallback onCollapse;
 
   static const _circle = 52.0;
-  static const _cardHeight = 76.0;
+
+  /// 제목 두 줄 + 부제 한 줄이 들어가는 높이. 스팟 이름이 길어도 «…»로 자르지 않는다.
+  static const _cardHeight = 88.0;
   static const _duration = Duration(milliseconds: 360);
 
   @override
@@ -189,31 +191,25 @@ class _NearCardContent extends StatelessWidget {
     final verifyMeters = SpotProximity.verifyEnterMeters.round();
     return Padding(
       padding: const EdgeInsets.fromLTRB(AppSpacing.sm, 6, AppSpacing.xxs, 6),
+      // 아이콘 없이 글만 — 나침반 원은 자리만 먹었고(시진, 09-14), 그 폭을 제목에 준다.
       child: Row(
         children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
-            child: const Icon(Icons.explore_outlined, color: Colors.white, size: 20),
-          ),
-          const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
+                  // 스팟 이름이 길어도 «…»로 자르지 않는다 — 두 줄까지 내려쓴다.
                   '${proximity.spot.title} 근처예요',
                   style: theme.textTheme.titleSmall,
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
-                  // 두 줄까지 — 360dp 폰에서 카드 글자 폭이 180dp 남짓이라 한 줄이면 «인증»이 잘린다.
                   '약 ${distance}m · ${verifyMeters}m 안으로 가면 인증할 수 있어요',
                   style: theme.textTheme.bodySmall?.copyWith(color: AppColors.inkMuted, height: 1.3),
-                  maxLines: 2,
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               ],
@@ -318,7 +314,7 @@ class _VerifyBeaconState extends State<_VerifyBeacon> with SingleTickerProviderS
                           Text(
                             '${widget.spotTitle} 인증 가능',
                             style: Theme.of(context).textTheme.titleSmall,
-                            maxLines: 1,
+                            maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
                           Text(
@@ -342,7 +338,7 @@ class _VerifyBeaconState extends State<_VerifyBeacon> with SingleTickerProviderS
   }
 
   /// «근처» 카드와 같은 높이 — 두 단계가 한자리에서 문구만 바뀌는 것으로 보이게.
-  static const _cardHeight = 76.0;
+  static const _cardHeight = _NearMorph._cardHeight;
 
   Widget _beacon() {
     return SizedBox(
