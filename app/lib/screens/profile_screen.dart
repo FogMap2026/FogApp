@@ -37,13 +37,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   Future<Profile> _loadProfile() async {
     final profile = await ref.read(profileServiceProvider).me();
     if (mounted) {
-      setState(() => _footprintsFuture = ref.read(footprintServiceProvider).listByUser(profile.id));
+      setState(() {
+        _footprintsFuture = ref.read(footprintServiceProvider).listByUser(profile.id);
+      });
     }
     return profile;
   }
 
   void _refreshFootprints(int userId) {
-    setState(() => _footprintsFuture = ref.read(footprintServiceProvider).listByUser(userId));
+    setState(() {
+      _footprintsFuture = ref.read(footprintServiceProvider).listByUser(userId);
+    });
   }
 
   /// 성향 테스트(#31) 화면에 다녀온 뒤 프로필을 다시 불러온다. 저장했는지 여부를
@@ -53,7 +57,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const PersonalityTestScreen()),
     );
-    if (mounted) setState(() => _profileFuture = _loadProfile());
+    if (mounted) {
+      setState(() {
+        _profileFuture = _loadProfile();
+      });
+    }
   }
 
   Future<void> _editFootprint(Footprint footprint, int userId) async {
@@ -131,7 +139,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     const Text('프로필을 불러오지 못했어요.'),
                     const SizedBox(height: 8),
                     TextButton(
-                      onPressed: () => setState(() => _profileFuture = _loadProfile()),
+                      onPressed: () => setState(() {
+                        _profileFuture = _loadProfile();
+                      }),
                       child: const Text('다시 시도'),
                     ),
                   ],

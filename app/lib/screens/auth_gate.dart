@@ -34,7 +34,9 @@ class _AuthGateState extends ConsumerState<AuthGate> {
   }
 
   void _reloadProfile() {
-    setState(() => _profileFuture = _loadProfile());
+    setState(() {
+      _profileFuture = _loadProfile();
+    });
   }
 
   @override
