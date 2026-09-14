@@ -217,6 +217,9 @@ class FogOverlayController {
     _disposed = true;
     for (final landmass in _landmasses) {
       _mapController.deleteOverlay(landmass.overlay.info);
+      // 섬 폴리곤도 같은 방식으로 지도에 직접 올라가므로 같이 지운다 — 안 지우면 지도
+      // 화면을 나갔다 들어올 때 예전 섬이 새 안개와 안 맞는 자리에 남는다(#214 리뷰).
+      landmass._disposeIslands();
     }
   }
 
@@ -312,10 +315,9 @@ class _Landmass {
   }
 
   void _syncIslands(List<List<NLatLng>> rings) {
-    for (final island in _islands) {
-      _mapController.deleteOverlay(island.info);
-    }
-    _islands.clear();
+    // 섬이 없고 지금도 없으면 아무것도 안 한다 — 위치 갱신마다 불리므로 이게 대부분이다.
+    if (rings.isEmpty && _islands.isEmpty) return;
+    _disposeIslands();
     for (final ring in rings) {
       final island = NPolygonOverlay(
         id: 'fog-island-$index-${_islandSerial++}',
@@ -325,6 +327,13 @@ class _Landmass {
       _islands.add(island);
       _mapController.addOverlay(island);
     }
+  }
+
+  void _disposeIslands() {
+    for (final island in _islands) {
+      _mapController.deleteOverlay(island.info);
+    }
+    _islands.clear();
   }
 
   void reFog(String spotId) {
