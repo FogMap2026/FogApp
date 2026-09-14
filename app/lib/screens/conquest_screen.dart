@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/conquest.dart';
 import '../services/conquest_service.dart';
+import '../services/favorite_sido_store.dart';
 import '../theme/app_theme.dart';
 import '../widgets/korea_choropleth_map.dart';
 import 'conquest_region_screen.dart';
@@ -28,14 +29,25 @@ class ConquestScreen extends ConsumerStatefulWidget {
 class _ConquestScreenState extends ConsumerState<ConquestScreen> {
   late Future<List<ConquestRegion>> _future;
 
+  /// 즐겨찾기한 시/도 키. 배지 목록 맨 위로 올린다. 이 폰에만 저장된다([FavoriteSidoStore]).
+  Set<String> _favorites = const {};
+
   @override
   void initState() {
     super.initState();
     _future = _load();
+    ref.read(favoriteSidoStoreProvider).load().then((f) {
+      if (mounted) setState(() => _favorites = f);
+    });
   }
 
   /// 정복률 목록(시/군/구 집계) 하나면 된다 — 지도도 배지도 여기서 합산한 시/도 값을 쓴다.
   Future<List<ConquestRegion>> _load() => ref.read(conquestServiceProvider).myConquest();
+
+  Future<void> _toggleFavorite(ConquestSido sido) async {
+    final next = await ref.read(favoriteSidoStoreProvider).toggle(favoriteKeyOf(sido));
+    if (mounted) setState(() => _favorites = next);
+  }
 
   void _retry() => setState(() => _future = _load());
 
@@ -63,7 +75,7 @@ class _ConquestScreenState extends ConsumerState<ConquestScreen> {
                 ),
               );
             }
-            return _ConquestBody(regions: snapshot.data!);
+            return _ConquestBody(regions: snapshot.data!, favorites: _favorites, onToggleFavorite: _toggleFavorite);
           },
         ),
       ),
@@ -72,9 +84,11 @@ class _ConquestScreenState extends ConsumerState<ConquestScreen> {
 }
 
 class _ConquestBody extends StatelessWidget {
-  const _ConquestBody({required this.regions});
+  const _ConquestBody({required this.regions, required this.favorites, required this.onToggleFavorite});
 
   final List<ConquestRegion> regions;
+  final Set<String> favorites;
+  final void Function(ConquestSido sido) onToggleFavorite;
 
   @override
   Widget build(BuildContext context) {
@@ -85,7 +99,14 @@ class _ConquestBody extends StatelessWidget {
 
     // 시/도로 합산한다. 이름을 못 만든 시/도(주소 품질 문제로 서버가 코드로 폴백)는
     // 이름이 비므로 코드를 대신 보여준다 — 드물지만 다른 시/도에 섞이는 것보다 낫다.
-    final sidos = aggregateBySido(regions)..sort((a, b) => _badgeLabel(a).compareTo(_badgeLabel(b)));
+    // 즐겨찾기가 먼저, 그 안에서는 이름순. 즐겨찾기를 켜면 «그 자리에서» 맨 위로 올라간다.
+    final sidos = aggregateBySido(regions)
+      ..sort((a, b) {
+        final fa = favorites.contains(favoriteKeyOf(a));
+        final fb = favorites.contains(favoriteKeyOf(b));
+        if (fa != fb) return fa ? -1 : 1;
+        return _badgeLabel(a).compareTo(_badgeLabel(b));
+      });
 
     if (totalSpots == 0) {
       return Center(
@@ -133,19 +154,32 @@ class _ConquestBody extends StatelessWidget {
         const SizedBox(height: AppSpacing.xxl),
         Text('지역별 배지', style: theme.textTheme.titleMedium),
         const SizedBox(height: AppSpacing.xs),
-        ...sidos.map((sido) => _SidoTile(sido: sido)),
+        ...sidos.map(
+          (sido) => _SidoTile(
+            sido: sido,
+            favorite: favorites.contains(favoriteKeyOf(sido)),
+            onToggleFavorite: () => onToggleFavorite(sido),
+          ),
+        ),
       ],
     );
   }
 }
 
+/// 즐겨찾기 저장 키. 이름이 있으면 정규화한 이름(통합 시/도가 코드 둘이어도 하나),
+/// 없으면 코드.
+String favoriteKeyOf(ConquestSido sido) =>
+    sido.sidoName.isEmpty ? 'code:${sido.areaCodes.join(',')}' : 'name:${normalizeSidoName(sido.sidoName)}';
+
 /// 배지에 쓸 시/도 이름. 서버가 이름을 못 만든 시/도는 코드라도 보여준다.
 String _badgeLabel(ConquestSido sido) => sido.sidoName.isEmpty ? '지역 ${sido.areaCodes.join('·')}' : sido.sidoName;
 
 class _SidoTile extends StatelessWidget {
-  const _SidoTile({required this.sido});
+  const _SidoTile({required this.sido, required this.favorite, required this.onToggleFavorite});
 
   final ConquestSido sido;
+  final bool favorite;
+  final VoidCallback onToggleFavorite;
 
   @override
   Widget build(BuildContext context) {
@@ -164,6 +198,19 @@ class _SidoTile extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
           child: Row(
             children: [
+              // 별은 이름 왼쪽. 카드 탭(상세 진입)과 별 탭(즐겨찾기)이 겹치지 않게
+              // IconButton 이 먼저 잡는다.
+              IconButton(
+                onPressed: onToggleFavorite,
+                icon: Icon(favorite ? Icons.star_rounded : Icons.star_outline_rounded),
+                color: favorite ? _starColor : AppColors.inkFaint,
+                iconSize: 24,
+                tooltip: favorite ? '즐겨찾기 해제' : '즐겨찾기',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+                visualDensity: VisualDensity.compact,
+              ),
+              const SizedBox(width: AppSpacing.xxs),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -187,3 +234,7 @@ class _SidoTile extends StatelessWidget {
     );
   }
 }
+
+/// 즐겨찾기 별 색 — 앱 팔레트엔 노랑이 없어 여기서만 쓴다. 채도를 살짝 낮춘 금색이라
+/// 옅은 회색 카드 위에서 튀지 않으면서 «켜졌다»는 확실히 보인다.
+const _starColor = Color(0xFFF5B301);
