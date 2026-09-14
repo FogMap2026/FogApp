@@ -159,6 +159,20 @@ class FogRegions {
     return [for (final p in poly) NLatLng(seed.lat + p.y / _mPerLat, seed.lng + p.x / mLng)];
   }
 
+  /// [seeds] 의 구역들 — **좌표가 같은 씨앗은 하나로** 센다. 같은 자리 스팟 둘(인천애뜰·한복사랑,
+  /// #222 전 데이터)을 둘 다 인증하면 똑같은 폴리곤이 둘 나오는데, 폴리곤 구멍은 짝홀이라
+  /// 같은 구멍 둘은 서로 지워져 **도로 안개가 된다**(실기기, 09-15).
+  List<List<NLatLng>> cellsOf(Iterable<FogRegionSeed> seeds) {
+    final seen = <String>{};
+    final rings = <List<NLatLng>>[];
+    for (final seed in seeds) {
+      if (!seen.add('${seed.lat},${seed.lng}')) continue;
+      final ring = cell(seed);
+      if (ring.length >= 3) rings.add(ring);
+    }
+    return rings;
+  }
+
   static List<Point<double>> _clip(List<Point<double>> poly, double dx, double dy, double half) {
     final out = <Point<double>>[];
     for (var i = 0; i < poly.length; i++) {

@@ -86,6 +86,12 @@ void main() {
       final regions = FogRegions.build([_spot(1), _spot(2)]);
       expect(regions.cell(regions.seedOfSpot(1)!).length, greaterThanOrEqualTo(3));
     });
+
+    test('좌표가 같은 씨앗 둘을 다 걷어도 구멍은 하나다 — 같은 구멍 둘은 짝홀로 서로 지워진다', () {
+      final regions = FogRegions.build([_spot(1), _spot(2), _spot(3, east: 400)]);
+      final rings = regions.cellsOf([regions.seedOfSpot(1)!, regions.seedOfSpot(2)!, regions.seedOfSpot(3)!]);
+      expect(rings.length, 2);
+    });
   });
 
   group('LandMask', () {

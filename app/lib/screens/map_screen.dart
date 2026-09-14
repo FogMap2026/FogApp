@@ -457,7 +457,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       for (final id in _visitedSpotIds)
         if (regions.seedOfSpot(id) case final seed?) seed,
     };
-    fog.setRegionHoles([for (final seed in seeds) regions.cell(seed)]);
+    fog.setRegionHoles(regions.cellsOf(seeds));
   }
 
   /// 카메라를 마지막으로 받은 내 위치로 이동한다. SDK 기본 위치 버튼
