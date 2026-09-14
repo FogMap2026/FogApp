@@ -105,10 +105,13 @@ class _ChoroplethPainter extends CustomPainter {
     final oy = (size.height - drawH) / 2;
     Offset project(Offset c) => Offset(ox + (c.dx - minLng) * lngScale * scale, oy + (maxLat - c.dy) * scale);
 
+    // 경계선은 반투명 검정 — 회색 위에서도 파란색 위에서도 «한 톤 어둡게» 보인다.
+    // 흰 선은 파란 시/도 안에서 안 보였다. 0.5px 는 다도해처럼 작은 섬이 촘촘한 곳에서
+    // 선이 번져 덩어리로 보이지 않는 굵기다.
     final stroke = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1
-      ..color = AppColors.surface;
+      ..strokeWidth = 0.5
+      ..color = AppColors.ink.withValues(alpha: 0.18);
 
     for (final province in provinces) {
       final sido = matchSidoForProvince(sidos, province.name);
@@ -130,11 +133,13 @@ class _ChoroplethPainter extends CustomPainter {
 
   /// 탐험률 → 색. 0% 는 빈 회색, 그 위로는 앱 파란색이 짙어진다.
   ///
-  /// 1% 도 0% 와 구분되게 바닥을 둔다 — 시/도 하나에 스팟이 1000개라 처음 몇 개를 밝혀도
-  /// 비율은 0.x% 라, 선형이면 색이 안 바뀌어 「밝혔는데 아무 일도 없다」가 된다.
+  /// 제곱근 곡선이다 — 낮은 구간을 벌린다. 선형이면 5% 와 30% 가 거의 같은 색이었다
+  /// (실기기, 09-14). 실제 값은 대부분 한 자리 % 에 몰리므로(시/도당 스팟 1000개)
+  /// 그 구간이 제일 잘 갈려야 한다: 5% → 0.34, 30% → 0.62, 60% → 0.81, 100% → 1.
+  /// 바닥 0.15 는 1% 도 0% 와 구분되게 하는 값이다.
   static Color colorForRate(double rate) {
     if (rate <= 0) return _empty;
-    final t = 0.25 + 0.75 * rate.clamp(0.0, 1.0);
+    final t = 0.15 + 0.85 * sqrt(rate.clamp(0.0, 1.0));
     return Color.lerp(_empty, AppColors.primary, t)!;
   }
 
