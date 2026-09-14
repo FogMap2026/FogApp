@@ -105,13 +105,13 @@ class _ChoroplethPainter extends CustomPainter {
     final oy = (size.height - drawH) / 2;
     Offset project(Offset c) => Offset(ox + (c.dx - minLng) * lngScale * scale, oy + (maxLat - c.dy) * scale);
 
-    // 경계선은 반투명 검정 — 회색 위에서도 파란색 위에서도 «한 톤 어둡게» 보인다.
-    // 흰 선은 파란 시/도 안에서 안 보였다. 0.5px 는 다도해처럼 작은 섬이 촘촘한 곳에서
-    // 선이 번져 덩어리로 보이지 않는 굵기다.
+    // 경계선은 흰색 — 반투명 검정도 써봤지만 회색 시/도가 칙칙해 보여 흰색으로 돌렸다
+    // (시진, 09-14). 0.5px 는 다도해처럼 작은 섬이 촘촘한 곳에서 선이 번져 덩어리로
+    // 보이지 않는 굵기다.
     final stroke = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 0.5
-      ..color = AppColors.ink.withValues(alpha: 0.18);
+      ..color = AppColors.surface;
 
     for (final province in provinces) {
       final sido = matchSidoForProvince(sidos, province.name);
