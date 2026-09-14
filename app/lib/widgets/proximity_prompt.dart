@@ -90,8 +90,7 @@ class _NearMorph extends StatelessWidget {
 
   static const _circle = 52.0;
 
-  /// 제목 두 줄 + 부제 한 줄이 들어가는 높이. 스팟 이름이 길어도 «…»로 자르지 않는다.
-  static const _cardHeight = 88.0;
+  static const _cardHeight = 76.0;
   static const _duration = Duration(milliseconds: 360);
 
   @override
@@ -199,12 +198,12 @@ class _NearCardContent extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  // 스팟 이름이 길어도 «…»로 자르지 않는다 — 두 줄까지 내려쓴다.
-                  '${proximity.spot.title} 근처예요',
-                  style: theme.textTheme.titleSmall,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+                // 스팟 이름이 길면 줄을 바꾸지 않고 글자를 줄여 한 줄에 맞춘다(시진, 09-14) —
+                // «…»로 자르지도, 두 줄로 내리지도 않는다.
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text('${proximity.spot.title} 근처예요', style: theme.textTheme.titleSmall, maxLines: 1),
                 ),
                 Text(
                   '약 ${distance}m · ${verifyMeters}m 안으로 가면 인증할 수 있어요',
@@ -311,11 +310,15 @@ class _VerifyBeaconState extends State<_VerifyBeacon> with SingleTickerProviderS
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            '${widget.spotTitle} 인증 가능',
-                            style: Theme.of(context).textTheme.titleSmall,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
+                          // 근처 카드와 같은 규칙 — 길면 글자를 줄여 한 줄.
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              '${widget.spotTitle} 인증 가능',
+                              style: Theme.of(context).textTheme.titleSmall,
+                              maxLines: 1,
+                            ),
                           ),
                           Text(
                             '약 ${widget.distanceMeters.round()}m · 눌러서 인증하기',
