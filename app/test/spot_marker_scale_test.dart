@@ -10,20 +10,20 @@ void main() {
     expect(SpotMarkerController.scaleForZoom(6), 0.5);
   });
 
-  test('한 단계에 8~12% 씩만 준다 — 조금 빼도 확 작아지지 않는다', () {
-    expect(SpotMarkerController.scaleForZoom(14), closeTo(0.92, 1e-9));
-    expect(SpotMarkerController.scaleForZoom(13), closeTo(0.82, 1e-9));
-    expect(SpotMarkerController.scaleForZoom(12), closeTo(0.7, 1e-9));
-    expect(SpotMarkerController.scaleForZoom(11), closeTo(0.6, 1e-9));
+  test('한 단계에 6~12% 씩만 준다 — 조금 빼도 확 작아지지 않는다', () {
+    expect(SpotMarkerController.scaleForZoom(14), closeTo(0.88, 1e-9));
+    expect(SpotMarkerController.scaleForZoom(13), closeTo(0.76, 1e-9));
+    expect(SpotMarkerController.scaleForZoom(12), closeTo(0.65, 1e-9));
+    expect(SpotMarkerController.scaleForZoom(11), closeTo(0.56, 1e-9));
     for (var z = 15.0; z > 10; z -= 1) {
       final drop = SpotMarkerController.scaleForZoom(z) - SpotMarkerController.scaleForZoom(z - 1);
-      expect(drop, inInclusiveRange(0.079, 0.121), reason: '줌 $z → ${z - 1}');
+      expect(drop, inInclusiveRange(0.059, 0.121), reason: '줌 $z → ${z - 1}');
     }
   });
 
   test('사이 값은 선형 보간 — 핀치 중에 뚝뚝 끊기지 않는다', () {
-    expect(SpotMarkerController.scaleForZoom(14.5), closeTo(0.96, 1e-9));
-    expect(SpotMarkerController.scaleForZoom(13.5), closeTo(0.87, 1e-9));
-    expect(SpotMarkerController.scaleForZoom(12.5), closeTo(0.76, 1e-9));
+    expect(SpotMarkerController.scaleForZoom(14.5), closeTo(0.94, 1e-9));
+    expect(SpotMarkerController.scaleForZoom(13.5), closeTo(0.82, 1e-9));
+    expect(SpotMarkerController.scaleForZoom(12.5), closeTo(0.705, 1e-9));
   });
 }
