@@ -1263,7 +1263,6 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                     expanded: _proximityExpanded,
                     onExpand: _expandProximity,
                     onCollapse: _collapseProximity,
-                    onVerify: () => _openVisitVerify(_proximity!.spot),
                     onOpenSpot: () => _openSpotDetail(_proximity!.spot),
                     showVerifyLabel: !_actionsExpanded,
                   ),

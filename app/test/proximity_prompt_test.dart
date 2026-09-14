@@ -1,4 +1,4 @@
-// 지도 우하단 근접 아이콘 — «!» 원이 카드로 펼쳐지고, 인증 단계에서는 카메라가 인증으로, 카드가 스팟 상세로 간다.
+// 지도 우하단 근접 아이콘 — «!» 원이 카드로 펼쳐지고, 인증 단계에서는 숨 쉬는 카드를 누르면 스팟 상세로 간다.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fogapp/models/spot.dart';
@@ -12,10 +12,9 @@ SpotProximity _proximity(ProximityLevel level, {double distance = 230}) =>
 
 /// 상위 상태(펼침 여부)를 흉내 내는 호스트 — 실제로는 [MapScreen] 이 들고 있다.
 class _Host extends StatefulWidget {
-  const _Host({required this.proximity, required this.onVerify, this.onOpenSpot});
+  const _Host({required this.proximity, this.onOpenSpot});
 
   final SpotProximity proximity;
-  final VoidCallback onVerify;
   final VoidCallback? onOpenSpot;
 
   @override
@@ -40,7 +39,6 @@ class _HostState extends State<_Host> {
                 expanded: expanded,
                 onExpand: () => setState(() => expanded = true),
                 onCollapse: () => setState(() => expanded = false),
-                onVerify: widget.onVerify,
                 onOpenSpot: widget.onOpenSpot ?? () {},
               ),
             ),
@@ -53,7 +51,7 @@ class _HostState extends State<_Host> {
 
 void main() {
   testWidgets('근처 — 처음엔 «!» 원만 보이고, 누르면 카드로 펼쳐지며, 닫으면 다시 원이다', (tester) async {
-    await tester.pumpWidget(_Host(proximity: _proximity(ProximityLevel.near), onVerify: () {}));
+    await tester.pumpWidget(_Host(proximity: _proximity(ProximityLevel.near)));
     await tester.pumpAndSettle();
 
     final circle = tester.getSize(find.byType(AnimatedContainer));
@@ -75,39 +73,29 @@ void main() {
   });
 
   testWidgets('근처 단계에는 인증 버튼이 없다 — 100m 밖에서 인증하면 서버가 거절한다', (tester) async {
-    var verified = false;
-    await tester.pumpWidget(_Host(proximity: _proximity(ProximityLevel.near), onVerify: () => verified = true));
+    var opened = false;
+    await tester.pumpWidget(_Host(proximity: _proximity(ProximityLevel.near), onOpenSpot: () => opened = true));
     await tester.pumpAndSettle();
     await tester.tap(find.text('!'));
     await tester.pumpAndSettle();
 
     expect(find.text('경복궁 인증 가능'), findsNothing);
-    expect(verified, isFalse);
+    expect(opened, isFalse);
   });
 
-  testWidgets('인증 가능 — 「경복궁 인증 가능」처럼 스팟 이름이 뜨고, 카메라는 인증으로·카드는 스팟 상세로 간다', (tester) async {
-    var verified = 0;
+  testWidgets('인증 가능 — 「경복궁 인증 가능」처럼 스팟 이름이 뜨고, 카메라 없이 카드를 누르면 스팟 상세로 간다', (tester) async {
     var opened = 0;
     await tester.pumpWidget(
-      _Host(
-        proximity: _proximity(ProximityLevel.verifiable, distance: 60),
-        onVerify: () => verified++,
-        onOpenSpot: () => opened++,
-      ),
+      _Host(proximity: _proximity(ProximityLevel.verifiable, distance: 60), onOpenSpot: () => opened++),
     );
     // 맥박 애니메이션이 계속 돌아 pumpAndSettle 은 끝나지 않는다 — 등장 전환 시간만큼만 흘린다.
     await tester.pump(const Duration(milliseconds: 500));
 
     expect(find.text('경복궁 인증 가능'), findsOneWidget);
-    expect(find.byIcon(Icons.photo_camera_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.photo_camera_rounded), findsNothing);
     expect(find.text('!'), findsNothing);
-
-    await tester.tap(find.byIcon(Icons.photo_camera_rounded));
-    expect(verified, 1);
-    expect(opened, 0);
 
     await tester.tap(find.text('경복궁 인증 가능'));
     expect(opened, 1);
-    expect(verified, 1);
   });
 }

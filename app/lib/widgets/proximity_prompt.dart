@@ -9,8 +9,8 @@ import '../theme/app_theme.dart';
 ///
 /// - **근처**([ProximityLevel.near]): 조용한 «!» 원. 누르면 원이 옆으로 늘어나며 알림 카드로
 ///   **모양이 바뀐다**(같은 상자가 커지는 것이라 새 창이 뜨는 느낌이 아니다). 닫으면 다시 원으로.
-/// - **인증 가능**([ProximityLevel.verifiable]): 맥박처럼 퍼지는 주황 원 + 「○○ 인증 가능」.
-///   누르면 곧바로 인증 화면으로 간다. 진동은 화면([MapScreen])이 단계가 바뀌는 순간 한 번 낸다
+/// - **인증 가능**([ProximityLevel.verifiable]): 「○○ 인증 가능」 카드가 맥박처럼 숨 쉰다.
+///   누르면 스팟 상세로 가고, 인증 버튼은 거기 있다. 진동은 화면([MapScreen])이 단계가 바뀌는 순간 한 번 낸다
 ///   — 이 위젯은 다시 그려질 때마다 불리므로 여기서 울리면 반복된다.
 ///
 /// 상단 배너를 없앤 이유: 지도 위 상단은 정보 바·위치 안내·서버 오류가 이미 쓰고 있고,
@@ -22,7 +22,6 @@ class ProximityPrompt extends StatelessWidget {
     required this.expanded,
     required this.onExpand,
     required this.onCollapse,
-    required this.onVerify,
     required this.onOpenSpot,
     this.showVerifyLabel = true,
     super.key,
@@ -34,13 +33,12 @@ class ProximityPrompt extends StatelessWidget {
   final bool expanded;
   final VoidCallback onExpand;
   final VoidCallback onCollapse;
-  final VoidCallback onVerify;
 
-  /// 인증 단계의 «○○ 인증 가능» 카드를 누르면 — 스팟 상세로 간다(시진, 09-15).
-  /// 카메라(맥박 원)는 인증 화면, 카드는 스팟 페이지: 둘이 다른 곳으로 간다.
+  /// 인증 단계의 «○○ 인증 가능» 카드를 누르면 — 스팟 상세로 간다(시진, 09-15). 인증
+  /// (카메라)은 상세 화면에 있다; 지도 위에는 따로 두지 않는다.
   final VoidCallback onOpenSpot;
 
-  /// 인증 아이콘 옆 글자. 좌하단 메뉴를 펼쳤을 때는 겹치지 않게 끈다.
+  /// 카드의 문구. 좌하단 메뉴를 펼쳤을 때는 겹치지 않게 「인증 가능」만 남긴다.
   final bool showVerifyLabel;
 
   @override
@@ -64,8 +62,7 @@ class ProximityPrompt extends StatelessWidget {
               key: ValueKey('verify-${proximity.spot.id}'),
               spotTitle: proximity.spot.title,
               distanceMeters: proximity.distanceMeters,
-              onTap: onVerify,
-              onCardTap: onOpenSpot,
+              onTap: onOpenSpot,
               showLabel: showVerifyLabel,
             )
           : _NearMorph(
@@ -234,29 +231,30 @@ class _NearCardContent extends StatelessWidget {
   }
 }
 
-/// 인증 가능 — 누가 봐도 눈에 띄어야 한다. 주황 원이 맥박처럼 퍼지고 「○○ 인증 가능」이 붙는다.
+/// 인증 가능 — 누가 봐도 눈에 띄어야 한다. 「○○ 인증 가능」 카드가 맥박처럼 숨 쉬며 고리를
+/// 퍼뜨린다. 누르면 스팟 상세로 가고, 인증(카메라)은 거기 있다(시진, 09-15) — 지도 위 카메라
+/// 원은 뺐다. 카드와 원이 나란히 있으면 «둘 중 뭘 누르지»가 되고, 상세에도 같은 버튼이 있어
+/// 굳이 지도에 둘 필요가 없었다.
 ///
 /// 라벨에 **스팟 이름**을 넣는다 — 「지금 인증하기」만으로는 무엇을 인증하는지 없어서, 스팟이
 /// 붙어 있는 도심에서는 눌러 보고서야 어느 스팟인지 알았다(시진, 실기기 09-14). «근처» 카드의
 /// 「100m 안으로 가면 인증할 수 있어요」와 이어지는 말이라 두 단계가 한 문장처럼 읽힌다.
-///
-/// 앱 테마는 스티커 색을 버튼에 쓰지 않는다([AppColors] 문서)는 원칙이 있지만, 이 아이콘은
-/// 「지도 위에서 지금 당장 해야 할 일」이 뜨는 유일한 자리라 일부러 어긋난다 — 파랑(주요 행동)으로
-/// 칠하면 지도 컨트롤·정보 바와 구분되지 않는다.
 class _VerifyBeacon extends StatefulWidget {
   const _VerifyBeacon({
     required this.spotTitle,
     required this.distanceMeters,
     required this.onTap,
-    required this.onCardTap,
     required this.showLabel,
     super.key,
   });
 
   final String spotTitle;
   final double distanceMeters;
+
+  /// 카드를 누르면 — 스팟 상세.
   final VoidCallback onTap;
-  final VoidCallback onCardTap;
+
+  /// 거짓이면(좌하단 메뉴가 펼쳐졌을 때) 문구를 접고 「인증 가능」 알약만 남긴다 — 메뉴와 겹치지 않게.
   final bool showLabel;
 
   @override
@@ -269,7 +267,11 @@ class _VerifyBeaconState extends State<_VerifyBeacon> with SingleTickerProviderS
     duration: const Duration(milliseconds: 1300),
   )..repeat();
 
-  static const _size = 64.0;
+  /// «근처» 카드와 같은 높이 — 두 단계가 한자리에서 문구만 바뀌는 것으로 보이게.
+  static const _cardHeight = _NearMorph._cardHeight;
+
+  /// 고리가 카드 밖으로 퍼지는 최대 폭.
+  static const _ringSpread = 14.0;
 
   @override
   void dispose() {
@@ -279,141 +281,114 @@ class _VerifyBeaconState extends State<_VerifyBeacon> with SingleTickerProviderS
 
   @override
   Widget build(BuildContext context) {
-    // 카메라(맥박 원)가 위, 카드가 아래 — 카드는 «근처» 카드와 같은 자리·같은 폭에 놓인다
-    // (시진, 09-14). 옆으로 붙이면 카드가 왼쪽으로 자라 좌하단 메뉴를 덮고, 300m 카드와
-    // 다른 자리에 뜬다. 카메라는 인증 화면으로, 카드는 스팟 상세로 — 상세에도 인증 버튼이
-    // 있으니(100m 안일 때) 어느 쪽을 눌러도 인증에 닿는다(시진, 09-15).
+    // 카드는 «근처» 카드와 같은 자리·같은 폭·같은 옷(연파랑 바탕·파란 테두리) — 두 단계가
+    // 같은 카드의 문구만 바뀐 것으로 읽히게. 폭은 문구만큼만(시진, 09-14).
     return LayoutBuilder(
       builder: (context, constraints) {
         final cardWidth = min(constraints.maxWidth, 420.0);
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Semantics(
-              button: true,
-              label: '${widget.spotTitle} 인증할 수 있어요. 눌러서 인증하기',
-              child: GestureDetector(onTap: widget.onTap, behavior: HitTestBehavior.opaque, child: _beacon()),
-            ),
-            if (widget.showLabel) ...[
-              const SizedBox(height: AppSpacing.xxs),
-              // «근처» 카드(_NearCardContent)와 같은 옷 — 연파랑 바탕·파란 테두리·같은 높이.
-              // 두 단계가 같은 카드의 문구만 바뀐 것으로 읽히게.
-              // 폭은 문구만큼만 — 화면 폭으로 늘리면 글 오른쪽이 비어 보인다(시진, 09-14).
-              // 오른쪽 끝(카메라 아래)에 붙는 건 Column 의 end 정렬이 한다.
-              Semantics(
-                button: true,
-                label: '${widget.spotTitle} 상세 보기',
-                child: GestureDetector(
-                  onTap: widget.onCardTap,
-                  behavior: HitTestBehavior.opaque,
-                  child: Container(
-                    constraints: BoxConstraints(maxWidth: cardWidth),
-                    height: _cardHeight,
-                    padding: const EdgeInsets.fromLTRB(AppSpacing.sm, 6, AppSpacing.sm, 6),
-                    decoration: BoxDecoration(
-                      color: AppColors.infoContainer,
-                      borderRadius: BorderRadius.circular(AppRadii.lg),
-                      border: Border.all(color: AppColors.primary),
-                      boxShadow: AppShadows.soft,
+        return Semantics(
+          button: true,
+          label: '${widget.spotTitle} 인증할 수 있어요. 눌러서 스팟 보기',
+          child: GestureDetector(
+            onTap: widget.onTap,
+            behavior: HitTestBehavior.opaque,
+            child: AnimatedBuilder(
+              animation: _pulse,
+              builder: (context, child) {
+                final t = _pulse.value;
+                return Stack(
+                  alignment: Alignment.center,
+                  clipBehavior: Clip.none,
+                  children: [
+                    // 카드 테두리에서 바깥으로 퍼지며 옅어지는 고리 둘 — 반 박자 어긋나게.
+                    _ring(t),
+                    _ring((t + 0.5) % 1),
+                    Transform.scale(
+                      // 카드 자체도 살짝 숨 쉬게 한다 — 고리만 퍼지면 멀리서 정지한 카드처럼 보인다.
+                      scale: 1 + 0.03 * sin(t * 2 * pi),
+                      child: child,
                     ),
-                    // 카드 안에는 아이콘을 두지 않는다 — 카메라는 바로 위 맥박 원이 이미 하나다.
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Flexible(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // 근처 카드와 같은 규칙 — 길면 글자를 줄여 한 줄.
-                              FittedBox(
-                                fit: BoxFit.scaleDown,
-                                alignment: Alignment.centerLeft,
-                                child: Text(
-                                  '${widget.spotTitle} 인증 가능',
-                                  style: Theme.of(context).textTheme.titleSmall,
-                                  maxLines: 1,
-                                ),
-                              ),
-                              Text(
-                                '약 ${widget.distanceMeters.round()}m · 눌러서 스팟 보기',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.copyWith(color: AppColors.inkMuted, height: 1.3),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  ],
+                );
+              },
+              child: Container(
+                constraints: BoxConstraints(maxWidth: cardWidth),
+                height: _cardHeight,
+                padding: const EdgeInsets.fromLTRB(AppSpacing.sm, 6, AppSpacing.sm, 6),
+                decoration: BoxDecoration(
+                  color: AppColors.infoContainer,
+                  borderRadius: BorderRadius.circular(AppRadii.lg),
+                  border: Border.all(color: AppColors.primary),
+                  boxShadow: AppShadows.soft,
                 ),
+                child: widget.showLabel ? _label(context) : _compact(context),
               ),
-            ],
-          ],
+            ),
+          ),
         );
       },
     );
   }
 
-  /// «근처» 카드와 같은 높이 — 두 단계가 한자리에서 문구만 바뀌는 것으로 보이게.
-  static const _cardHeight = _NearMorph._cardHeight;
-
-  Widget _beacon() {
-    return SizedBox(
-      // 칸은 원 크기 그대로 — 넉넉히 잡으면 그만큼 카드보다 왼쪽에 뜬다(오른쪽 여백).
-      // 퍼지는 고리는 Stack 밖으로 넘치게 둔다(clipBehavior none).
-      width: _size,
-      height: _size,
-      child: AnimatedBuilder(
-        animation: _pulse,
-        builder: (context, child) {
-          final t = _pulse.value;
-          return Stack(
-            alignment: Alignment.center,
-            clipBehavior: Clip.none,
+  Widget _label(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Flexible(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _ring(t),
-              _ring((t + 0.5) % 1),
-              Transform.scale(
-                // 원 자체도 살짝 숨 쉬게 한다 — 고리만 퍼지면 멀리서 정지 아이콘처럼 보인다.
-                scale: 1 + 0.06 * sin(t * 2 * pi),
-                child: child,
+              // 근처 카드와 같은 규칙 — 길면 글자를 줄여 한 줄.
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '${widget.spotTitle} 인증 가능',
+                  style: Theme.of(context).textTheme.titleSmall,
+                  maxLines: 1,
+                ),
+              ),
+              Text(
+                '약 ${widget.distanceMeters.round()}m · 눌러서 스팟 보기',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.inkMuted, height: 1.3),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
-          );
-        },
-        child: Container(
-          width: _size,
-          height: _size,
-          decoration: const BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [AppColors.accentOrange, AppColors.accentPink],
-            ),
-            boxShadow: [BoxShadow(color: Color(0x55DD5B00), blurRadius: 16, offset: Offset(0, 4))],
           ),
-          child: const Icon(Icons.photo_camera_rounded, color: Colors.white, size: 30),
         ),
-      ),
+      ],
     );
   }
 
-  /// 원에서 퍼져 나가며 옅어지는 고리. [t] 는 0→1.
+  /// 메뉴가 펼쳐졌을 때의 접힌 모양 — 스팟 이름 없이 「인증 가능」만.
+  Widget _compact(BuildContext context) {
+    return Center(
+      child: Text('인증 가능', style: Theme.of(context).textTheme.titleSmall, maxLines: 1),
+    );
+  }
+
+  /// 카드 테두리에서 퍼져 나가며 옅어지는 고리. [t] 는 0→1. 카드 크기를 모르고도(문구만큼만
+  /// 자라는 카드라) 그리도록 카드 네 변에서 바깥으로 [_ringSpread]·t 만큼 내민다.
   Widget _ring(double t) {
-    return Opacity(
-      opacity: (1 - t) * 0.55,
-      child: Container(
-        width: _size * (1 + 0.5 * t),
-        height: _size * (1 + 0.5 * t),
-        decoration: const BoxDecoration(shape: BoxShape.circle, color: AppColors.accentOrange),
+    final spread = _ringSpread * t;
+    return Positioned.fill(
+      left: -spread,
+      top: -spread,
+      right: -spread,
+      bottom: -spread,
+      child: IgnorePointer(
+        child: Opacity(
+          opacity: (1 - t) * 0.45,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppRadii.lg + spread),
+              border: Border.all(color: AppColors.primary, width: 2),
+            ),
+          ),
+        ),
       ),
     );
   }
