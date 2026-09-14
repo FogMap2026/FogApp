@@ -19,6 +19,7 @@ class MapControls extends StatelessWidget {
     required this.onZoomOut,
     required this.onRecenter,
     required this.onSearchHere,
+    this.searchHereActive = false,
   });
 
   /// 패널 폭. 아이콘(20) + 좌우 여백이 들어가는 최소치다.
@@ -40,9 +41,13 @@ class MapControls extends StatelessWidget {
   /// 아직 내 위치를 모르면 null — 버튼이 비활성화된다.
   final VoidCallback? onRecenter;
 
-  /// 「이 지역 스팟 보기」 — 스팟은 평소 내 위치 주변만 불러오는데, 지도를 멀리 밀어
-  /// 보고 있을 때 그 화면 중심 주변을 불러온다. 지도가 아직 준비 전이면 null.
+  /// 「이 지역 스팟 보기」 토글 — 스팟은 평소 내 위치 주변만 불러오는데, 켜면 화면
+  /// 중심 주변을 불러오고 지도를 움직일 때마다 따라온다. 지도가 아직 준비 전이면 null.
   final VoidCallback? onSearchHere;
+
+  /// 토글이 켜져 있는지. 켜지면 아이콘을 채우고 강조색으로 그려 «지금 화면 기준»임을
+  /// 알린다 — 안 그러면 내 주변 스팟이 왜 안 뜨는지 모른다.
+  final bool searchHereActive;
 
   @override
   Widget build(BuildContext context) {
@@ -61,7 +66,12 @@ class MapControls extends StatelessWidget {
             const Divider(height: 1),
             _button(icon: Icons.my_location, onPressed: onRecenter, tooltip: '내 위치로'),
             const Divider(height: 1),
-            _button(icon: Icons.location_on_outlined, onPressed: onSearchHere, tooltip: '이 지역 스팟 보기'),
+            _button(
+              icon: searchHereActive ? Icons.location_on : Icons.location_on_outlined,
+              onPressed: onSearchHere,
+              tooltip: searchHereActive ? '내 위치 기준으로' : '이 지역 스팟 보기',
+              color: searchHereActive ? Theme.of(context).colorScheme.primary : null,
+            ),
           ],
         ),
       ),
@@ -74,10 +84,11 @@ class MapControls extends StatelessWidget {
     required IconData icon,
     required VoidCallback? onPressed,
     required String tooltip,
+    Color? color,
   }) {
     return IconButton(
       onPressed: onPressed,
-      icon: Icon(icon),
+      icon: Icon(icon, color: color),
       iconSize: _iconSize,
       tooltip: tooltip,
       padding: EdgeInsets.zero,

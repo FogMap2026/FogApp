@@ -148,10 +148,17 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   NLatLng? _lastLoadCenter;
 
   /// 마지막으로 «내 위치 기준» 스팟을 불러왔을 때의 내 위치. 여기서
-  /// [_spotReloadDistanceMeters] 이상 벗어나면 다시 불러온다. 📍(이 지역 스팟 보기)로
-  /// 화면 중심을 불러왔을 때도 이 값을 그때의 내 위치로 맞춘다 — 그래야 다음 위치
-  /// 갱신이 곧바로 내 주변으로 되돌려 버리지 않고, 실제로 300m 걸을 때까지 남는다.
+  /// [_spotReloadDistanceMeters] 이상 벗어나면 다시 불러온다.
   NLatLng? _spotLoadMyPosition;
+
+  /// 📍 「이 지역 스팟 보기」 토글. 켜면 스팟을 **화면 중심** 기준으로 불러오고, 지도를
+  /// 움직여 멈출 때마다 다시 불러온다. 조회 범위(3km)를 원으로 그려 화면 중심을 따라
+  /// 움직이게 한다 — 「지금 어디를 뒤지고 있나」가 보여야 지도를 어디까지 밀지 안다.
+  /// 끄면 내 위치 기준으로 되돌아간다.
+  bool _searchHereMode = false;
+
+  /// 켜져 있는 동안 화면 중심을 따라다니는 조회 범위 원. 꺼지면 지운다.
+  NCircleOverlay? _searchRangeCircle;
 
   /// 스팟은 내 위치 3km 안을 불러온다. 15m 마다 다시 부르면 요청이 쏟아지고 결과도
   /// 거의 같으므로, 이만큼 움직였을 때만 다시 부른다 — 반경(3km)의 1/10 이라
@@ -468,25 +475,55 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     unawaited(_spotMarkers?.loadAround(center));
   }
 
-  /// 「이 지역 스팟 보기」(지도 컨트롤 📍) — 지금 보고 있는 화면 중심 3km 를 불러온다.
+  /// 📍 토글. 켜면 화면 중심 기준 + 범위 원, 끄면 내 위치 기준으로 즉시 되돌린다.
   ///
-  /// 스팟은 평소 내 위치 주변만 불러오므로(#146 이후 바뀐 규칙), 지도를 멀리 밀어
-  /// 「거기엔 뭐가 있나」를 볼 길이 이것뿐이다. 내 위치를 [_spotLoadMyPosition]에
-  /// 적어 두어 다음 위치 갱신이 곧바로 되돌리지 않게 한다.
-  void _searchSpotsHere() {
+  /// 스팟은 평소 내 위치 주변만 불러오므로, 지도를 멀리 밀어 「거기엔 뭐가 있나」를
+  /// 볼 길이 이것이다. 한 번 누를 때 한 번만 불러오는 방식도 써봤는데, 지도를 조금
+  /// 옮길 때마다 다시 눌러야 해서 토글로 바꿨다(시진, 09-14).
+  void _toggleSearchHere() {
     final controller = _controller;
     if (controller == null) return;
     // ignore: experimental_member_use
     final target = controller.nowCameraPosition.target;
+    setState(() => _searchHereMode = !_searchHereMode);
+
+    if (_searchHereMode) {
+      final circle = NCircleOverlay(
+        id: 'spot-search-range',
+        center: target,
+        radius: SpotMarkerController.radiusMeters,
+        color: AppColors.primary.withValues(alpha: 0.08),
+        outlineColor: AppColors.primary.withValues(alpha: 0.6),
+        outlineWidth: 1.5,
+      );
+      _searchRangeCircle = circle;
+      unawaited(controller.addOverlay(circle));
+      _loadSpotsAt(target);
+      return;
+    }
+
+    final circle = _searchRangeCircle;
+    _searchRangeCircle = null;
+    if (circle != null) unawaited(controller.deleteOverlay(circle.info));
+    // 내 위치 기준으로 «지금» 되돌린다 — 300m 걸을 때까지 화면 중심 스팟이 남아 있으면
+    // 끈 것 같지 않다.
     final lat = _myLat;
     final lng = _myLng;
-    if (lat != null && lng != null) _spotLoadMyPosition = NLatLng(lat, lng);
-    _lastLoadCenter = target;
-    unawaited(_spotMarkers?.loadAround(target));
+    if (lat != null && lng != null) {
+      _spotLoadMyPosition = null;
+      _reloadSpotsIfMoved(lat, lng);
+    }
+  }
+
+  void _loadSpotsAt(NLatLng center) {
+    _lastLoadCenter = center;
+    unawaited(_spotMarkers?.loadAround(center));
   }
 
   /// 내 위치가 마지막 조회 지점에서 충분히 멀어졌으면 내 주변 스팟을 다시 불러온다.
+  /// 📍 모드에서는 안 한다 — 화면 중심이 기준이다.
   void _reloadSpotsIfMoved(double lat, double lng) {
+    if (_searchHereMode) return;
     final last = _spotLoadMyPosition;
     if (last != null &&
         Geolocator.distanceBetween(last.latitude, last.longitude, lat, lng) < _spotReloadDistanceMeters) {
@@ -839,11 +876,15 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     _footprintMarkers?.setZoom(params.position.zoom);
     // 스팟 마커도 줌에 맞춰 줄인다 — 줌을 빼면 밀집 지역에서 마커가 서로 덮는다.
     _spotMarkers?.setZoom(params.position.zoom);
+    // 📍 모드의 범위 원은 손가락을 따라 «즉시» 움직인다 — 멈춘 뒤에 옮기면 원이 끌려오는
+    // 것처럼 보인다.
+    _searchRangeCircle?.setCenter(params.position.target);
     if (!params.isIdle) return;
     unawaited(_lookupRegion(params.position.target));
-    // 스팟은 여기서 다시 부르지 않는다 — 내 위치 기준([_reloadSpotsIfMoved])이거나
-    // 📍 버튼([_searchSpotsHere])으로만 바뀐다. 지도를 밀 때마다 요청이 나가고 내
-    // 주변 스팟이 화면에서 사라지던 것을 없앴다.
+    // 스팟은 평소 내 위치 기준([_reloadSpotsIfMoved])이라 여기서 안 부른다 — 지도를 밀
+    // 때마다 요청이 나가고 내 주변 스팟이 사라지던 것을 없앴다. 📍 모드일 때만 화면
+    // 중심으로 다시 부른다.
+    if (_searchHereMode) _loadSpotsAt(params.position.target);
     unawaited(_refreshNearbyTravelers(params.position.target));
   }
 
@@ -1116,7 +1157,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                         onZoomIn: () => _zoomBy(1),
                         onZoomOut: () => _zoomBy(-1),
                         onRecenter: _myLat != null ? _recenterToMe : null,
-                        onSearchHere: _mapReady ? _searchSpotsHere : null,
+                        onSearchHere: _mapReady ? _toggleSearchHere : null,
+                        searchHereActive: _searchHereMode,
                       ),
                     ),
                   ),
