@@ -74,20 +74,18 @@ class _CharacterPainter extends CustomPainter {
   const _CharacterPainter();
 
   /// 스팟의 숨김 톤(짙은 청회색)·발자취의 금색과 뚜렷이 구분되는 파랑.
-  // 속은 흰색, 테두리가 파랑 — 처음엔 반대였는데 어두운 안개 위에서 흰 몸통이 더
-  // 「내 자리」로 읽힌다(시진, 09-14).
-  static const _fillColor = Colors.white;
-  static const _outlineColor = Color(0xFF3D8BFD);
+  static const _fillColor = Color(0xFF3D8BFD);
+  static const _outlineColor = Colors.white;
 
   @override
   void paint(Canvas canvas, Size size) {
     final width = size.width;
     final height = size.height;
     // 원이 몸통, 삼각형은 그 위에 «떨어져» 떠 있는 작은 방향 표시 — 처음엔 삼각형이
-    // 원만큼 커서 화살표로 읽혔다(시진, 09-14). 원 지름 ≈ 아이콘 폭의 54%, 삼각형 폭 ≈ 24%,
+    // 원만큼 커서 화살표로 읽혔다(시진, 09-14). 원 지름 = 아이콘 폭의 40%, 삼각형 폭 ≈ 24%,
     // 둘 사이 틈 ≈ 높이의 10%. 원 테두리는 삼각형보다 두껍게 — 몸통이 먼저 읽히게.
-    final center = Offset(width / 2, height * 0.65);
-    final radius = width * 0.27;
+    final center = Offset(width / 2, height * 0.58);
+    final radius = width * 0.2;
 
     // 위(북쪽)를 향한 삼각형 — 회전은 SDK 가 bearing 으로 처리한다.
     final arrow = Path()
