@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 
@@ -163,10 +165,22 @@ class SpotMarkerController {
       if (marker != null) await _mapController.deleteOverlay(marker.info);
     }
 
+    // 좌표가 완전히 같은 스팟(같은 장소의 행사·시설이 따로 등록된 것 — 전국 247쌍)은 마커가
+    // 포개져 하나만 보이고, 어느 쪽을 눌러도 위에 있는 것만 열린다. 조금씩 벌려 둘 다 보이게.
+    final positions = spreadOverlapping(next.values);
+    for (final entry in _markersBySpotId.entries) {
+      final position = positions[entry.key];
+      if (position != null && position != entry.value.position) entry.value.setPosition(position);
+    }
+
     final added = <NMarker>{};
     for (final entry in next.entries) {
       if (_markersBySpotId.containsKey(entry.key)) continue;
-      final marker = _toMarker(entry.value, favorite: _favorites.containsKey(entry.key));
+      final marker = _toMarker(
+        entry.value,
+        favorite: _favorites.containsKey(entry.key),
+        position: positions[entry.key] ?? NLatLng(entry.value.lat, entry.value.lng),
+      );
       _markersBySpotId[entry.key] = marker;
       _styleBySpotId[entry.key] = styleOf(entry.value);
       added.add(marker);
@@ -209,13 +223,38 @@ class SpotMarkerController {
     return table.last.$2;
   }
 
-  Size _sizeForScale() =>
-      _scale >= 1.0 ? NMarker.autoSize : Size(_baseSize.width * _scale, _baseSize.height * _scale);
+  Size _sizeForScale() => _scale >= 1.0 ? NMarker.autoSize : Size(_baseSize.width * _scale, _baseSize.height * _scale);
 
-  NMarker _toMarker(Spot spot, {required bool favorite}) {
+  /// 좌표가 같은 스팟끼리 벌린 자리. [spreadMeters] 반지름 원 위에 id 순으로 고르게 놓는다 —
+  /// 같은 무리면 조회 순서와 무관하게 늘 같은 자리다. 혼자인 스팟은 목록에 없다.
+  ///
+  /// 순수 함수라 지도 없이 검증한다(`spot_marker_spread_test.dart`).
+  static Map<int, NLatLng> spreadOverlapping(Iterable<Spot> spots, {double spreadMeters = 6}) {
+    final groups = <String, List<Spot>>{};
+    for (final spot in spots) {
+      groups.putIfAbsent('${spot.lat.toStringAsFixed(6)},${spot.lng.toStringAsFixed(6)}', () => []).add(spot);
+    }
+    final out = <int, NLatLng>{};
+    for (final group in groups.values) {
+      if (group.length < 2) continue;
+      group.sort((a, b) => a.id.compareTo(b.id));
+      final mPerLng = 111320 * cos(group.first.lat * pi / 180);
+      for (var i = 0; i < group.length; i++) {
+        final angle = -pi / 2 + 2 * pi * i / group.length; // 첫 스팟은 위쪽부터
+        final spot = group[i];
+        out[spot.id] = NLatLng(
+          spot.lat + spreadMeters * sin(angle) / 111320,
+          spot.lng + spreadMeters * cos(angle) / mPerLng,
+        );
+      }
+    }
+    return out;
+  }
+
+  NMarker _toMarker(Spot spot, {required bool favorite, required NLatLng position}) {
     final marker = NMarker(
       id: 'spot-${spot.id}',
-      position: NLatLng(spot.lat, spot.lng),
+      position: position,
       size: _sizeForScale(),
       // 찜이 먼저, 그다음 잠김. unlocked 스팟은 Phase 3에서 실제 정보를 담은 마커로
       // 대체될 예정이라 지금은 숨김 톤으로 그린다 (서버도 현재 unlocked=false만 내려준다).
