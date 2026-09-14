@@ -9,10 +9,10 @@ import 'spot_detail_screen.dart';
 
 /// 시/도 상세 — [ConquestScreen] 의 배지 하나를 누르면 들어온다.
 ///
-/// **밝혀지지 않은 스팟은 이름·사진을 보여주지 않는다.** [SpotDetailScreen]이 잠긴
-/// 스팟에서 지키는 규칙과 같다 — 서버가 `overview`만 가리는 게 아니라, 앱도 "탐험의
-/// 보상"이 스포일러 없이 유지되도록 이름까지 감춘다. 이 화면이 값을 갖고 있어도
-/// (서버는 title·addr를 잠긴 스팟에도 내려준다) 화면에 옮기지 않는다.
+/// **밝혀지지 않은 스팟은 이름만 보여주고 사진·주소는 가린다.** [SpotDetailScreen]이
+/// 잠긴 스팟에서 지키는 규칙과 같다 — 이름까지 가리면 갈 곳을 고를 수 없고(시진, 09-14),
+/// 사진·주소·소개가 탐험의 보상으로 남는다. 잠긴 스팟은 시/도당 최대 1000개라
+/// 슬리버로 게을리 그린다 — 전부 미리 만들면 화면 진입이 느리다.
 class ConquestRegionScreen extends ConsumerStatefulWidget {
   const ConquestRegionScreen({required this.sido, super.key});
 
@@ -111,34 +111,40 @@ class _ConquestRegionScreenState extends ConsumerState<ConquestRegionScreen> {
                   final unlocked = spots.where((s) => s.unlocked).toList();
                   final locked = spots.where((s) => !s.unlocked).toList();
 
-                  return ListView(
-                    padding: const EdgeInsets.all(AppSpacing.md),
-                    children: [
-                      Text('밝힌 스팟 (${unlocked.length})', style: theme.textTheme.titleMedium),
-                      const SizedBox(height: AppSpacing.xs),
-                      if (unlocked.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-                          child: Text(
-                            '아직 밝힌 스팟이 없어요.',
-                            style: theme.textTheme.bodyMedium?.copyWith(color: AppColors.inkMuted),
-                          ),
-                        )
-                      else
-                        ...unlocked.map((s) => _UnlockedSpotTile(spot: s)),
-                      const SizedBox(height: AppSpacing.lg),
-                      Text('밝혀지지 않은 스팟 (${locked.length})', style: theme.textTheme.titleMedium),
-                      const SizedBox(height: AppSpacing.xs),
-                      if (locked.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-                          child: Text(
-                            '이 지역 스팟을 전부 밝혔어요 🎉',
-                            style: theme.textTheme.bodyMedium?.copyWith(color: AppColors.inkMuted),
-                          ),
-                        )
-                      else
-                        _LockedSpotGrid(count: locked.length),
+                  final muted = theme.textTheme.bodyMedium?.copyWith(color: AppColors.inkMuted);
+                  return CustomScrollView(
+                    slivers: [
+                      SliverPadding(
+                        padding: const EdgeInsets.all(AppSpacing.md),
+                        sliver: SliverList.list(
+                          children: [
+                            Text('밝힌 스팟 (${unlocked.length})', style: theme.textTheme.titleMedium),
+                            const SizedBox(height: AppSpacing.xs),
+                            if (unlocked.isEmpty)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+                                child: Text('아직 밝힌 스팟이 없어요.', style: muted),
+                              )
+                            else
+                              ...unlocked.map((s) => _UnlockedSpotTile(spot: s)),
+                            const SizedBox(height: AppSpacing.lg),
+                            Text('밝혀지지 않은 스팟 (${locked.length})', style: theme.textTheme.titleMedium),
+                            const SizedBox(height: AppSpacing.xs),
+                            if (locked.isEmpty)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+                                child: Text('이 지역 스팟을 전부 밝혔어요 🎉', style: muted),
+                              ),
+                          ],
+                        ),
+                      ),
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(AppSpacing.md, 0, AppSpacing.md, AppSpacing.lg),
+                        sliver: SliverList.builder(
+                          itemCount: locked.length,
+                          itemBuilder: (context, i) => _LockedSpotTile(spot: locked[i]),
+                        ),
+                      ),
                     ],
                   );
                 },
@@ -226,34 +232,46 @@ class _ImagePlaceholder extends StatelessWidget {
   }
 }
 
-/// 밝혀지지 않은 스팟들 — [ConquestRegionScreen]의 문서 주석에 적은 이유로 이름·사진을
-/// 보여주지 않고, 몇 개가 남았는지만 물음표 타일로 알려준다. 탭해도 아무 일도 하지
-/// 않는다 — 잠긴 스팟은 [SpotDetailScreen]도 정보 없이 "밝혀지지 않았다"는 안내만
-/// 보여주므로, 여기서 굳이 그 화면을 또 열게 할 이유가 없다.
-class _LockedSpotGrid extends StatelessWidget {
-  const _LockedSpotGrid({required this.count});
+/// 밝혀지지 않은 스팟 하나 — 이름과 자물쇠만. 누르면 [SpotDetailScreen] 의 잠긴 화면으로
+/// 간다(거기서 발자취 남기기까지 할 수 있다). 사진 자리엔 자물쇠를 둬 밝힌 타일과 한눈에
+/// 갈린다.
+class _LockedSpotTile extends StatelessWidget {
+  const _LockedSpotTile({required this.spot});
 
-  final int count;
+  final Spot spot;
 
   @override
   Widget build(BuildContext context) {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: count,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 5,
-        mainAxisSpacing: AppSpacing.xs,
-        crossAxisSpacing: AppSpacing.xs,
-        childAspectRatio: 1,
-      ),
-      itemBuilder: (context, index) => DecoratedBox(
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(AppRadii.sm),
-          border: Border.all(color: AppColors.hairline),
+    final theme = Theme.of(context);
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      margin: const EdgeInsets.only(bottom: AppSpacing.xxs),
+      child: InkWell(
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => SpotDetailScreen(spot: spot)),
         ),
-        child: const Icon(Icons.help_outline, color: AppColors.inkFaint, size: 20),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs, vertical: AppSpacing.xxs),
+          child: Row(
+            children: [
+              const SizedBox(
+                width: 32,
+                height: 32,
+                child: Icon(Icons.lock_outline, size: 18, color: AppColors.inkFaint),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Expanded(
+                child: Text(
+                  spot.title,
+                  style: theme.textTheme.bodyMedium?.copyWith(color: AppColors.inkMuted),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const Icon(Icons.chevron_right, size: 18, color: AppColors.inkFaint),
+            ],
+          ),
+        ),
       ),
     );
   }
