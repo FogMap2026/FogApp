@@ -25,6 +25,9 @@ class ConquestRegionScreen extends ConsumerStatefulWidget {
 class _ConquestRegionScreenState extends ConsumerState<ConquestRegionScreen> {
   late Future<List<Spot>> _future;
 
+  /// 검색어. 비어 있으면 시/군/구로 접어 보여주고, 있으면 접기를 풀고 이름으로 거른다.
+  String _query = '';
+
   @override
   void initState() {
     super.initState();
@@ -112,6 +115,13 @@ class _ConquestRegionScreenState extends ConsumerState<ConquestRegionScreen> {
                   final locked = spots.where((s) => !s.unlocked).toList();
 
                   final muted = theme.textTheme.bodyMedium?.copyWith(color: AppColors.inkMuted);
+                  final query = _query.trim();
+                  // 검색 중이면 접기를 풀고 이름으로 거른 평평한 목록. 시/도당 1000개를
+                  // 스크롤로 훑게 하지 않는다(시진, 09-14).
+                  final matched =
+                      query.isEmpty ? const <Spot>[] : locked.where((s) => s.title.contains(query)).toList();
+                  final groups = query.isEmpty ? _groupBySigungu(locked) : const <_SigunguGroup>[];
+
                   return CustomScrollView(
                     slivers: [
                       SliverPadding(
@@ -134,17 +144,48 @@ class _ConquestRegionScreenState extends ConsumerState<ConquestRegionScreen> {
                               Padding(
                                 padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
                                 child: Text('이 지역 스팟을 전부 밝혔어요 🎉', style: muted),
+                              )
+                            else ...[
+                              TextField(
+                                onChanged: (v) => setState(() => _query = v),
+                                decoration: InputDecoration(
+                                  hintText: '스팟 이름으로 찾기',
+                                  prefixIcon: const Icon(Icons.search, size: 20),
+                                  isDense: true,
+                                  filled: true,
+                                  fillColor: AppColors.surface,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(AppRadii.sm),
+                                    borderSide: const BorderSide(color: AppColors.hairline),
+                                  ),
+                                ),
                               ),
+                              const SizedBox(height: AppSpacing.xs),
+                              if (query.isNotEmpty && matched.isEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+                                  child: Text('「$query」에 맞는 스팟이 없어요.', style: muted),
+                                ),
+                            ],
                           ],
                         ),
                       ),
-                      SliverPadding(
-                        padding: const EdgeInsets.fromLTRB(AppSpacing.md, 0, AppSpacing.md, AppSpacing.lg),
-                        sliver: SliverList.builder(
-                          itemCount: locked.length,
-                          itemBuilder: (context, i) => _LockedSpotTile(spot: locked[i]),
+                      if (query.isNotEmpty)
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(AppSpacing.md, 0, AppSpacing.md, AppSpacing.lg),
+                          sliver: SliverList.builder(
+                            itemCount: matched.length,
+                            itemBuilder: (context, i) => _LockedSpotTile(spot: matched[i]),
+                          ),
+                        )
+                      else
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(AppSpacing.md, 0, AppSpacing.md, AppSpacing.lg),
+                          sliver: SliverList.builder(
+                            itemCount: groups.length,
+                            itemBuilder: (context, i) => _SigunguTile(group: groups[i]),
+                          ),
                         ),
-                      ),
                     ],
                   );
                 },
@@ -271,6 +312,63 @@ class _LockedSpotTile extends StatelessWidget {
               const Icon(Icons.chevron_right, size: 18, color: AppColors.inkFaint),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 잠긴 스팟을 시/군/구로 묶는다. `addr1`(「경상북도 경주시 …」)의 둘째 토큰이 시/군/구다.
+/// 주소가 비었거나 시/도만 있으면 「주소 없음」으로 맨 뒤에 둔다. 그룹은 이름순,
+/// 그룹 안은 스팟 이름순.
+List<_SigunguGroup> _groupBySigungu(List<Spot> spots) {
+  const noAddress = '주소 없음';
+  final byName = <String, List<Spot>>{};
+  for (final spot in spots) {
+    final tokens = (spot.addr1 ?? '').trim().split(' ').where((t) => t.isNotEmpty).toList();
+    final name = tokens.length >= 2 ? tokens[1] : noAddress;
+    byName.putIfAbsent(name, () => []).add(spot);
+  }
+  final groups = [
+    for (final e in byName.entries)
+      _SigunguGroup(name: e.key, spots: e.value..sort((a, b) => a.title.compareTo(b.title))),
+  ]..sort((a, b) {
+      if (a.name == noAddress) return 1;
+      if (b.name == noAddress) return -1;
+      return a.name.compareTo(b.name);
+    });
+  return groups;
+}
+
+class _SigunguGroup {
+  const _SigunguGroup({required this.name, required this.spots});
+
+  final String name;
+  final List<Spot> spots;
+}
+
+/// 시/군/구 하나 — 접혀 있고 누르면 그 안의 잠긴 스팟이 펼쳐진다. 자식은 펼칠 때만
+/// 만들어지므로(`ExpansionTile` 기본) 1000개를 한 번에 그리지 않는다.
+class _SigunguTile extends StatelessWidget {
+  const _SigunguTile({required this.group});
+
+  final _SigunguGroup group;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      margin: const EdgeInsets.only(bottom: AppSpacing.xxs),
+      child: Theme(
+        // ExpansionTile 이 펼쳐질 때 넣는 위아래 구분선을 뺀다 — 카드 안에서는 군더더기다.
+        data: theme.copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          title: Text(group.name, style: theme.textTheme.bodyLarge),
+          subtitle:
+              Text('${group.spots.length}곳', style: theme.textTheme.bodySmall?.copyWith(color: AppColors.inkMuted)),
+          childrenPadding: const EdgeInsets.fromLTRB(AppSpacing.xs, 0, AppSpacing.xs, AppSpacing.xs),
+          children: [for (final spot in group.spots) _LockedSpotTile(spot: spot)],
         ),
       ),
     );
