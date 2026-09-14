@@ -79,11 +79,11 @@ void main() {
     await tester.tap(find.text('!'));
     await tester.pumpAndSettle();
 
-    expect(find.text('지금 인증하기'), findsNothing);
+    expect(find.text('경복궁 인증 가능'), findsNothing);
     expect(verified, isFalse);
   });
 
-  testWidgets('인증 가능 — 「지금 인증하기」가 뜨고, 누르면 곧바로 인증으로 간다', (tester) async {
+  testWidgets('인증 가능 — 「경복궁 인증 가능」처럼 스팟 이름이 뜨고, 누르면 곧바로 인증으로 간다', (tester) async {
     var verified = 0;
     await tester.pumpWidget(
       _Host(proximity: _proximity(ProximityLevel.verifiable, distance: 60), onVerify: () => verified++),
@@ -91,7 +91,7 @@ void main() {
     // 맥박 애니메이션이 계속 돌아 pumpAndSettle 은 끝나지 않는다 — 등장 전환 시간만큼만 흘린다.
     await tester.pump(const Duration(milliseconds: 500));
 
-    expect(find.text('지금 인증하기'), findsOneWidget);
+    expect(find.text('경복궁 인증 가능'), findsOneWidget);
     expect(find.byIcon(Icons.photo_camera_rounded), findsOneWidget);
     expect(find.text('!'), findsNothing);
 

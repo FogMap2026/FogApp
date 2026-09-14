@@ -9,7 +9,7 @@ import '../theme/app_theme.dart';
 ///
 /// - **근처**([ProximityLevel.near]): 조용한 «!» 원. 누르면 원이 옆으로 늘어나며 알림 카드로
 ///   **모양이 바뀐다**(같은 상자가 커지는 것이라 새 창이 뜨는 느낌이 아니다). 닫으면 다시 원으로.
-/// - **인증 가능**([ProximityLevel.verifiable]): 맥박처럼 퍼지는 주황 원 + 「지금 인증하기」.
+/// - **인증 가능**([ProximityLevel.verifiable]): 맥박처럼 퍼지는 주황 원 + 「○○ 인증 가능」.
 ///   누르면 곧바로 인증 화면으로 간다. 진동은 화면([MapScreen])이 단계가 바뀌는 순간 한 번 낸다
 ///   — 이 위젯은 다시 그려질 때마다 불리므로 여기서 울리면 반복된다.
 ///
@@ -57,6 +57,7 @@ class ProximityPrompt extends StatelessWidget {
       child: verifiable
           ? _VerifyBeacon(
               key: ValueKey('verify-${proximity.spot.id}'),
+              spotTitle: proximity.spot.title,
               onTap: onVerify,
               showLabel: showVerifyLabel,
             )
@@ -229,14 +230,19 @@ class _NearCardContent extends StatelessWidget {
   }
 }
 
-/// 인증 가능 — 누가 봐도 눈에 띄어야 한다. 주황 원이 맥박처럼 퍼지고 「지금 인증하기」가 붙는다.
+/// 인증 가능 — 누가 봐도 눈에 띄어야 한다. 주황 원이 맥박처럼 퍼지고 「○○ 인증 가능」이 붙는다.
+///
+/// 라벨에 **스팟 이름**을 넣는다 — 「지금 인증하기」만으로는 무엇을 인증하는지 없어서, 스팟이
+/// 붙어 있는 도심에서는 눌러 보고서야 어느 스팟인지 알았다(시진, 실기기 09-14). «근처» 카드의
+/// 「100m 안으로 가면 인증할 수 있어요」와 이어지는 말이라 두 단계가 한 문장처럼 읽힌다.
 ///
 /// 앱 테마는 스티커 색을 버튼에 쓰지 않는다([AppColors] 문서)는 원칙이 있지만, 이 아이콘은
 /// 「지도 위에서 지금 당장 해야 할 일」이 뜨는 유일한 자리라 일부러 어긋난다 — 파랑(주요 행동)으로
 /// 칠하면 지도 컨트롤·정보 바와 구분되지 않는다.
 class _VerifyBeacon extends StatefulWidget {
-  const _VerifyBeacon({required this.onTap, required this.showLabel, super.key});
+  const _VerifyBeacon({required this.spotTitle, required this.onTap, required this.showLabel, super.key});
 
+  final String spotTitle;
   final VoidCallback onTap;
   final bool showLabel;
 
@@ -262,7 +268,7 @@ class _VerifyBeaconState extends State<_VerifyBeacon> with SingleTickerProviderS
   Widget build(BuildContext context) {
     return Semantics(
       button: true,
-      label: '지금 인증할 수 있어요. 눌러서 인증하기',
+      label: '${widget.spotTitle} 인증할 수 있어요. 눌러서 인증하기',
       child: GestureDetector(
         onTap: widget.onTap,
         behavior: HitTestBehavior.opaque,
@@ -277,9 +283,13 @@ class _VerifyBeaconState extends State<_VerifyBeacon> with SingleTickerProviderS
                   borderRadius: BorderRadius.circular(999),
                   boxShadow: AppShadows.soft,
                 ),
-                child: const Text(
-                  '지금 인증하기',
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14),
+                // 이름이 길어도 한 줄 — 카드가 왼쪽으로 자라 좌하단 메뉴를 덮지 않게.
+                constraints: const BoxConstraints(maxWidth: 220),
+                child: Text(
+                  '${widget.spotTitle} 인증 가능',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14),
                 ),
               ),
               const SizedBox(width: AppSpacing.xs),
