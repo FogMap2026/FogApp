@@ -10,8 +10,10 @@ import 'footprint_create_screen.dart';
 
 /// 스팟 상세 화면(#50). 마커를 탭하면 열린다 — 발자취 작성(#70)·조회(#71) 진입점도 여기 있다.
 ///
-/// 해금 여부(`unlocked`)로 나뉘는 건 스팟 정보(이름·주소·소개)뿐이다. 발자취는
-/// 방문 인증과 독립적이라(#70 결정) 잠긴 스팟에서도 목록을 그대로 보여준다.
+/// 해금 여부(`unlocked`)로 나뉘는 건 스팟 정보(사진·주소·소개)다 — **이름은 잠긴
+/// 스팟에서도 보여준다.** 이름까지 가리면 「잠긴 스팟」이라는 글자만 남아 어디를 눌렀는지
+/// 알 길이 없고, 갈 곳을 고를 수도 없다(시진, 09-14). 사진·주소·소개가 탐험의 보상이다.
+/// 발자취는 방문 인증과 독립적이라(#70 결정) 잠긴 스팟에서도 목록을 그대로 보여준다.
 class SpotDetailScreen extends ConsumerStatefulWidget {
   const SpotDetailScreen({required this.spot, super.key});
 
@@ -53,14 +55,14 @@ class _SpotDetailScreenState extends ConsumerState<SpotDetailScreen> {
   Widget build(BuildContext context) {
     final spot = widget.spot;
     return Scaffold(
-      appBar: AppBar(title: Text(spot.unlocked ? spot.title : '잠긴 스팟')),
+      appBar: AppBar(title: Text(spot.title)),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (spot.unlocked) ..._buildUnlocked(context, spot) else ..._buildLocked(context),
+              if (spot.unlocked) ..._buildUnlocked(context, spot) else ..._buildLocked(context, spot),
               const SizedBox(height: 24),
               FilledButton.icon(
                 onPressed: _openFootprintWrite,
@@ -123,19 +125,21 @@ class _SpotDetailScreenState extends ConsumerState<SpotDetailScreen> {
     );
   }
 
-  List<Widget> _buildLocked(BuildContext context) {
+  List<Widget> _buildLocked(BuildContext context, Spot spot) {
     final theme = Theme.of(context);
     return [
       const SizedBox(height: 40),
-      const Center(child: Icon(Icons.help_outline, size: 72, color: AppColors.inkFaint)),
+      const Center(child: Icon(Icons.lock_outline, size: 72, color: AppColors.inkFaint)),
       const SizedBox(height: 16),
+      Center(child: Text(spot.title, style: theme.textTheme.headlineSmall, textAlign: TextAlign.center)),
+      const SizedBox(height: 8),
       Center(
         child: Text('아직 밝혀지지 않은 곳이에요', style: theme.textTheme.titleMedium),
       ),
       const SizedBox(height: 4),
       Center(
         child: Text(
-          '현장에서 방문 인증을 하면 이름과 소개가 열려요.',
+          '현장에서 방문 인증을 하면 사진·주소·소개가 열려요.',
           style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           textAlign: TextAlign.center,
         ),
