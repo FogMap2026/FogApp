@@ -13,7 +13,10 @@ import 'footprint_create_screen.dart';
 /// 해금 여부(`unlocked`)로 나뉘는 건 스팟 정보(사진·주소·소개)다 — **이름은 잠긴
 /// 스팟에서도 보여준다.** 이름까지 가리면 「잠긴 스팟」이라는 글자만 남아 어디를 눌렀는지
 /// 알 길이 없고, 갈 곳을 고를 수도 없다(시진, 09-14). 사진·주소·소개가 탐험의 보상이다.
-/// 발자취는 방문 인증과 독립적이라(#70 결정) 잠긴 스팟에서도 목록을 그대로 보여준다.
+/// 발자취 **보기**는 잠긴 스팟에서도 된다(#70 결정). **남기기는 인증한 스팟에서만** —
+/// 가 보지도 않은 곳에 글이 쌓이면 발자취가 「거기 있었다」는 증거가 아니게 된다
+/// (시진, 09-14; #70 의 「독립」 결정을 여기서 좁힌다). 길목 글귀(지도의 발자취 남기기,
+/// 스팟 없음)는 이 화면 밖이라 그대로다.
 class SpotDetailScreen extends ConsumerStatefulWidget {
   const SpotDetailScreen({required this.spot, super.key});
 
@@ -64,11 +67,21 @@ class _SpotDetailScreenState extends ConsumerState<SpotDetailScreen> {
             children: [
               if (spot.unlocked) ..._buildUnlocked(context, spot) else ..._buildLocked(context, spot),
               const SizedBox(height: 24),
-              FilledButton.icon(
-                onPressed: _openFootprintWrite,
-                icon: const Icon(Icons.edit_note_outlined),
-                label: const Text('발자취 남기기'),
-              ),
+              if (spot.unlocked)
+                FilledButton.icon(
+                  onPressed: _openFootprintWrite,
+                  icon: const Icon(Icons.edit_note_outlined),
+                  label: const Text('발자취 남기기'),
+                )
+              else
+                Text(
+                  '방문 인증을 하면 이 스팟에 발자취를 남길 수 있어요.',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                ),
               const SizedBox(height: 24),
               Text('발자취', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
