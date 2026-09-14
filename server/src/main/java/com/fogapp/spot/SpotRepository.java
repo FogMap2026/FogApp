@@ -18,6 +18,12 @@ public interface SpotRepository extends JpaRepository<Spot, Long> {
     Optional<Spot> findByContentId(String contentId);
 
     /**
+     * 좌표가 완전히 같은 스팟이 이미 있는지(V11). 관광공사 API 는 같은 장소를 여러 contentid 로
+     * 주므로(광장과 그 광장의 축제), 수집기가 같은 자리에 둘째 스팟을 만들지 않게 막는다.
+     */
+    boolean existsByLatAndLng(Double lat, Double lng);
+
+    /**
      * 소개글을 <b>아직 조회하지 않은</b> 스팟(#100). 상세조회로 채울 대상을 고른다.
      *
      * <p>상세는 스팟 1건당 1회 호출이라 비싸다 — 이미 조회한 것을 제외해 재실행이 남은 것만
