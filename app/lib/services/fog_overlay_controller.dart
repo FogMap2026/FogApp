@@ -459,7 +459,7 @@ class FogGrid {
       final ring = _simplify(loop);
       final area = _signedArea(ring);
       if (area == 0) continue;
-      final coords = [for (final v in ring) _vertex(v), _vertex(ring.first)];
+      final coords = smoothRing([for (final v in ring) _vertex(v)]);
       (area > 0 ? holes : islands).add(coords);
     }
     return FogOutlines(holes: holes, islands: islands);
@@ -495,6 +495,43 @@ class FogGrid {
   }
 
   static NLatLng _vertex(int key) => NLatLng(_row(key) * _latStep, _col(key) * _lngStep);
+
+  /// 격자 계단을 매끄럽게 — 각 변의 **중점을 잇는** 것을 [smoothPasses]번 반복한다.
+  ///
+  /// 3m 격자는 최대 줌(≈0.15m/px)에서 계단이 20px 로 보였다(실기기, 09-14). 격자를 더
+  /// 잘게 하면 셀 수가 제곱으로 늘지만, 중점 다각형은 **꼭짓점 수를 그대로 둔 채** 계단을
+  /// 대각선 곡선으로 바꾼다. 볼록 모서리는 안쪽으로, 오목 모서리는 바깥으로 셀 크기의
+  /// 절반쯤 깎이는데 3m 격자에서 1.5m 라 화면에서 안 보인다. 방향(시계/반시계)은 그대로다.
+  ///
+  /// 닫힌 고리를 받아(마지막 점 ≠ 첫 점) 닫힌 고리로 돌려준다(마지막 점 = 첫 점).
+  static List<NLatLng> smoothRing(List<NLatLng> ring) {
+    var pts = ring;
+    for (var pass = 0; pass < smoothPasses && pts.length >= 3; pass++) {
+      pts = [
+        for (var i = 0; i < pts.length; i++)
+          NLatLng(
+            (pts[i].latitude + pts[(i + 1) % pts.length].latitude) / 2,
+            (pts[i].longitude + pts[(i + 1) % pts.length].longitude) / 2,
+          ),
+      ];
+    }
+    // 다듬은 뒤 한 직선 위에 놓인 점을 지운다 — 긴 직선 구간의 중점들이 그렇다.
+    // 그리는 데는 상관없지만 setHoles 로 보내는 좌표 수를 줄인다.
+    final out = <NLatLng>[];
+    for (var i = 0; i < pts.length; i++) {
+      final a = pts[(i + pts.length - 1) % pts.length];
+      final b = pts[i];
+      final c = pts[(i + 1) % pts.length];
+      final cross = (b.longitude - a.longitude) * (c.latitude - b.latitude) -
+          (b.latitude - a.latitude) * (c.longitude - b.longitude);
+      if (cross.abs() > 1e-14) out.add(b);
+    }
+    final ring2 = out.length >= 3 ? out : pts;
+    return [...ring2, ring2.first];
+  }
+
+  /// 중점 다듬기 횟수. 1번이면 계단이 45° 톱니로, 2번이면 곡선에 가깝게 된다.
+  static const smoothPasses = 2;
 }
 
 /// [FogGrid.outlines] 의 결과.

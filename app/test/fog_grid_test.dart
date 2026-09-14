@@ -99,4 +99,29 @@ void main() {
       expect(sameDirection, isFalse, reason: '꼭짓점 $i 가 직선 위에 있다');
     }
   });
+
+  _smoothTests();
+}
+
+void _smoothTests() {
+  const seoul = NLatLng(37.5665, 126.9780);
+
+  test('다듬어도 닫힌 고리이고 방향(반시계)이 그대로다', () {
+    final ring = FogGrid.outlines(_union([FogGrid.cellsInCircle(seoul, 50)])).holes.single;
+    expect(ring.first.latitude, ring.last.latitude);
+    expect(ring.first.longitude, ring.last.longitude);
+    expect(_signedArea(ring), greaterThan(0));
+  });
+
+  test('다듬으면 계단이 사라진다 — 축 방향(가로·세로)만 있던 변이 대각선이 된다', () {
+    final ring = FogGrid.outlines(_union([FogGrid.cellsInCircle(seoul, 50)])).holes.single;
+    var diagonal = 0;
+    for (var i = 0; i < ring.length - 1; i++) {
+      final dLat = (ring[i + 1].latitude - ring[i].latitude).abs();
+      final dLng = (ring[i + 1].longitude - ring[i].longitude).abs();
+      if (dLat > 1e-9 && dLng > 1e-9) diagonal++;
+    }
+    // 격자 그대로면 대각선 변이 0 이다.
+    expect(diagonal, greaterThan((ring.length - 1) ~/ 2));
+  });
 }
