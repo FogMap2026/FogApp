@@ -7,6 +7,7 @@ import '../models/profile.dart';
 import '../services/auth_service.dart';
 import '../services/footprint_service.dart';
 import '../services/profile_service.dart';
+import '../services/traveler_service.dart';
 import '../services/traveler_sharing.dart';
 import '../theme/app_theme.dart';
 import '../widgets/footprint_card.dart';
@@ -264,8 +265,25 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       ),
     );
     if (confirmed != true || !mounted) return;
+    await _stopSharingBeforeLeaving();
+    if (!mounted) return;
     Navigator.of(context).popUntil((route) => route.isFirst);
     await ref.read(authServiceProvider).signOut();
+  }
+
+  /// 로그아웃·탈퇴 전에 「내 위치 공유」를 끈다(#228 리뷰, 송건희). 세션 상태라 다음 사람이
+  /// 같은 기기에서 로그인하면 **켜진 채로 시작**하는데, 그건 신고 접수본의 opt-in(기본값 꺼짐)
+  /// 요건을 어긴다. 서버 행 삭제는 실패해도 넘어간다 — 로그아웃 자체는 진행돼야 하고, 남은 행은
+  /// 서버가 30분 뒤 알아서 거른다.
+  Future<void> _stopSharingBeforeLeaving() async {
+    if (ref.read(travelerSharingProvider)) {
+      try {
+        await ref.read(travelerServiceProvider).stopSharing();
+      } catch (e) {
+        debugPrint('[Profile] 위치 공유 끄기 실패(로그아웃은 진행): $e');
+      }
+    }
+    ref.read(travelerSharingProvider.notifier).set(false);
   }
 
   /// 회원 탈퇴(#182). ⛔ **되돌릴 수 없다** — 무엇이 지워지는지 나열하고 확인을 받는다.
@@ -307,6 +325,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
     try {
       await ref.read(profileServiceProvider).withdraw();
+      // 공유 상태를 끈다 — 계정은 서버에서 지워졌지만 provider 는 이 기기에 남는다.
+      ref.read(travelerSharingProvider.notifier).set(false);
       // 계정이 사라졌으니 토큰도 의미가 없다. 로그아웃하면 AuthGate 가 로그인 화면으로
       // 되돌린다 — 그 판정은 한 곳(AuthGate)에 둔다. 다만 이 화면은 지도 위에 push 된
       // 것이라 그대로 두면 로그인 화면 «위에» 남으므로 첫 화면까지 먼저 걷어낸다([_logout] 과 같다).
