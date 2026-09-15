@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fogapp/widgets/map_controls.dart';
+import 'package:fogapp/widgets/map_pin.dart';
 
 /// 지도 우하단 컨트롤의 **폭**을 지킨다.
 ///
@@ -20,7 +21,7 @@ Widget _host(Widget child) {
 }
 
 MapControls _controls({VoidCallback? onRecenter = _noop}) {
-  return MapControls(onZoomIn: _noop, onZoomOut: _noop, onRecenter: onRecenter, onSearchHere: _noop);
+  return MapControls(onRecenter: onRecenter, onSpotMode: _noop);
 }
 
 void _noop() {}
@@ -44,15 +45,39 @@ void main() {
     expect(width, 40);
   });
 
-  testWidgets('세 버튼이 다 있고 잘리지 않는다', (tester) async {
+  testWidgets('버튼이 다 있고 잘리지 않는다', (tester) async {
     await tester.pumpWidget(_host(_controls()));
 
-    expect(find.byIcon(Icons.add), findsOneWidget);
-    expect(find.byIcon(Icons.remove), findsOneWidget);
     expect(find.byIcon(Icons.my_location), findsOneWidget);
     expect(find.byIcon(Icons.location_on_outlined), findsOneWidget);
+    expect(find.byType(HumanFootprint), findsOneWidget);
     // 폭을 고정했으므로 버튼이 넘치지 않는지 함께 본다.
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('네 번째 버튼은 내 주변 → 화면 중심 → 숨김 → 내 주변 순으로 돈다', (tester) async {
+    var mode = SpotViewMode.nearby;
+    await tester.pumpWidget(
+      _host(
+        StatefulBuilder(
+          builder: (context, setState) => MapControls(
+            onRecenter: _noop,
+            onSpotMode: () => setState(() => mode = mode.next),
+            spotMode: mode,
+          ),
+        ),
+      ),
+    );
+    expect(find.byIcon(Icons.location_on_outlined), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.location_on_outlined));
+    await tester.pump();
+    expect(find.byIcon(Icons.location_on), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.location_on));
+    await tester.pump();
+    expect(find.byIcon(Icons.location_off), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.location_off));
+    await tester.pump();
+    expect(find.byIcon(Icons.location_on_outlined), findsOneWidget);
   });
 
   testWidgets('내 위치를 모르면 그 버튼만 비활성', (tester) async {
@@ -65,7 +90,7 @@ void main() {
     }
 
     expect(buttonFor(Icons.my_location).onPressed, isNull);
-    expect(buttonFor(Icons.add).onPressed, isNotNull);
+    expect(buttonFor(Icons.location_on_outlined).onPressed, isNotNull);
   });
 
   testWidgets('좌하단 버튼을 덮지 않는다', (tester) async {
@@ -110,5 +135,27 @@ void main() {
       isFalse,
       reason: '컨트롤이 발자취 버튼과 겹친다 — 탭이 가로채진다',
     );
+  });
+
+  testWidgets('발자취 버튼은 발자국 그림이고, 누르면 토글된다', (tester) async {
+    var hidden = false;
+    await tester.pumpWidget(
+      _host(
+        StatefulBuilder(
+          builder: (context, setState) => MapControls(
+            onRecenter: _noop,
+            onSpotMode: _noop,
+            onToggleFootprints: () => setState(() => hidden = !hidden),
+            footprintsHidden: hidden,
+          ),
+        ),
+      ),
+    );
+    final before = tester.widget<HumanFootprint>(find.byType(HumanFootprint)).color;
+    await tester.tap(find.byType(HumanFootprint));
+    await tester.pump();
+    final after = tester.widget<HumanFootprint>(find.byType(HumanFootprint)).color;
+    expect(hidden, isTrue);
+    expect(after, isNot(before)); // 켜짐(강조색) ↔ 숨김(옅은 색)
   });
 }

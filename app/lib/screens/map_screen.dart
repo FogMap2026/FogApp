@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
@@ -19,6 +20,7 @@ import '../services/fog_overlay_controller.dart';
 import '../services/outside_korea_mask.dart';
 import '../services/province_boundary_overlay.dart';
 import '../services/fog_regions.dart';
+import '../services/footprint_region_gate.dart';
 import '../services/journey_service.dart';
 import '../services/footprint_location_gate.dart';
 import '../services/footprint_marker_controller.dart';
@@ -35,6 +37,7 @@ import '../services/traveler_sharing.dart';
 import '../services/visit_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/footprint_card.dart';
+import '../widgets/footprint_region_taken_dialog.dart';
 import '../widgets/map_controls.dart';
 import '../widgets/proximity_prompt.dart';
 import 'conquest_screen.dart';
@@ -305,6 +308,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       if (ref.read(travelerSharingProvider)) {
         _startTravelerShareTimer();
       }
+      _footprintMarkers?.resume();
     } else if (state == AppLifecycleState.paused) {
       controller.setLocationTrackingMode(NLocationTrackingMode.none);
       _geofencePositionSubscription?.cancel();
@@ -315,6 +319,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       // (oorony, PR #201 리뷰).
       _travelerShareTimer?.cancel();
       _travelerShareTimer = null;
+      // 발자취 60초 갱신도 같은 이유로 멈춘다 — 옛 좌표로 조회가 나간다(#229 리뷰).
+      _footprintMarkers?.pause();
       // 화면을 벗어나기 전에 남은 궤적을 올린다 — 배치가 차기 전에 앱을 닫으면
       // 그 구간이 사라진다.
       unawaited(_flushJourney());
@@ -395,29 +401,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       // ⚠️ 아래 둘은 «정확도 판정 밖»이다 — 화면 표시라 튀어도 다음 갱신에 되돌아온다.
       //    되돌아오지 않는 것(구멍·서버 저장)만 거른다.
       _recomputeProximity();
-      unawaited(
-        _footprintMarkers?.updatePosition(
-          lat: position.latitude,
-          lng: position.longitude,
-          insideUnlockedSpot: _isInsideUnlockedSpot(position.latitude, position.longitude),
-        ),
-      );
+      unawaited(_footprintMarkers?.updatePosition(lat: position.latitude, lng: position.longitude));
     });
-  }
-
-  /// 해금된(방문 인증한) 스팟의 구역 안에 있는지(#117) — 발자취 조회 반경을 50m에서 넓힐지
-  /// 판단하는 데 쓴다(문서 3-3). 안개가 걷힌 곳과 같은 기준이다 — 「밝힌 동네」 안이면
-  /// 발자취도 넓게 보인다. 구역이 아직 없으면(좌표 받는 중) 스팟 150m 로 대신한다.
-  bool _isInsideUnlockedSpot(double lat, double lng) {
-    final regions = _fogRegions;
-    if (regions != null) {
-      final spotId = regions.nearest(lat, lng)?.spotId;
-      return spotId != null && _visitedSpotIds.contains(spotId);
-    }
-    for (final coord in _visitedSpotCoords.values) {
-      if (Geolocator.distanceBetween(lat, lng, coord.latitude, coord.longitude) <= 150) return true;
-    }
-    return false;
   }
 
   // ── 안개 구역 ───────────────────────────────────────────────────────────
@@ -436,6 +421,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       debugPrint('[FogRegions] 스팟 ${coords.length} → 씨앗 ${regions.seeds.length} (${sw.elapsedMilliseconds}ms)');
       if (!mounted) return;
       _fogRegions = regions;
+      // 스팟 상세 등 다른 화면이 «여기가 어느 구역인가»를 물을 수 있게(발자취 구역당 하나).
+      ref.read(fogRegionsProvider.notifier).state = regions;
       for (final p in _journeyRestored) {
         _markEmptyRegion(p.latitude, p.longitude);
       }
@@ -500,7 +487,27 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     final lat = _myLat;
     final lng = _myLng;
     if (lat == null || lng == null) return;
-    _moveToMyLocation(lat, lng);
+    _fitAroundMe(lat, lng);
+  }
+
+  /// 「내 위치로」 버튼이 보여주는 범위 — 스팟 조회 반경과 같다. 버튼 하나로 «내 주변 스팟이
+  /// 다 보이는» 화면이 되게(시진, 09-15). 확대/축소 버튼은 뺐다 — 핀치로 되는 일이고, 이 버튼이
+  /// 기준 배율을 잡아 준다.
+  static const _recenterRadiusMeters = SpotMarkerController.radiusMeters;
+
+  /// 내 위치를 가운데 두고 반경 [_recenterRadiusMeters] 가 화면에 들어오게 맞춘다. 줌 값을 박지
+  /// 않고 경계로 맞추는 이유: 화면 폭·밀도마다 같은 줌이 다른 거리를 보여준다.
+  void _fitAroundMe(double lat, double lng) {
+    final controller = _controller;
+    if (controller == null) return;
+    const mPerLat = 111320.0;
+    const dLat = _recenterRadiusMeters / mPerLat;
+    final dLng = _recenterRadiusMeters / (mPerLat * cos(lat * pi / 180));
+    controller.updateCamera(
+      NCameraUpdate.fitBounds(
+        NLatLngBounds(southWest: NLatLng(lat - dLat, lng - dLng), northEast: NLatLng(lat + dLat, lng + dLng)),
+      ),
+    );
   }
 
   /// 내 위치를 볼 때 쓰는 줌. 위도 37.5에서 약 3.8m/px라 100m 떨어진 스팟이 26px쯤
@@ -624,6 +631,37 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   /// 스팟은 평소 내 위치 주변만 불러오므로, 지도를 멀리 밀어 「거기엔 뭐가 있나」를
   /// 볼 길이 이것이다. 한 번 누를 때 한 번만 불러오는 방식도 써봤는데, 지도를 조금
   /// 옮길 때마다 다시 눌러야 해서 토글로 바꿨다(시진, 09-14).
+  /// 네 번째 버튼: 내 주변 → 화면 중심 → 숨김 → 내 주변. 숨김은 마커만 감춘다 — 근접 카드·안개는
+  /// 그대로다: 스팟이 안 보여도 인증은 된다.
+  SpotViewMode get _spotViewMode => _spotsHidden
+      ? SpotViewMode.hidden
+      : _searchHereMode
+          ? SpotViewMode.here
+          : SpotViewMode.nearby;
+  bool _spotsHidden = false;
+
+  /// 다섯 번째 버튼: 발자취 보이기/숨기기. 마커만 감춘다 — 남기기·조회는 그대로다.
+  bool _footprintsHidden = false;
+
+  void _toggleFootprintsHidden() {
+    setState(() => _footprintsHidden = !_footprintsHidden);
+    _footprintMarkers?.setUserVisible(!_footprintsHidden);
+  }
+
+  void _cycleSpotViewMode() {
+    switch (_spotViewMode.next) {
+      case SpotViewMode.here:
+        _toggleSearchHere(); // nearby → here
+      case SpotViewMode.hidden:
+        _toggleSearchHere(); // here → nearby 로 되돌린 뒤 숨긴다 — 숨김을 풀면 «내 주변»이 되게.
+        setState(() => _spotsHidden = true);
+        _spotMarkers?.setVisible(false);
+      case SpotViewMode.nearby:
+        setState(() => _spotsHidden = false);
+        _spotMarkers?.setVisible(true);
+    }
+  }
+
   void _toggleSearchHere() {
     final controller = _controller;
     if (controller == null) return;
@@ -807,6 +845,13 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   }
 
   Future<void> _writeFootprintAt(double lat, double lng) async {
+    // 발자취는 구역당 하나(시진, 09-15). 이미 남긴 구역이면 안내하고 끝낸다.
+    final check = await ref.read(footprintRegionGateProvider).check(lat: lat, lng: lng);
+    if (!mounted) return;
+    if (check is FootprintRegionTaken) {
+      await showFootprintRegionTakenDialog(context, check.existing);
+      return;
+    }
     final written = await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (_) => FootprintNearbyCreateScreen(lat: lat, lng: lng)),
     );
@@ -815,6 +860,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('발자취를 남겼어요.')));
       }
       unawaited(_loadFootprintQuota());
+      // 방금 남긴 글이 바로 핀으로 보이게 — 200m 걸을 때까지 기다리지 않는다.
+      unawaited(_footprintMarkers?.refresh());
     }
   }
 
@@ -840,6 +887,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     if (action == SpotDetailAction.verify && mounted) {
       await _openVisitVerify(spot);
     }
+    // 상세에서 발자취를 남겼을 수 있다 — 돌아오면 바로 핀에 반영한다.
+    unawaited(_footprintMarkers?.refresh());
   }
 
   bool _canVerify(Spot spot) {
@@ -941,9 +990,14 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     unawaited(_restoreJourney());
     // 구역은 전국 좌표를 받아야 해서 늦게 온다 — 그동안의 방문·궤적은 만들어질 때 반영된다.
     unawaited(_buildFogRegions());
+    // 스팟 핀 이미지(잠김·밝힘·찜)는 위젯을 구워 만든다 — 앞선 await 이후라 mounted 를 본다.
+    if (!mounted) return;
+    final spotIcons = await SpotMarkerController.createIcons(context);
+    if (!mounted) return;
     _spotMarkers = SpotMarkerController(
       controller,
       ref.read(spotServiceProvider),
+      icons: spotIcons,
       onSpotsLoaded: (spots) {
         _proximityCandidates = spots;
         _recomputeProximity();
@@ -967,8 +1021,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     // 찜한 스팟은 조회와 무관하게 항상 지도에 둔다 — 컨트롤러가 생기자마자 넘기고,
     // 이후 변경은 build 의 ref.listen 이 넘긴다.
     unawaited(_spotMarkers!.setFavorites(ref.read(favoriteSpotsProvider)));
-    // 발자취 아이콘은 위젯을 이미지로 구워 만든다 — 마커마다 만들지 않고 한 번만 만들어
-    // 공유한다. 앞선 await 이후라 context를 쓰기 전에 mounted를 확인한다.
+    // 발자취 아이콘(발바닥 핀)은 위젯을 이미지로 구워 만든다 — 마커마다 만들지 않고 한 번만
+    // 만들어 공유한다. 앞선 await 이후라 context를 쓰기 전에 mounted를 확인한다.
     if (!mounted) return;
     NOverlayImage? footprintIcon;
     try {
@@ -1261,10 +1315,6 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     }
   }
 
-  void _zoomBy(double delta) {
-    _controller?.updateCamera(NCameraUpdate.zoomBy(delta));
-  }
-
   _LocationIssue? get _locationIssue {
     if (_locationServiceEnabled == false) {
       return _LocationIssue(
@@ -1408,11 +1458,11 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                     child: Align(
                       alignment: Alignment.centerRight,
                       child: MapControls(
-                        onZoomIn: () => _zoomBy(1),
-                        onZoomOut: () => _zoomBy(-1),
                         onRecenter: _myLat != null ? _recenterToMe : null,
-                        onSearchHere: _mapReady ? _toggleSearchHere : null,
-                        searchHereActive: _searchHereMode,
+                        onSpotMode: _mapReady ? _cycleSpotViewMode : null,
+                        spotMode: _spotViewMode,
+                        onToggleFootprints: _mapReady ? _toggleFootprintsHidden : null,
+                        footprintsHidden: _footprintsHidden,
                       ),
                     ),
                   ),

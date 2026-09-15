@@ -4,9 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/footprint.dart';
 import '../models/spot.dart';
 import '../services/favorite_spot_store.dart';
+import '../services/footprint_region_gate.dart';
 import '../services/footprint_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/footprint_card.dart';
+import '../widgets/footprint_region_taken_dialog.dart';
 import 'footprint_create_screen.dart';
 
 /// 스팟 상세 화면(#50). 마커를 탭하면 열린다 — 발자취 작성(#70)·조회(#71) 진입점도 여기 있다.
@@ -56,6 +58,13 @@ class _SpotDetailScreenState extends ConsumerState<SpotDetailScreen> {
   }
 
   Future<void> _openFootprintWrite() async {
+    // 발자취는 구역당 하나(시진, 09-15) — 스팟 자리의 구역에 이미 남겼으면 안내하고 끝낸다.
+    final check = await ref.read(footprintRegionGateProvider).check(lat: widget.spot.lat, lng: widget.spot.lng);
+    if (!mounted) return;
+    if (check is FootprintRegionTaken) {
+      await showFootprintRegionTakenDialog(context, check.existing);
+      return;
+    }
     final written = await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (_) => FootprintCreateScreen(spot: widget.spot)),
     );

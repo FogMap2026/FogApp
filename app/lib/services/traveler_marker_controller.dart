@@ -93,8 +93,9 @@ class _AnonymousTravelerDot extends StatelessWidget {
   }
 }
 
-/// 옅은 보라색 원 + 흰 테두리. 안개(짙은 청회색) 위에서도 윤곽이 보이도록
-/// 발자취·내 캐릭터와 같은 원칙(흰 테두리 먼저)을 쓴다.
+/// 프로필 아이콘 모양 — 옅은 보라 원 안에 흰 사람 실루엣, 흰 테두리(시진, 09-15: 보라 점만으로는
+/// «사람»으로 안 읽혔다). 익명이라 실제 사진은 없고 누구나 같은 아이콘이다. 안개(짙은 청회색)
+/// 위에서도 윤곽이 보이도록 발자취·내 캐릭터와 같은 원칙(흰 테두리 먼저)을 쓴다.
 class _DotPainter extends CustomPainter {
   const _DotPainter();
 
@@ -104,16 +105,27 @@ class _DotPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width * 0.32;
+    final radius = size.width * 0.44;
 
-    final outline = Paint()
-      ..color = _outlineColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3;
-    canvas.drawCircle(center, radius, outline);
-
-    final fill = Paint()..color = _fillColor;
-    canvas.drawCircle(center, radius, fill);
+    canvas.drawCircle(center, radius, Paint()..color = _fillColor);
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..color = _outlineColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.5,
+    );
+    // 사람 실루엣: 머리(원) + 어깨(반원). 원 안에서 잘라 프로필 아이콘처럼 보이게.
+    canvas.save();
+    canvas.clipPath(Path()..addOval(Rect.fromCircle(center: center, radius: radius - 1)));
+    final white = Paint()..color = Colors.white;
+    canvas.drawCircle(Offset(center.dx, center.dy - radius * 0.22), radius * 0.34, white);
+    canvas.drawOval(
+      Rect.fromCenter(center: Offset(center.dx, center.dy + radius * 0.75), width: radius * 1.5, height: radius * 1.2),
+      white,
+    );
+    canvas.restore();
   }
 
   @override
