@@ -77,7 +77,18 @@ class FootprintMarkerController {
   /// 때의 값을 클로저에 가두지 않고 여기서 찾아 쓴다.
   final Map<int, Footprint> _footprintsById = {};
 
-  bool _visible = true;
+  /// 줌이 [_minVisibleZoom] 이상인가 — 밀도 때문에 자동으로 숨기는 쪽.
+  bool _zoomVisible = true;
+
+  /// 사용자가 ☰ 메뉴에서 「다른 사람 발자취」를 켜 뒀는가(피그마 메인화면, oorony 09-15).
+  ///
+  /// 줌 판정과 **따로 둔다.** 하나로 합치면 사용자가 껐다가 켜는 사이에 줌이 바뀌었을 때
+  /// 어느 쪽이 숨긴 것인지 알 수 없어, 켜도 안 보이거나 껐는데 다시 뜬다.
+  bool _userVisible = true;
+
+  /// 실제로 지도에 보일지 — 둘 다 참일 때만.
+  bool get _visible => _zoomVisible && _userVisible;
+
   bool _loading = false;
 
   double? _lastFetchLat;
@@ -94,9 +105,27 @@ class FootprintMarkerController {
   /// 카메라 줌이 바뀔 때마다 호출한다. 보이기/숨기기를 전환하고, 다시 보이게 될 때만
   /// 마지막 위치로 한 번 채운다.
   void setZoom(double zoom) {
-    final visible = zoom >= _minVisibleZoom;
-    if (visible == _visible) return;
-    _visible = visible;
+    final zoomVisible = zoom >= _minVisibleZoom;
+    if (zoomVisible == _zoomVisible) return;
+    final was = _visible;
+    _zoomVisible = zoomVisible;
+    _applyVisibility(was);
+  }
+
+  /// ☰ 메뉴의 「다른 사람 발자취」 토글. 끄면 지도에서 사라지고 조회도 멈춘다 —
+  /// 보이지도 않을 것을 15m 마다 받아올 이유가 없다.
+  void setUserVisible(bool visible) {
+    if (visible == _userVisible) return;
+    final was = _visible;
+    _userVisible = visible;
+    _applyVisibility(was);
+  }
+
+  /// 보임 상태가 실제로 바뀌었으면 마커에 반영하고, 다시 보이게 된 것이면 마지막 위치로
+  /// 한 번 채운다 — 새 위치 이벤트를 기다리면 제자리에 서 있는 동안 빈 지도가 된다.
+  void _applyVisibility(bool wasVisible) {
+    final visible = _visible;
+    if (visible == wasVisible) return;
     for (final marker in _markersByFootprintId.values) {
       marker.setIsVisible(visible);
     }

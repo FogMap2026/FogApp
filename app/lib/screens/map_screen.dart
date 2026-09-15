@@ -10,6 +10,7 @@ import 'package:geolocator/geolocator.dart';
 import '../models/conquest.dart';
 import '../models/footprint.dart';
 import '../models/nearby_traveler.dart';
+import '../models/profile.dart';
 import '../models/spot.dart';
 import '../services/character_overlay.dart';
 import '../services/conquest_service.dart';
@@ -34,13 +35,16 @@ import '../services/traveler_service.dart';
 import '../services/traveler_sharing.dart';
 import '../services/visit_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/conquest_pill.dart';
 import '../widgets/footprint_card.dart';
-import '../widgets/map_controls.dart';
-import '../widgets/proximity_prompt.dart';
+import '../widgets/map_action_dock.dart';
+import '../widgets/map_compass_button.dart';
+import '../widgets/map_top_bar.dart';
 import 'conquest_screen.dart';
 import 'footprint_nearby_create_screen.dart';
 import 'friends_screen.dart';
 import 'profile_screen.dart';
+import 'settings_screen.dart';
 import 'spot_detail_screen.dart';
 import 'visit_verify_screen.dart';
 
@@ -125,8 +129,9 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   bool _mapReady = false;
   bool? _locationServiceEnabled;
   LocationPermission? _permission;
+  /// 카메라 중심의 시/도 이름. 화면에 글자로 띄우지는 않는다 — 지도 타일이 이미 지명을
+  /// 찍어 준다. 정복률([_currentConquest])이 **어느 시/도 것인지 고르는 데**만 쓴다.
   String? _regionName;
-  bool _regionLookupFailed = false;
 
   /// 정복률(#51) 조회 결과 전체. 표시할 지역만 골라 쓴다.
   /// 카메라 중심에서 가장 가까운(=현재 보고 있는) 스팟. 정복률 표시 지역을 고르는 데 쓴다.
@@ -222,11 +227,18 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   /// 근접 판정 후보 — 스팟 마커가 카메라 idle 마다 불러오는 목록을 그대로 쓴다(따로 조회하지 않는다).
   List<Spot> _proximityCandidates = const [];
 
-  /// 지금 우하단에 띄운 근접 아이콘의 대상과 단계. null 이면 아이콘 없음.
+  /// 지금 알리고 있는 스팟과 단계. null 이면 알릴 것이 없다.
   SpotProximity? _proximity;
 
-  /// «근처» 아이콘을 눌러 알림 카드로 펼쳤는지.
-  bool _proximityExpanded = false;
+  /// «근처» 알림을 사용자가 눌러 닫은 스팟(피그마 메인화면, oorony 09-15).
+  ///
+  /// 스팟별로 기억한다 — 한 번 닫았다고 모든 스팟의 알림을 영영 접으면, 다음 스팟에
+  /// 다가서도 아무 말도 못 한다. 반대로 스팟이 같으면 다시 띄우지 않는다: 300m 경계에서
+  /// GPS 가 흔들릴 때마다 닫은 알림이 되살아나면 끈질긴 광고가 된다.
+  ///
+  /// **«인증 가능»은 닫을 수 없다.** 닫는 대신 누르면 인증 화면으로 간다 — 이 앱에서
+  /// 그 순간이 가장 중요한 한 번이라, 실수로 접어 못 찾게 두지 않는다.
+  int? _nearAlarmDismissedSpotId;
 
   /// 이번 실행에서 «인증 가능» 진동을 이미 낸 스팟. 130m 경계를 드나들 때마다 울리면 주머니
   /// 속에서 계속 떨린다 — 아이콘은 매번 뜨지만 진동은 스팟당 한 번.
@@ -239,13 +251,25 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   /// GPS 측정+정확도 확인이 진행 중일 때 버튼 연타를 막는다.
   bool _footprintLocationChecking = false;
 
-  /// 좌하단 액션 목록을 펼쳤는지. **기본값은 접힘** — 버튼 5개가 상시로 서 있으면
-  /// 지도를 그만큼 가리는데, 이 앱에서 화면의 주인공은 지도다.
+  /// ☰ 메뉴를 펼쳤는지. **기본값은 접힘** — 버튼이 상시로 서 있으면 지도를 그만큼
+  /// 가리는데, 이 앱에서 화면의 주인공은 지도다.
   ///
   /// 임시 진입점들(#73·5-1·5-2)이 하나씩 늘면서 열이 길어졌고, 결국 네이버 로고와
   /// 지도 컨트롤까지 밀어냈다(#64·#187·#190·#194). 근본은 "상시 노출 항목이 계속
   /// 늘어난 것"이라 접어서 해결한다.
   bool _actionsExpanded = false;
+
+  /// ☰ 메뉴의 「다른 사람 발자취」 토글. 켜짐이 기본 — 걷다 보면 남의 글귀를 만나는 것이
+  /// 이 앱의 재미라서, 끄는 것은 «지금은 내 지도만 보고 싶다»는 선택이다.
+  bool _footprintsVisible = true;
+
+  /// 지도 방위(도). **`setState` 로 들고 있지 않다** — 지도를 돌리는 동안 카메라 이벤트가
+  /// 프레임마다 오는데, 그때마다 이 화면 전체를 다시 그리면 오버레이·마커까지 재빌드된다.
+  /// 나침반 바늘만 이 값을 듣는다([MapCompassButton]).
+  final ValueNotifier<double> _bearing = ValueNotifier<double>(0);
+
+  /// 우상단 프로필 버튼에 쓸 내 프로필. 못 받아왔으면 null — 사람 실루엣으로 그린다.
+  Profile? _profile;
 
   TravelerMarkerController? _travelerMarkers;
 
@@ -259,15 +283,22 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     WidgetsBinding.instance.addObserver(this);
     // 위치 권한 요청은 onMapReady에서 한 번만 수행한다(중복 요청 시 Android가
     // "Can request only one set of permissions at a time"로 두 번째 요청을 무시함).
-    _loadFootprintQuota();
+    _loadProfile();
   }
 
-  /// 프로필에서 잔여 발자취 횟수만 읽어온다(#118). 실패해도 버튼을 막지 않는다 —
-  /// 표시가 갱신되지 않을 뿐, 실제 소진 여부는 작성 시 서버가 429로 가른다.
-  Future<void> _loadFootprintQuota() async {
+  /// 내 프로필을 읽어 **잔여 발자취 횟수**(#118)와 **우상단 버튼의 프로필 사진**을 채운다.
+  ///
+  /// 실패해도 버튼을 막지 않는다 — 표시가 갱신되지 않을 뿐, 실제 소진 여부는 작성 시
+  /// 서버가 429로 가르고 프로필 사진은 사람 실루엣으로 대신한다.
+  Future<void> _loadProfile() async {
     try {
       final profile = await ref.read(profileServiceProvider).me();
-      if (mounted) setState(() => _footprintQuota = profile.footprintQuota);
+      if (mounted) {
+        setState(() {
+          _profile = profile;
+          _footprintQuota = profile.footprintQuota;
+        });
+      }
     } catch (_) {
       // 조용히 넘어간다 — 위 주석 참고.
     }
@@ -283,6 +314,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     _cameraSubscription?.cancel();
     _geofencePositionSubscription?.cancel();
     _travelerShareTimer?.cancel();
+    _bearing.dispose();
     _fogOverlay?.dispose();
     _provinceBoundary?.dispose();
     _outsideMask?.dispose();
@@ -553,17 +585,40 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
 
     final spotChanged = previous?.spot.id != next?.spot.id;
     final levelChanged = previous?.level != next?.level;
-    // 거리만 바뀐 갱신은 펼친 카드(거리 문구가 보이는 때)가 아니면 다시 그릴 필요가 없다.
-    if (!mounted || (!spotChanged && !levelChanged && !_proximityExpanded)) {
+    // 알림 막대가 떠 있으면 거리 문구가 보이므로 거리만 바뀌어도 다시 그린다. 떠 있지
+    // 않으면 15m 걸을 때마다 지도 화면을 다시 그릴 이유가 없다.
+    final showing = _pillMode != ConquestPillMode.progress;
+    if (!mounted || (!spotChanged && !levelChanged && !showing)) {
       _proximity = next;
       return;
     }
     setState(() {
       _proximity = next;
-      // 대상이 바뀌었거나 인증 단계로 올라서면 펼친 카드는 접는다 — 다른 스팟 이야기를 하던 카드가
-      // 그대로 남거나, 인증 아이콘과 카드가 섞이지 않게.
-      if (spotChanged || next?.level != ProximityLevel.near) _proximityExpanded = false;
+      // 알리는 스팟이 바뀌면 «닫음» 기억도 그 스팟과 함께 버린다 — 다음 스팟의 알림까지
+      // 미리 닫아둘 수는 없다.
+      if (spotChanged) _nearAlarmDismissedSpotId = null;
     });
+  }
+
+  /// 지금 우상단 알약이 무엇을 말하고 있는가 — 나침반 원의 표정도 이 값에서 나온다.
+  ConquestPillMode get _pillMode => conquestPillModeFor(
+        proximity: _proximity,
+        dismissedSpotId: _nearAlarmDismissedSpotId,
+      );
+
+  /// 알림 막대에 띄울 한 줄. [ConquestPillMode.progress] 면 null.
+  String? get _pillMessage {
+    final proximity = _proximity;
+    if (proximity == null) return null;
+    final distance = proximity.distanceMeters.round();
+    switch (_pillMode) {
+      case ConquestPillMode.progress:
+        return null;
+      case ConquestPillMode.near:
+        return '${proximity.spot.title} 근처 · 약 ${distance}m';
+      case ConquestPillMode.verifiable:
+        return '${proximity.spot.title} 인증 가능 · 눌러서 인증';
+    }
   }
 
   /// 인증할 수 있을 만큼 가까워진 순간의 진동 — 짧게 두 번.
@@ -577,15 +632,23 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     await HapticFeedback.vibrate();
   }
 
-  void _expandProximity() {
-    // 좌하단 메뉴를 펼친 채로 카드가 자라면 메뉴 아래쪽 버튼과 겹친다 — 하나만 펼친다.
-    setState(() {
-      _proximityExpanded = true;
-      _actionsExpanded = false;
-    });
+  /// 우상단 알약이나 나침반 원을 눌렀을 때 — 단계에 따라 하는 일이 다르다.
+  ///
+  /// - 평소: 알약은 [ConquestScreen], 나침반은 내 위치로.
+  /// - «근처»: 알림을 접는다. 알약은 정복률로, 나침반 원은 «!»에서 바늘로 함께 되돌아간다
+  ///   — 둘이 한 알림의 두 부분이라 따로 돌아가면 반쪽만 꺼진 것처럼 보인다.
+  /// - «인증 가능»: 인증 화면([VisitVerifyScreen])으로 간다.
+  void _onAlarmSurfaceTap({required VoidCallback whenIdle}) {
+    final proximity = _proximity;
+    switch (_pillMode) {
+      case ConquestPillMode.progress:
+        whenIdle();
+      case ConquestPillMode.near:
+        setState(() => _nearAlarmDismissedSpotId = proximity?.spot.id);
+      case ConquestPillMode.verifiable:
+        if (proximity != null) unawaited(_openVisitVerify(proximity.spot));
+    }
   }
-
-  void _collapseProximity() => setState(() => _proximityExpanded = false);
 
   /// 지금 띄울 안내(#144, #146).
   ///
@@ -657,6 +720,13 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       _spotLoadMyPosition = null;
       _reloadSpotsIfMoved(lat, lng);
     }
+  }
+
+  /// ☰ 메뉴의 「다른 사람 발자취」 토글. 마커를 숨기고 조회도 멈춘다
+  /// ([FootprintMarkerController.setUserVisible]).
+  void _toggleFootprintsVisible() {
+    setState(() => _footprintsVisible = !_footprintsVisible);
+    _footprintMarkers?.setUserVisible(_footprintsVisible);
   }
 
   void _loadSpotsAt(NLatLng center) {
@@ -814,7 +884,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('발자취를 남겼어요.')));
       }
-      unawaited(_loadFootprintQuota());
+      unawaited(_loadProfile());
     }
   }
 
@@ -1123,6 +1193,9 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   void _onCameraChanged(OnCameraChangedParams params) {
     final controller = _controller;
     if (controller != null) unawaited(_fitExtentToViewport(controller, params.position.zoom));
+    // 나침반 바늘. ValueNotifier 라 이 화면은 다시 그려지지 않는다 — 지도를 돌리는 동안
+    // 프레임마다 setState 하면 마커·오버레이까지 같이 재빌드된다.
+    _bearing.value = params.position.bearing;
     // 줌 임계값에 따른 발자취 표시/숨김(#117)은 카메라가 멈추기 전에도 즉시
     // 반영한다 — 핀치 줌 도중에도 "확대하면 보인다"가 바로 느껴져야 한다.
     _footprintMarkers?.setZoom(params.position.zoom);
@@ -1252,17 +1325,61 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       final placemarks = await placemarkFromCoordinates(target.latitude, target.longitude);
       final name = placemarks.isEmpty ? null : regionNameFromPlacemark(placemarks.first);
       if (!mounted) return;
-      setState(() {
-        _regionName = name;
-        _regionLookupFailed = name == null;
-      });
+      setState(() => _regionName = name);
     } catch (_) {
-      if (mounted) setState(() => _regionLookupFailed = true);
+      // 지역 이름은 정복률을 고르는 힌트일 뿐이다 — 못 구하면 가장 가까운 스팟의
+      // areaCode 로 찾는 경로가 남아 있다([findSidoConquest]).
+      if (mounted) setState(() => _regionName = null);
     }
   }
 
-  void _zoomBy(double delta) {
-    _controller?.updateCamera(NCameraUpdate.zoomBy(delta));
+  /// ☰ 를 눌렀을 때 위에서부터 쌓이는 항목들.
+  ///
+  /// 앞 둘은 **토글**(지도에 무엇을 띄울지), 뒤 둘은 **화면**(어디로 갈지)이다. 그 순서를
+  /// 섞지 않는다 — 누르면 화면이 바뀌는 것과 제자리에서 켜지고 꺼지는 것이 섞여 있으면
+  /// 무엇이 일어날지 모르고 누르게 된다.
+  ///
+  /// 「내 프로필」은 여기 없다 — 우상단 프로필 버튼이 그 자리다. 같은 화면으로 가는 입구를
+  /// 둘 두면 둘 중 하나는 늘 죽은 버튼이다(시진, 09-14 성향 테스트 때와 같은 판단).
+  List<MapMenuEntry> get _menuEntries => [
+        MapMenuEntry(
+          icon: Icons.travel_explore,
+          label: '멀리 있는 스팟 보기',
+          active: _searchHereMode,
+          onTap: _mapReady ? _toggleSearchHere : null,
+        ),
+        MapMenuEntry(
+          icon: Icons.directions_walk,
+          label: '다른 사람 발자취',
+          active: _footprintsVisible,
+          onTap: _footprintMarkers == null ? null : _toggleFootprintsVisible,
+        ),
+        MapMenuEntry(
+          icon: Icons.people_outline,
+          label: '동행',
+          onTap: () => _openFromMenu(const FriendsScreen()),
+        ),
+        MapMenuEntry(
+          icon: Icons.settings_outlined,
+          label: '설정',
+          onTap: () => _openFromMenu(const SettingsScreen()),
+        ),
+      ];
+
+  /// 메뉴에서 화면으로 나가는 항목 — **나가면서 메뉴를 접는다.** 안 접으면 돌아왔을 때
+  /// 펼쳐진 채로 지도를 가리고 있다. 토글 항목은 반대로 열어 둔다(둘을 잇달아 켜기도 한다).
+  void _openFromMenu(Widget screen) {
+    setState(() => _actionsExpanded = false);
+    unawaited(Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen)));
+  }
+
+  /// 우상단 프로필 버튼. 돌아오면 프로필을 다시 읽는다 — 닉네임·사진을 바꾸고
+  /// 왔을 수 있고(#219), 발자취 잔여 횟수도 그 화면에서 달라질 수 있다.
+  Future<void> _openProfile() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const ProfileScreen()),
+    );
+    await _loadProfile();
   }
 
   _LocationIssue? get _locationIssue {
@@ -1305,26 +1422,23 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     final safeAreaPadding = MediaQuery.paddingOf(context);
     final locationIssue = _locationIssue;
 
-    // SDK 콘텐츠 패딩에 우리 오버레이가 차지하는 대략적인 높이를 더한다 — 안 그러면
-    // "내 위치로 이동" 시 마커가 상단 정보 바 뒤에 숨을 수 있다(#64).
+    // SDK 콘텐츠 패딩에 우리 오버레이가 차지하는 높이를 더한다 — 안 그러면
+    // "내 위치로 이동" 시 마커가 상단 알약 뒤에 숨을 수 있다(#64).
+    // 76 = 프로필 버튼 44 + 위아래 여백 16·16.
     //
     // ⚠️ **bottom 에는 더하지 않는다.** 로고·스케일 바가 그만큼 딸려 올라온다.
     //
     // SDK 문서에는 «카메라가 콘텐츠 패딩을 제외한 영역의 중심에 위치한다» 까지만
-    // 적혀 있고 로고 배치는 언급이 없는데, 실기기 화면에서 재보니 로고가 화면
-    // 아래에서 **약 154dp** 위에 있었다 — `bottom(안전영역 48 + 96) + logoMargin 12`
-    // 과 맞아떨어진다. 즉 로고도 콘텐츠 영역을 기준으로 놓인다.
+    // 적혀 있고 로고 배치는 언급이 없는데, 실기기 화면에서 재보니 로고도 콘텐츠 영역을
+    // 기준으로 놓였다 — bottom 에 96 을 더했더니 로고가 좌하단 버튼 열 중간에 끼어 보였다.
     //
-    // 그 결과 예전 값(+96)에서는 로고가 좌하단 버튼 열 중간(「내 동행 요청」과
-    // 「발자취 남기기」 사이)에 끼어 보였다.
-    //
-    // 로고를 가리는 것은 네이버 지도 이용 약관 위반이기도 해서, 로고 자리는
-    // 화면 맨 아래로 두고 **우리 버튼이 그 위에 서도록** 한다 — 좌하단 열의 아래
-    // 여백 64 가 그 간격이다(로고는 12~34 구간을 쓴다).
+    // 로고를 가리는 것은 네이버 지도 이용 약관 위반이기도 해서, 로고 자리는 화면 맨
+    // 아래로 두고 **우리 버튼이 그 위에 서도록** 한다 — 하단 원 세 개의 아래 여백
+    // 52 가 그 간격이다(로고는 12~34 구간을 쓴다).
     final contentPadding = EdgeInsets.only(
       left: safeAreaPadding.left,
       right: safeAreaPadding.right,
-      top: safeAreaPadding.top + 64,
+      top: safeAreaPadding.top + 76,
       bottom: safeAreaPadding.bottom,
     );
 
@@ -1353,8 +1467,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
               // 스타일을 콘솔에서 고치면 앱 재배포 없이 바뀐다.
               customStyleId: _mapStyleId,
               maxTilt: 0,
-              // SDK 기본 위치 버튼 대신 우측 컨트롤에 직접 그린다(#64) — 좌하단 Naver
-              // 로고 자리와 겹치는 걸 피하고, 우리 UI를 한 곳(우측 세로 스택)으로 모은다.
+              // SDK 기본 위치 버튼 대신 하단 가운데 나침반 원이 그 일을 한다([MapActionDock]) —
+              // 우리 UI 를 «위 한 줄 · 아래 한 줄» 두 곳으로만 모은다.
               locationButtonEnable: false,
               logoAlign: NLogoAlign.leftBottom,
               logoMargin: const EdgeInsets.only(left: 12, bottom: 12),
@@ -1366,241 +1480,87 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
               color: Colors.black12,
               child: Center(child: CircularProgressIndicator()),
             ),
+          // 우상단 — 정복률 배터리 + 프로필. 스팟에 다가서면 배터리가 프로필 왼쪽으로
+          // 길게 자라며 알림이 된다([ConquestPill]).
+          //
+          // 위치 안내·서버 오류 배너는 그 아래에 붙인다. 이 Column 안에 두면 배너가 뜨고
+          // 지는 만큼 자동으로 밀려 서로 겹치지 않는다 — 별도 Align 으로 빼면 배너 높이를
+          // 상수로 짐작해야 하고, 문구가 늘어날 때마다 그 값이 낡는다.
           SafeArea(
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(AppSpacing.md),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _TopInfoBar(
-                    regionName: _regionName,
-                    regionLookupFailed: _regionLookupFailed,
+                  MapTopBar(
+                    pillMode: _pillMode,
                     conquestRate: _currentConquest?.rate,
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const ConquestScreen()),
+                    pillMessage: _pillMessage,
+                    onPillTap: () => _onAlarmSurfaceTap(
+                      whenIdle: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const ConquestScreen()),
+                      ),
                     ),
+                    profileImageUrl: _profile?.profileImageUrl,
+                    onProfileTap: _openProfile,
                   ),
                   if (locationIssue != null)
                     Padding(
-                      padding: const EdgeInsets.only(top: 8),
+                      padding: const EdgeInsets.only(top: AppSpacing.xs),
                       child: _LocationBanner(issue: locationIssue),
                     ),
                   switch (_notice) {
                     MapNotice.serverError => Padding(
-                        padding: const EdgeInsets.only(top: 8),
+                        padding: const EdgeInsets.only(top: AppSpacing.xs),
                         child: _ServerErrorNotice(
                           onDismiss: _dismissServerErrorNotice,
                           onRetry: _lastLoadCenter == null ? null : _retrySpotLoad,
                         ),
                       ),
                     MapNotice.emptyArea => Padding(
-                        padding: const EdgeInsets.only(top: 8),
+                        padding: const EdgeInsets.only(top: AppSpacing.xs),
                         child: _EmptyAreaNotice(onDismiss: _dismissEmptyNotice),
                       ),
                     MapNotice.none => const SizedBox.shrink(),
                   },
-                  // 지도 컨트롤은 이 Column 안에 둔다 — 배너가 뜨고 지는 만큼
-                  // 자동으로 아래위로 밀려 서로 겹치지 않는다. 별도 Align 으로
-                  // 빼면 배너 높이를 상수로 짐작해야 하고, 배너가 늘어날 때마다
-                  // 그 값이 낡는다.
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: MapControls(
-                        onZoomIn: () => _zoomBy(1),
-                        onZoomOut: () => _zoomBy(-1),
-                        onRecenter: _myLat != null ? _recenterToMe : null,
-                        onSearchHere: _mapReady ? _toggleSearchHere : null,
-                        searchHereActive: _searchHereMode,
-                      ),
-                    ),
-                  ),
                 ],
               ),
             ),
           ),
-          // 하단 좌측 액션 영역. 여러 오버레이가 늘어도 이 Column 하나에 세로로
-          // 쌓이므로 서로 겹치지 않는다(#64 — 예전엔 독립된 Align끼리 포개졌음).
-          // Naver 로고(좌하단, logoMargin 12)를 가리지 않도록 하단 여백을 넉넉히 둔다.
+          // 하단 — 발자취 · 나침반 · 메뉴 세 원([MapActionDock]).
+          //
+          // 아래 여백 52 는 **네이버 로고 자리**다. 로고는 화면 아래 12~34dp 를 쓰는데
+          // (logoMargin 12), 가리는 것은 네이버 지도 이용 약관 위반이다 — 버튼은 그 위에 선다.
           SafeArea(
             child: Align(
-              alignment: Alignment.bottomLeft,
-              child: FilledButtonTheme(
-                // 지도 위 액션 버튼(tonal)은 흰 알약이라 밝은 지도 타일에 묻힌다 — 경계선 한 줄과
-                // 옅은 그림자로 종이에서 살짝 뜨게 한다(Notion button-secondary). 전역 테마를
-                // «대체»하지 않고 병합해야 알약 모양·글자 크기가 유지된다.
-                data: FilledButtonThemeData(style: mapActionButtonStyle(Theme.of(context))),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 64),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // 펼쳤을 때만 나온다. 접힘이 기본이라 지도가 그만큼 열린다.
-                      AnimatedSize(
-                        duration: const Duration(milliseconds: 180),
-                        curve: Curves.easeOut,
-                        alignment: Alignment.bottomLeft,
-                        child: _actionsExpanded
-                            ? Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // 성향 테스트(#31) 진입점은 프로필 화면에 있다 — 지도 메뉴에 또 두면
-                                  // 같은 화면으로 가는 버튼이 둘이라 뺐다(시진, 09-14).
-                                  FilledButton.tonalIcon(
-                                    // 제대로 된 네비게이션(하단 바 등)이 붙기 전까지의 최소 진입점(#73).
-                                    onPressed: () => Navigator.of(context).push(
-                                      MaterialPageRoute(builder: (_) => const ProfileScreen()),
-                                    ),
-                                    icon: const Icon(Icons.person_outline),
-                                    label: const Text('내 프로필'),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  FilledButton.tonalIcon(
-                                    // 친구 — 「추천 친구」(5-1)·「동행 요청」(5-2) 두 탭. 예전엔 버튼이
-                                    // 각각 따로 있었다.
-                                    onPressed: () => Navigator.of(context).push(
-                                      MaterialPageRoute(builder: (_) => const FriendsScreen()),
-                                    ),
-                                    icon: const Icon(Icons.people_outline),
-                                    label: const Text('친구'),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  FilledButton.tonalIcon(
-                                    // 발자취 남기기(#118). 위 임시 진입점들과 달리 계속 남을 기능이지만,
-                                    // 지도를 가리지 않는 쪽을 택해 같이 접는다.
-                                    onPressed: (_footprintQuota == 0 || _footprintLocationChecking)
-                                        ? null
-                                        : _openFootprintCreate,
-                                    icon: _footprintLocationChecking
-                                        ? const SizedBox(
-                                            width: 16,
-                                            height: 16,
-                                            child: CircularProgressIndicator(strokeWidth: 2),
-                                          )
-                                        : const Icon(Icons.edit_location_alt_outlined),
-                                    label: Text(
-                                      _footprintQuota == null ? '발자취 남기기' : '발자취 남기기 ($_footprintQuota)',
-                                    ),
-                                  ),
-                                  if (_footprintQuota == 0)
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 4, left: 4),
-                                      child: Text(
-                                        '스팟을 탐험하면 다시 채워집니다',
-                                        style: Theme.of(context).textTheme.bodySmall,
-                                      ),
-                                    ),
-                                  const SizedBox(height: 8),
-                                  // 내 위치 공유(#133) 스위치는 프로필 화면으로 옮겼다(시진, 09-14) —
-                                  // 지도 메뉴는 «지금 할 행동»만 남긴다.
-                                ],
-                              )
-                            : const SizedBox.shrink(),
-                      ),
-                      // 토글은 접든 펼치든 **같은 자리**에 있는다 — 목록이 위로만 자라므로
-                      // 연달아 누를 때 손가락을 옮기지 않아도 된다.
-                      FloatingActionButton.small(
-                        // Scaffold 의 FAB 이 아니라 Stack 안에 직접 놓은 것이라 Hero 태그가
-                        // 필요 없다. 두면 화면 전환 때 태그 충돌로 예외가 날 수 있다.
-                        heroTag: null,
-                        onPressed: () => setState(() {
-                          _actionsExpanded = !_actionsExpanded;
-                          // 우하단 근접 카드와 겹치지 않게 — 하나만 펼친다([_expandProximity]).
-                          if (_actionsExpanded) _proximityExpanded = false;
-                        }),
-                        tooltip: _actionsExpanded ? '메뉴 닫기' : '메뉴 열기',
-                        child: Icon(_actionsExpanded ? Icons.close : Icons.menu),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          // 우하단 근접 아이콘. 왼쪽 여백 68 = 좌하단 메뉴 토글(16 + 40) + 간격 12 — 카드로
-          // 펼쳐져 왼쪽으로 자라도 토글 버튼을 덮지 않는다. 아래 여백은 토글과 같은 줄에 서도록.
-          if (_proximity != null)
-            SafeArea(
+              alignment: Alignment.bottomCenter,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(68, 16, 16, 58),
-                child: Align(
-                  alignment: Alignment.bottomRight,
-                  child: ProximityPrompt(
-                    proximity: _proximity!,
-                    expanded: _proximityExpanded,
-                    onExpand: _expandProximity,
-                    onCollapse: _collapseProximity,
-                    onOpenSpot: () => _openSpotDetail(_proximity!.spot),
-                    showVerifyLabel: !_actionsExpanded,
+                padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.md, AppSpacing.md, 52),
+                child: MapActionDock(
+                  onFootprint: (_footprintQuota == 0 || _footprintLocationChecking)
+                      ? null
+                      : _openFootprintCreate,
+                  footprintQuota: _footprintQuota,
+                  footprintBusy: _footprintLocationChecking,
+                  bearing: _bearing,
+                  compassMode: switch (_pillMode) {
+                    ConquestPillMode.progress => MapCompassMode.compass,
+                    ConquestPillMode.near => MapCompassMode.near,
+                    ConquestPillMode.verifiable => MapCompassMode.verifiable,
+                  },
+                  onCompass: () => _onAlarmSurfaceTap(
+                    whenIdle: () {
+                      if (_myLat != null) _recenterToMe();
+                    },
                   ),
+                  menuOpen: _actionsExpanded,
+                  onToggleMenu: () => setState(() => _actionsExpanded = !_actionsExpanded),
+                  menuEntries: _menuEntries,
                 ),
               ),
             ),
-        ],
-      ),
-    );
-  }
-}
-
-/// 지도 상단 정보 바. 현재 지역(시/도)과 정복률(#51)을 보여준다.
-///
-/// 누르면 전국 정복 현황([ConquestScreen])으로 들어간다 — 여기 보이는 숫자 하나
-/// (지금 보고 있는 지역의 정복률)를 전체·지역별로 펼친 화면이다.
-class _TopInfoBar extends StatelessWidget {
-  const _TopInfoBar({
-    required this.regionName,
-    required this.regionLookupFailed,
-    required this.conquestRate,
-    required this.onTap,
-  });
-
-  final String? regionName;
-  final bool regionLookupFailed;
-
-  /// 0.0~1.0. 아직 못 구했으면(스팟 미로드·API 실패 등) null — 플레이스홀더로 표시한다.
-  final double? conquestRate;
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final label = regionName ?? (regionLookupFailed ? '지역 정보를 가져올 수 없어요' : '지역 확인 중…');
-    final rate = conquestRate;
-    final rateLabel = rate == null ? '탐험률 --%' : '탐험률 ${(rate * 100).round()}%';
-
-    return Material(
-      color: theme.colorScheme.surface.withValues(alpha: 0.92),
-      elevation: 2,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
-            children: [
-              const Icon(Icons.place_outlined, size: 20),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  label,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodyMedium,
-                ),
-              ),
-              Chip(
-                label: Text(rateLabel),
-                visualDensity: VisualDensity.compact,
-              ),
-              const SizedBox(width: 2),
-              const Icon(Icons.chevron_right, size: 18, color: AppColors.inkFaint),
-            ],
           ),
-        ),
+        ],
       ),
     );
   }
