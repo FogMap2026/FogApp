@@ -29,7 +29,7 @@ dependencies:
   # 네트워크
   dio: ^5.5.0
 
-  # 기기 로컬 저장 — 즐겨찾기 시/도(#217) 같은 «이 폰에서만» 유효한 설정
+  # 기기 로컬 저장 — 찜한 스팟(#218)·즐겨찾기 시/도(#217) 같은 «이 폰에서만» 유효한 설정
   shared_preferences: ^2.3.0
 
   # Firebase (Auth / Firestore / Messaging)
