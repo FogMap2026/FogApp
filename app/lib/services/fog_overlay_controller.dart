@@ -183,7 +183,17 @@ class FogOverlayController {
     final byLandmass = <_Landmass, List<List<NLatLng>>>{};
     for (final ring in rings) {
       if (ring.length < 3) continue;
-      byLandmass.putIfAbsent(_landmassFor(ring.first), () => []).add(ring);
+      // 🔴 구역을 땅에 맞춰 자른다. 구역(볼록 셀)이 해안 밖으로 삐져나오면 그 부분은 안개 폴리곤
+      // 바깥에 놓인 구멍이라, 짝홀 채움에서 «구멍만 있는 자리 = 칠해진다»가 되어 **바다 위에
+      // 안개 조각**이 생긴다(실기기 송도·인천신항, 09-15). 볼록 셀을 클립 다각형으로 두고 landmass
+      // 고리를 서덜랜드–호지먼으로 자르면 땅 ∩ 셀 이 나온다 — 섬이 여럿 걸리면 각 landmass 마다.
+      final bbox = _Bbox.of(ring);
+      for (final landmass in _landmasses) {
+        if (!landmass._bbox.intersects(bbox)) continue;
+        final clipped = FogGrid.clipByConvex(landmass.outerRing, ring);
+        if (clipped.length < 3) continue;
+        byLandmass.putIfAbsent(landmass, () => []).add(clipped);
+      }
     }
     for (final landmass in _landmasses) {
       landmass._setRegionRings(byLandmass[landmass] ?? const []);
@@ -221,6 +231,8 @@ class _Landmass {
   final int index;
   final List<NLatLng> outerRing;
   final NaverMapController _mapController;
+
+  late final _Bbox _bbox = _Bbox.of(outerRing);
 
   /// 걷힌 자리 — «격자 셀의 합집합». 셀 키 → 그 셀을 덮는 원의 수(참조 카운트).
   ///
@@ -368,6 +380,50 @@ class FogGrid {
 
   /// 셀 [key] 의 중심 좌표.
   static NLatLng cellCenter(int key) => NLatLng((_row(key) + 0.5) * _latStep, (_col(key) + 0.5) * _lngStep);
+
+  /// [subject](임의 다각형, 예: landmass 해안선)를 [convex](볼록 다각형, 예: 구역 셀)로 자른
+  /// 교집합. 서덜랜드–호지먼 — 클립 쪽만 볼록이면 되므로 해안선처럼 오목한 쪽을 subject 로 둔다.
+  /// 교집합이 여러 조각이면 폭 0 의 다리로 이어진 한 고리가 나오는데, 짝홀 구멍으로는 문제없다.
+  /// [convex] 의 방향은 부호 있는 넓이로 알아내 어느 쪽이 안인지 정한다.
+  static List<NLatLng> clipByConvex(List<NLatLng> subject, List<NLatLng> convex) {
+    if (convex.length < 3 || subject.length < 3) return const [];
+    var area = 0.0;
+    for (var i = 0, j = convex.length - 1; i < convex.length; j = i++) {
+      area += (convex[j].longitude * convex[i].latitude) - (convex[i].longitude * convex[j].latitude);
+    }
+    final ccw = area > 0;
+    var out = subject;
+    for (var i = 0, j = convex.length - 1; i < convex.length; j = i++) {
+      final a = convex[j];
+      final b = convex[i];
+      double side(NLatLng p) =>
+          (b.longitude - a.longitude) * (p.latitude - a.latitude) -
+          (b.latitude - a.latitude) * (p.longitude - a.longitude);
+      bool inside(NLatLng p) => ccw ? side(p) >= 0 : side(p) <= 0;
+      final input = out;
+      out = [];
+      for (var k = 0, m = input.length - 1; k < input.length; m = k++) {
+        final cur = input[k];
+        final prev = input[m];
+        final curIn = inside(cur);
+        final prevIn = inside(prev);
+        if (curIn != prevIn) {
+          final sp = side(prev);
+          final sc = side(cur);
+          final t = sp / (sp - sc);
+          out.add(
+            NLatLng(
+              prev.latitude + (cur.latitude - prev.latitude) * t,
+              prev.longitude + (cur.longitude - prev.longitude) * t,
+            ),
+          );
+        }
+        if (curIn) out.add(cur);
+      }
+      if (out.length < 3) return const [];
+    }
+    return out;
+  }
 
   /// [p] 가 [ring] 안인지(짝홀, 반직선 교차 수).
   static bool pointInRing(NLatLng p, List<NLatLng> ring) {
@@ -552,4 +608,6 @@ class _Bbox {
 
   bool contains(NLatLng p) =>
       p.latitude >= minLat && p.latitude <= maxLat && p.longitude >= minLng && p.longitude <= maxLng;
+
+  bool intersects(_Bbox o) => o.minLat <= maxLat && o.maxLat >= minLat && o.minLng <= maxLng && o.maxLng >= minLng;
 }
