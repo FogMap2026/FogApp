@@ -1221,6 +1221,11 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
               // FogApp은 국내 탐험이 목적이므로 대한민국 밖으로 축소/이동할 이유가 없어 제한한다.
               minZoom: 6,
               extent: _mapExtent,
+              // 기울기(3D 뷰)는 끈다 — 두 손가락을 위로 밀면 지도가 눕는데, 안개 구역·마커가
+              // 원근으로 찌그러져 «어디까지 밝혔나»가 읽기 어렵고 되돌리는 법도 눈에 안 띈다(시진, 09-15).
+              // maxTilt 0 으로 제스처뿐 아니라 카메라 이동으로도 눕지 않게 못 박는다.
+              tiltGesturesEnable: false,
+              maxTilt: 0,
               // SDK 기본 위치 버튼 대신 우측 컨트롤에 직접 그린다(#64) — 좌하단 Naver
               // 로고 자리와 겹치는 걸 피하고, 우리 UI를 한 곳(우측 세로 스택)으로 모은다.
               locationButtonEnable: false,
