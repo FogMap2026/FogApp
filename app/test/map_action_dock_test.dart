@@ -67,7 +67,7 @@ void main() {
         _dock(
           menuOpen: true,
           entries: [
-            MapMenuEntry(icon: Icons.travel_explore, label: '멀리 있는 스팟 보기', onTap: () {}),
+            MapMenuEntry(icon: Icons.near_me_outlined, label: '근처 스팟 보기', onTap: () {}),
             MapMenuEntry(icon: Icons.directions_walk, label: '발자취 숨기기', onTap: () {}),
             MapMenuEntry(icon: Icons.settings_outlined, label: '설정', onTap: () {}),
           ],
@@ -76,7 +76,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final first = tester.getCenter(find.text('멀리 있는 스팟 보기')).dy;
+    final first = tester.getCenter(find.text('근처 스팟 보기')).dy;
     final last = tester.getCenter(find.text('설정')).dy;
     final toggle = tester.getCenter(find.byIcon(Icons.close)).dy;
 
@@ -112,8 +112,8 @@ void main() {
               onTap: () {},
             ),
             MapMenuEntry(
-              icon: Icons.travel_explore,
-              label: '멀리 있는 스팟 보기',
+              icon: Icons.near_me_outlined,
+              label: '근처 스팟 보기',
               active: false,
               onTap: () {},
             ),
@@ -124,7 +124,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final on = tester.widget<Icon>(find.byIcon(Icons.directions_walk));
-    final off = tester.widget<Icon>(find.byIcon(Icons.travel_explore));
+    final off = tester.widget<Icon>(find.byIcon(Icons.near_me_outlined));
     expect(on.color, isNot(off.color), reason: '켜짐/꺼짐이 색으로 구분돼야 한다');
   });
 

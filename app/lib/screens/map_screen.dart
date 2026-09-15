@@ -172,7 +172,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   /// [_spotReloadDistanceMeters] 이상 벗어나면 다시 불러온다.
   NLatLng? _spotLoadMyPosition;
 
-  /// 📍 「이 지역 스팟 보기」 토글. 켜면 스팟을 **화면 중심** 기준으로 불러오고, 지도를
+  /// 📍 화면 중심 기준 조회(☰ 「근처 스팟 보기」를 **끈** 상태). 켜면 스팟을 **화면 중심** 기준으로 불러오고, 지도를
   /// 움직여 멈출 때마다 다시 불러온다. 조회 범위(3km)를 원으로 그려 화면 중심을 따라
   /// 움직이게 한다 — 「지금 어디를 뒤지고 있나」가 보여야 지도를 어디까지 밀지 안다.
   /// 끄면 내 위치 기준으로 되돌아간다.
@@ -1378,9 +1378,19 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   /// 둘 두면 둘 중 하나는 늘 죽은 버튼이다(시진, 09-14 성향 테스트 때와 같은 판단).
   List<MapMenuEntry> get _menuEntries => [
         MapMenuEntry(
-          icon: Icons.travel_explore,
-          label: '멀리 있는 스팟 보기',
-          active: _searchHereMode,
+          // 지도의 발자취 핀과 같은 발에 대각선 — 「스팟 숨기기」(location_off)와 한 짝.
+          iconBuilder: (color) => HumanFootprint(color: color, slashed: true),
+          label: '발자취 숨기기',
+          active: _footprintsHidden,
+          onTap: _footprintMarkers == null ? null : _toggleFootprintsHidden,
+        ),
+        MapMenuEntry(
+          // 「근처 스팟 보기」 — 기본(내 위치 기준)이 «켜짐»이라 처음부터 파랗다. 끄면 화면 중심
+          // 기준으로 멀리 있는 스팟을 뒤진다([_searchHereMode]). 예전 「멀리 있는 스팟 보기」의
+          // 반대말로 뒤집은 것(시진, 09-15) — 평소 상태가 켜진 모양이어야 «지금 근처를 보고 있다»가 읽힌다.
+          icon: Icons.near_me_outlined,
+          label: '근처 스팟 보기',
+          active: !_searchHereMode,
           onTap: _mapReady ? _toggleSearchHere : null,
         ),
         MapMenuEntry(
@@ -1388,13 +1398,6 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
           label: '스팟 숨기기',
           active: _spotsHidden,
           onTap: _mapReady ? _toggleSpotsHidden : null,
-        ),
-        MapMenuEntry(
-          // 지도의 발자취 핀과 같은 발에 대각선 — 「스팟 숨기기」(location_off)와 한 짝.
-          iconBuilder: (color) => HumanFootprint(color: color, slashed: true),
-          label: '발자취 숨기기',
-          active: _footprintsHidden,
-          onTap: _footprintMarkers == null ? null : _toggleFootprintsHidden,
         ),
         MapMenuEntry(
           icon: Icons.people_outline,
