@@ -488,7 +488,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     final controller = _controller;
     if (controller == null) return;
     const mPerLat = 111320.0;
-    final dLat = _recenterRadiusMeters / mPerLat;
+    const dLat = _recenterRadiusMeters / mPerLat;
     final dLng = _recenterRadiusMeters / (mPerLat * cos(lat * pi / 180));
     controller.updateCamera(
       NCameraUpdate.fitBounds(
