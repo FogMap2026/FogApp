@@ -104,14 +104,27 @@ class FogOverlayController {
   /// 않으므로 전부 펴서 landmass 하나씩으로 쓴다. 좌표는 GeoJSON 순서 [경도, 위도] — 뒤집는다.
   /// 안개 구역의 땅/바다 마스크(`LandMask`)도 같은 고리를 쓴다.
   static Future<List<List<NLatLng>>> loadProvinceRings() async {
-    final raw = await rootBundle.loadString(_boundaryAssetPath);
-    final json = jsonDecode(raw) as Map<String, dynamic>;
-    return [
-      for (final province in json['provinces'] as List)
-        for (final ring in province['rings'] as List)
-          [for (final c in ring as List) NLatLng((c[1] as num).toDouble(), (c[0] as num).toDouble())],
-    ];
+    final json = await _loadBoundaryJson();
+    return _ringsOf(json['provinces'] as List);
   }
+
+  /// 안개는 안 덮고 국외 덮개(`OutsideKoreaMask`)만 뚫는 고리 — 독도. 해안선 자료가 없어 사각형뿐이라
+  /// 안개로 쓰면 네모난 안개가 뜬다(시진, 09-15). 지도에는 보이되 탐험 대상 안개는 없다.
+  static Future<List<List<NLatLng>>> loadUnfoggedRings() async {
+    final json = await _loadBoundaryJson();
+    return _ringsOf(json['unfogged'] as List? ?? const []);
+  }
+
+  static Future<Map<String, dynamic>> _loadBoundaryJson() async {
+    final raw = await rootBundle.loadString(_boundaryAssetPath);
+    return jsonDecode(raw) as Map<String, dynamic>;
+  }
+
+  static List<List<NLatLng>> _ringsOf(List entries) => [
+        for (final entry in entries)
+          for (final ring in entry['rings'] as List)
+            [for (final c in ring as List) NLatLng((c[1] as num).toDouble(), (c[0] as num).toDouble())],
+      ];
 
   /// 궤적 점을 «같은 자리»로 묶는 격자 크기. 위치 스트림의 `distanceFilter`(15m)와
   /// 같은 값이다 — 스트림이 15m 마다 한 점을 주므로, 15m 칸이면 같은 자리를 두 번 밟아도

@@ -16,6 +16,7 @@ import '../services/conquest_service.dart';
 import '../services/favorite_spot_store.dart';
 import '../services/fog_location_tracker.dart';
 import '../services/fog_overlay_controller.dart';
+import '../services/outside_korea_mask.dart';
 import '../services/province_boundary_overlay.dart';
 import '../services/fog_regions.dart';
 import '../services/journey_service.dart';
@@ -91,11 +92,16 @@ const _mapStyleId = '650c32b2-9a57-4187-a6ab-9be4638556b4';
 
 const _southKoreaCenter = NLatLng(36.5, 127.8);
 
-/// 지도 이동(pan) 가능 범위. FogApp은 국내 탐험이 목적이므로 대한민국 전역
-/// (마라도~독도) 정도만 여유 있게 덮는 범위로 제한한다.
-const _mapExtent = NLatLngBounds(
-  southWest: NLatLng(32.5, 124.0),
-  northEast: NLatLng(39.0, 132.5),
+/// 화면이 벗어나면 안 되는 범위 — 대한민국 땅끝(마라도 33.11·고성 38.61·백령도 124.6·독도 131.87)에
+/// 20~30km 여유만. 이웃 나라 땅을 바다색으로 덮은 뒤로는(OutsideKoreaMask) 그 밖은 온통 바다라
+/// 움직일 이유가 없고, 넓으면 «어디까지 가야 하지»가 된다(시진, 09-15).
+///
+/// SDK 의 `extent` 는 **카메라 중심**만 가두므로 이 값을 그대로 주면 줌을 뺐을 때 화면 절반이
+/// 바다다. 그래서 [_MapScreenState._fitExtentToViewport] 가 지금 화면이 차지하는 위·경도 폭의 절반만큼
+/// 안쪽으로 줄인 범위를 매번 다시 준다 — 어느 줌에서든 «화면 가장자리»가 이 범위를 못 넘는다.
+const _viewportBounds = NLatLngBounds(
+  southWest: NLatLng(32.9, 124.3),
+  northEast: NLatLng(38.9, 132.2),
 );
 
 /// 탐험의 메인 화면. Naver Map 기반 지도를 표시한다.
@@ -111,6 +117,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   StreamSubscription<OnCameraChangedParams>? _cameraSubscription;
   FogOverlayController? _fogOverlay;
   ProvinceBoundaryOverlay? _provinceBoundary;
+  OutsideKoreaMask? _outsideMask;
   SpotMarkerController? _spotMarkers;
   FootprintMarkerController? _footprintMarkers;
   StreamSubscription<Position>? _geofencePositionSubscription;
@@ -278,6 +285,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     _travelerShareTimer?.cancel();
     _fogOverlay?.dispose();
     _provinceBoundary?.dispose();
+    _outsideMask?.dispose();
     _spotMarkers?.dispose();
     _footprintMarkers?.dispose();
     super.dispose();
@@ -926,6 +934,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     _fogOverlay = await FogOverlayController.attach(controller);
     // 시/도 경계선 — 탐험 현황의 배지·단계구분도와 같은 경계를 지도에도 보인다.
     unawaited(_attachProvinceBoundary(controller));
+    // 대한민국 밖(북한·일본·중국 땅)은 바다색으로 덮는다 — 국내 탐험 앱이라 이웃 땅은 «갈 수 없는 곳».
+    unawaited(_attachOutsideMask(controller));
     // 걸어온 자리를 서버에서 되살린다(#131). 인증 안개를 GET /api/visits 로 복원하는
     // 것(_loadVisitedSpots)과 같은 자리다 — 오버레이가 붙은 «뒤»라야 구멍을 낼 수 있다.
     unawaited(_restoreJourney());
@@ -1047,6 +1057,19 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   /// build 마다 합산하면 매 프레임 목록을 훑는다.
   List<ConquestSido> _conquestBySido = const [];
 
+  Future<void> _attachOutsideMask(NaverMapController controller) async {
+    try {
+      final mask = await OutsideKoreaMask.attach(controller);
+      if (!mounted) {
+        mask.dispose();
+        return;
+      }
+      _outsideMask = mask;
+    } catch (e) {
+      debugPrint('[MapScreen] 국외 덮개 실패: $e');
+    }
+  }
+
   Future<void> _attachProvinceBoundary(NaverMapController controller) async {
     try {
       final overlay = await ProvinceBoundaryOverlay.attach(controller);
@@ -1061,7 +1084,45 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     }
   }
 
+  /// 지금 카메라 중심이 갈 수 있는 범위. 처음엔 [_viewportBounds] 그대로(줌을 모르니), 첫 카메라
+  /// 이벤트부터 화면 폭만큼 안쪽으로 줄어든다.
+  NLatLngBounds _cameraExtent = _viewportBounds;
+  double? _extentFittedZoom;
+
+  /// 화면이 [_viewportBounds] 를 벗어나지 못하게 중심 범위를 화면 폭의 절반만큼 안쪽으로 줄인다.
+  /// 화면이 범위보다 크면(줌을 많이 뺐을 때) 중심을 범위 가운데에 고정한다. 줌이 0.2 이상 바뀌었을
+  /// 때만 다시 잰다 — 핀치 중 매 프레임 SDK 에 옵션을 보내지 않으려고.
+  Future<void> _fitExtentToViewport(NaverMapController controller, double zoom) async {
+    final fitted = _extentFittedZoom;
+    if (fitted != null && (zoom - fitted).abs() < 0.2) return;
+    _extentFittedZoom = zoom;
+    final view = await controller.getContentBounds();
+    if (!mounted) return;
+    final halfLat = (view.northLatitude - view.southLatitude) / 2;
+    final halfLng = (view.eastLongitude - view.westLongitude) / 2;
+    const b = _viewportBounds;
+    double south = b.southLatitude + halfLat, north = b.northLatitude - halfLat;
+    double west = b.westLongitude + halfLng, east = b.eastLongitude - halfLng;
+    // 🔴 폭 0 인 범위는 SDK 가 거부한다(«extent are invalid» 로 네이티브 크래시). 화면이 범위보다
+    //    크면 가운데 ±0.01° 로 «거의 고정».
+    if (south > north) {
+      final mid = (b.southLatitude + b.northLatitude) / 2;
+      south = mid - 0.01;
+      north = mid + 0.01;
+    }
+    if (west > east) {
+      final mid = (b.westLongitude + b.eastLongitude) / 2;
+      west = mid - 0.01;
+      east = mid + 0.01;
+    }
+    final next = NLatLngBounds(southWest: NLatLng(south, west), northEast: NLatLng(north, east));
+    if (next == _cameraExtent) return;
+    setState(() => _cameraExtent = next);
+  }
+
   void _onCameraChanged(OnCameraChangedParams params) {
+    final controller = _controller;
+    if (controller != null) unawaited(_fitExtentToViewport(controller, params.position.zoom));
     // 줌 임계값에 따른 발자취 표시/숨김(#117)은 카메라가 멈추기 전에도 즉시
     // 반영한다 — 핀치 줌 도중에도 "확대하면 보인다"가 바로 느껴져야 한다.
     _footprintMarkers?.setZoom(params.position.zoom);
@@ -1279,7 +1340,9 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
               ),
               // FogApp은 국내 탐험이 목적이므로 대한민국 밖으로 축소/이동할 이유가 없어 제한한다.
               minZoom: 6,
-              extent: _mapExtent,
+              // 줌마다 다시 계산한 중심 범위([_fitExtentToViewport]) — NaverMap 위젯은 options 가 바뀌면
+              // 지도를 다시 만들지 않고 옵션만 갱신한다.
+              extent: _cameraExtent,
               // 기울기(3D 뷰)는 끈다 — 두 손가락을 위로 밀면 지도가 눕는데, 안개 구역·마커가
               // 원근으로 찌그러져 «어디까지 밝혔나»가 읽기 어렵고 되돌리는 법도 눈에 안 띈다(시진, 09-15).
               // maxTilt 0 으로 제스처뿐 아니라 카메라 이동으로도 눕지 않게 못 박는다.

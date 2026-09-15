@@ -11,6 +11,11 @@
 
 2013 기준이라 그 뒤 통합된 시/도(광주·전남)는 폴리곤이 따로다 — 화면 쪽이 이름으로 묶는다.
 
+**독도는 원본에 없어서 `unfogged` 에 직접 넣었다** — 동도·서도를 함께 감싸는 작은 사각형(위도
+37.2365–37.2485, 경도 131.858–131.876). 해안선 자료가 없어 사각형뿐이라 **안개는 덮지 않고**(네모난
+안개가 뜬다) 국외 덮개(`OutsideKoreaMask`)만 뚫어 지도에 보이게 한다(시진, 09-15). `provinces` 는
+안개·경계선·단계구분도가 쓰고, `unfogged` 는 덮개만 쓴다.
+
 **출처**: [southkorea-maps](https://github.com/southkorea/southkorea-maps) `kostat/2013/json/skorea_provinces_geo_simple.json`
 (통계청 SGIS). 이름만 남기고 좌표를 4자리로 줄였다.
 
