@@ -87,6 +87,9 @@ MapNotice mapNoticeFor({
 }
 
 /// 대한민국 전역을 보여주는 기본 카메라 위치(안개 지도의 시작 화면).
+/// 네이버 지도 커스텀 스타일 ID — 콘솔 계정: 시진. 비밀값이 아니다(클라이언트 ID 처럼 앱에 실린다).
+const _mapStyleId = '650c32b2-9a57-4187-a6ab-9be4638556b4';
+
 const _southKoreaCenter = NLatLng(36.5, 127.8);
 
 /// 지도 이동(pan) 가능 범위. FogApp은 국내 탐험이 목적이므로 대한민국 전역
@@ -1282,6 +1285,11 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
               // 원근으로 찌그러져 «어디까지 밝혔나»가 읽기 어렵고 되돌리는 법도 눈에 안 띈다(시진, 09-15).
               // maxTilt 0 으로 제스처뿐 아니라 카메라 이동으로도 눕지 않게 못 박는다.
               tiltGesturesEnable: false,
+              // 네이버 클라우드 콘솔 「스타일 편집기」로 만든 지도 스타일(시진, 09-15). 도로 번호·IC 마크·
+              // 상업 POI 를 끄고 지명·역·자연 지명·도로선만 남겨, 기본 지도가 스팟·발자취 핀과 경쟁하지
+              // 않는 «배경»이 되게 한다. 심볼은 SDK 옵션으로 못 끈다(symbolScale 0 도 방패가 남는다).
+              // 스타일을 콘솔에서 고치면 앱 재배포 없이 바뀐다.
+              customStyleId: _mapStyleId,
               maxTilt: 0,
               // SDK 기본 위치 버튼 대신 우측 컨트롤에 직접 그린다(#64) — 좌하단 Naver
               // 로고 자리와 겹치는 걸 피하고, 우리 UI를 한 곳(우측 세로 스택)으로 모은다.
