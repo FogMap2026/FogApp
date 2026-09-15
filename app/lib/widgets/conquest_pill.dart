@@ -84,6 +84,14 @@ class ConquestPill extends StatelessWidget {
   /// 배터리가 늘어난 것처럼 보인다.
   static const double _nubWidth = 4;
 
+  /// 차오른 부분의 색.
+  ///
+  /// 안내 배너 바탕([AppColors.infoContainer])을 그대로 쓰다가 **보이지 않아서** 진하게
+  /// 했다 — 흰 알약 위 옅은 파랑은 차이가 4% 남짓이라 72%든 10%든 그냥 흰 알약으로 보였다.
+  /// 강조색을 «칠하지 않는다»는 규칙의 예외에 해당한다: 이건 장식이 아니라 **선택·진행
+  /// 상태**이고, 테마가 [AppColors.primary] 에 허락한 용도가 그것이다.
+  static const _fill = Color(0x380075DE);
+
   static const Duration _duration = Duration(milliseconds: 420);
   static const Curve _curve = Curves.easeOutCubic;
 
@@ -140,7 +148,7 @@ class ConquestPill extends StatelessWidget {
                               curve: _curve,
                               widthFactor: _alarm ? 0 : (rate ?? 0).clamp(0.0, 1.0),
                               heightFactor: 1,
-                              child: const ColoredBox(color: AppColors.infoContainer),
+                              child: const ColoredBox(color: _fill),
                             ),
                           ),
                         ),
