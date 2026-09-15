@@ -5,16 +5,20 @@ import '../models/match.dart';
 import '../services/match_service.dart';
 import '../theme/app_theme.dart';
 
-/// 내 매칭 목록 화면(5-2). 보낸 요청·받은 요청을 함께 보여주고, 받은 요청은
+/// 친구 화면의 「동행 요청」 탭(5-2). 보낸 요청·받은 요청을 함께 보여주고, 받은 요청은
 /// 수락·거절을, 대기 중인 요청은 취소를 할 수 있다.
-class MatchListScreen extends ConsumerStatefulWidget {
-  const MatchListScreen({super.key});
+///
+/// 예전엔 지도 메뉴의 「내 동행 요청」으로 따로 열리던 화면이다 — 친구 화면(`FriendsScreen`)
+/// 안으로 옮기면서 자체 Scaffold 를 뺐다. 탭을 옮겨 올 때마다 새로 불러오므로, 추천 친구
+/// 탭에서 방금 보낸 요청도 바로 보인다.
+class FriendsRequestsTab extends ConsumerStatefulWidget {
+  const FriendsRequestsTab({super.key});
 
   @override
-  ConsumerState<MatchListScreen> createState() => _MatchListScreenState();
+  ConsumerState<FriendsRequestsTab> createState() => _FriendsRequestsTabState();
 }
 
-class _MatchListScreenState extends ConsumerState<MatchListScreen> {
+class _FriendsRequestsTabState extends ConsumerState<FriendsRequestsTab> {
   late Future<List<Match>> _matchesFuture;
 
   /// 처리 중인 매칭 id — 연타로 같은 요청을 중복으로 보내는 걸 막는다.
@@ -68,70 +72,65 @@ class _MatchListScreenState extends ConsumerState<MatchListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('내 동행 요청')),
-      body: SafeArea(
-        child: FutureBuilder<List<Match>>(
-          future: _matchesFuture,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (snapshot.hasError) {
-              return Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text('매칭 목록을 불러오지 못했어요.'),
-                    const SizedBox(height: 8),
-                    TextButton(onPressed: _refresh, child: const Text('다시 시도')),
-                  ],
-                ),
-              );
-            }
-            final matches = snapshot.data!;
-            if (matches.isEmpty) {
-              return const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(24),
-                  child: Text('아직 동행 요청이 없어요.', textAlign: TextAlign.center),
-                ),
-              );
-            }
-
-            final received = matches.where((m) => !m.isSent).toList();
-            final sent = matches.where((m) => m.isSent).toList();
-
-            return ListView(
-              padding: const EdgeInsets.all(16),
+    return FutureBuilder<List<Match>>(
+      future: _matchesFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                if (received.isNotEmpty) ...[
-                  Text('받은 요청', style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  for (final match in received)
-                    _MatchCard(
-                      match: match,
-                      busy: _pendingActionIds.contains(match.id),
-                      onAccept: () => _respond(match, 'accepted'),
-                      onReject: () => _respond(match, 'rejected'),
-                    ),
-                  const SizedBox(height: 24),
-                ],
-                if (sent.isNotEmpty) ...[
-                  Text('보낸 요청', style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  for (final match in sent)
-                    _MatchCard(
-                      match: match,
-                      busy: _pendingActionIds.contains(match.id),
-                      onCancel: () => _cancel(match),
-                    ),
-                ],
+                const Text('매칭 목록을 불러오지 못했어요.'),
+                const SizedBox(height: 8),
+                TextButton(onPressed: _refresh, child: const Text('다시 시도')),
               ],
-            );
-          },
-        ),
-      ),
+            ),
+          );
+        }
+        final matches = snapshot.data!;
+        if (matches.isEmpty) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Text('아직 동행 요청이 없어요.', textAlign: TextAlign.center),
+            ),
+          );
+        }
+
+        final received = matches.where((m) => !m.isSent).toList();
+        final sent = matches.where((m) => m.isSent).toList();
+
+        return ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            if (received.isNotEmpty) ...[
+              Text('받은 요청', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              for (final match in received)
+                _MatchCard(
+                  match: match,
+                  busy: _pendingActionIds.contains(match.id),
+                  onAccept: () => _respond(match, 'accepted'),
+                  onReject: () => _respond(match, 'rejected'),
+                ),
+              const SizedBox(height: 24),
+            ],
+            if (sent.isNotEmpty) ...[
+              Text('보낸 요청', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              for (final match in sent)
+                _MatchCard(
+                  match: match,
+                  busy: _pendingActionIds.contains(match.id),
+                  onCancel: () => _cancel(match),
+                ),
+            ],
+          ],
+        );
+      },
     );
   }
 }
