@@ -400,9 +400,11 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       // 첫 측위에 한 번만 내 위치로 줌을 맞춘다(#144). 이게 없으면 권한을 허용해도
       // 전국 뷰에 머물러 "회색 화면에 점 하나"로 보인다 — 스팟이 없어서가 아니라
       // 전부 겹쳐 있어서다. 이후 갱신에서는 사용자의 카메라를 건드리지 않는다.
+      // 나침반(내 위치로) 버튼과 **같은 화면**(반경 3km 가 들어오는 범위)으로 시작한다(시진,
+      // 09-15) — 처음 뜬 화면과 버튼을 눌러 돌아온 화면이 다르면 «어느 게 기본인지» 헷갈린다.
       if (!_didZoomToFirstFix) {
         _didZoomToFirstFix = true;
-        _moveToMyLocation(position.latitude, position.longitude);
+        _fitAroundMe(position.latitude, position.longitude);
       }
       // 스팟은 «내 위치» 기준으로 불러온다 — 카메라가 아니라. 지도를 밀어도 내 주변
       // 스팟이 그대로 남고, 300m 이상 걸었을 때만 다시 부른다.
@@ -540,31 +542,6 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     controller.updateCamera(
       NCameraUpdate.fitBounds(
         NLatLngBounds(southWest: NLatLng(lat - dLat, lng - dLng), northEast: NLatLng(lat + dLat, lng + dLng)),
-      ),
-    );
-  }
-
-  /// 내 위치를 볼 때 쓰는 줌. 위도 37.5에서 약 3.8m/px라 100m 떨어진 스팟이 26px쯤
-  /// 벌어져 서로 구분된다(#144). 실제 밀도를 보고 조정할 튜닝값이다.
-  ///
-  /// 발자취 표시 기준([FootprintMarkerController] 줌 17)보다는 낮다 — 여기서 바로
-  /// 발자취까지 보이게 하면 스팟이 화면 밖으로 밀려난다. 발자취는 더 확대해야 나온다.
-  static const _myLocationZoom = 15.0;
-
-  /// 내 위치로 카메라를 옮긴다. **줌은 [_myLocationZoom]보다 낮을 때만 올린다** —
-  /// 사용자가 더 확대해 보고 있으면 그 배율을 빼앗지 않는다.
-  void _moveToMyLocation(double lat, double lng) {
-    final controller = _controller;
-    if (controller == null) return;
-
-    // flutter_naver_map 이 experimental 로 표시한 API 지만 현재 줌을 얻을 다른 경로가 없다.
-    // SDK 가 정식 API 를 제공하면 교체할 것(위 initialPosition 과 같은 이유).
-    // ignore: experimental_member_use
-    final currentZoom = controller.nowCameraPosition.zoom;
-    controller.updateCamera(
-      NCameraUpdate.withParams(
-        target: NLatLng(lat, lng),
-        zoom: currentZoom < _myLocationZoom ? _myLocationZoom : null,
       ),
     );
   }
