@@ -25,11 +25,13 @@ class OutsideKoreaMask {
   static const _globalZIndex = -200000;
 
   /// 지도 범위보다 넉넉하게 — 카메라 extent 가장자리에서 덮개가 끝나 보이지 않게.
+  /// 폴리곤 고리는 닫혀 있어야 한다(SDK 단언: 첫 점 == 끝 점).
   static const _cover = [
     NLatLng(29.0, 120.0),
     NLatLng(29.0, 136.0),
     NLatLng(42.0, 136.0),
     NLatLng(42.0, 120.0),
+    NLatLng(29.0, 120.0),
   ];
 
   static Future<OutsideKoreaMask> attach(NaverMapController mapController) async {
@@ -39,7 +41,7 @@ class OutsideKoreaMask {
       coords: _cover,
       holes: [
         for (final ring in rings)
-          if (ring.length >= 3) ring,
+          if (ring.length >= 3) (ring.first == ring.last ? ring : [...ring, ring.first]),
       ],
       color: seaColor,
     )..setGlobalZIndex(_globalZIndex);
