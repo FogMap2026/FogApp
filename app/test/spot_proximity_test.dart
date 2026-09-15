@@ -135,4 +135,48 @@ void main() {
       expect(_at(50, [], previous: previous), isNull);
     });
   });
+
+  group('근접 후보 — 내 위치 기준 조회만 받는다', () {
+    // 내 위치(시청)와 📍 로 밀어 둔 화면 중심(약 20km 떨어진 곳).
+    const me = (lat: 37.5665, lng: 126.9780);
+    const screenCenter = (lat: 37.3943, lng: 127.1107);
+    final nearMe = [_spot(1)];
+    final farAway = [_spot(2, northMeters: 20000)];
+
+    test('첫 측위 전에는 아무 조회도 받지 않는다 — 기다리는 내 위치가 없다', () {
+      final candidates = ProximityCandidates();
+      expect(candidates.offer(nearMe, lat: me.lat, lng: me.lng), isFalse);
+      expect(candidates.spots, isEmpty);
+    });
+
+    test('내 위치로 보낸 조회 결과는 받는다', () {
+      final candidates = ProximityCandidates()..expectLoadAt(lat: me.lat, lng: me.lng);
+      expect(candidates.offer(nearMe, lat: me.lat, lng: me.lng), isTrue);
+      expect(candidates.spots.single.id, 1);
+    });
+
+    test('📍 화면 중심 조회는 버린다 — 지도를 멀리 밀어도 스팟 옆이면 계속 「인증 가능」', () {
+      final candidates = ProximityCandidates()..expectLoadAt(lat: me.lat, lng: me.lng);
+      candidates.offer(nearMe, lat: me.lat, lng: me.lng);
+
+      expect(candidates.offer(farAway, lat: screenCenter.lat, lng: screenCenter.lng), isFalse);
+      expect(candidates.spots.single.id, 1, reason: '내 위치 목록이 남아 있어야 한다');
+      // 그 목록으로 판정하면 스팟 옆에 선 사람은 여전히 인증 가능이다.
+      expect(
+        resolveSpotProximity(candidates: candidates.spots, lat: _baseLat, lng: _baseLng)!.level,
+        ProximityLevel.verifiable,
+      );
+    });
+
+    test('걷는 사이 먼저 보낸 옛 위치 조회가 늦게 와도 새 목록을 덮지 않는다', () {
+      final candidates = ProximityCandidates()..expectLoadAt(lat: me.lat, lng: me.lng);
+      // 300m 걸어 새 조회를 보냈고, 그 결과가 먼저 왔다.
+      const moved = (lat: 37.5692, lng: 126.9780);
+      candidates.expectLoadAt(lat: moved.lat, lng: moved.lng);
+      expect(candidates.offer(farAway, lat: moved.lat, lng: moved.lng), isTrue);
+      // 옛 위치 결과가 뒤늦게 도착.
+      expect(candidates.offer(nearMe, lat: me.lat, lng: me.lng), isFalse);
+      expect(candidates.spots.single.id, 2);
+    });
+  });
 }

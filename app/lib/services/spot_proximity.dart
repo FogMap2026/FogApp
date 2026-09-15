@@ -97,6 +97,37 @@ ProximityLevel? _levelFor(double distance, ProximityLevel? wasLevel) {
   return null;
 }
 
+/// 근접 판정 후보 스팟 — **내 위치 기준으로 불러온 목록만** 받아들인다.
+///
+/// 지도 마커는 📍 모드(화면 중심 기준 조회)에서 지도를 민 곳의 스팟으로 바뀐다. 그 목록을
+/// 근접 판정에 그대로 쓰면, 지도를 멀리 민 순간 **실제로 스팟 옆에 서 있어도 「인증 가능」이
+/// 사라진다** — 후보에서 빠진 스팟은 조용히 사라지기 때문이다([resolveSpotProximity]).
+/// 근접은 «내가 어디 있나»의 문제라 화면이 어디를 보고 있는지와 무관해야 한다.
+///
+/// 조회를 보낼 때 [expectLoadAt] 으로 중심을 적어 두고, 결과는 [offer] 로 내민다 — 중심이
+/// 다르면 버린다. 덕분에 걷는 사이 **먼저 보낸 옛 위치 조회가 늦게 도착해도** 새 목록을
+/// 덮어쓰지 않는다.
+///
+/// 지도 없이 검증하려고 좌표를 `NLatLng` 대신 숫자로 받는다(`spot_proximity_test.dart`).
+class ProximityCandidates {
+  List<Spot> _spots = const [];
+  ({double lat, double lng})? _expected;
+
+  /// 지금 근접 판정에 쓸 목록.
+  List<Spot> get spots => _spots;
+
+  /// 내 위치 기준 조회를 보냈다 — 이 중심에서 온 결과만 받아들인다.
+  void expectLoadAt({required double lat, required double lng}) => _expected = (lat: lat, lng: lng);
+
+  /// 조회 결과를 내민다. [lat]·[lng] 는 그 조회의 중심. 받아들였으면 `true` — 호출부가 근접을
+  /// 다시 계산한다. 기다리던 내 위치 조회가 아니면(화면 중심 조회, 옛 위치 조회) `false`.
+  bool offer(List<Spot> spots, {required double lat, required double lng}) {
+    if (_expected != (lat: lat, lng: lng)) return false;
+    _spots = spots;
+    return true;
+  }
+}
+
 bool _outranks(SpotProximity a, SpotProximity b, int? previousSpotId, double margin) {
   if (a.level != b.level) return a.level.index > b.level.index;
   if (a.level == ProximityLevel.verifiable) {

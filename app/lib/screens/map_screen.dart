@@ -228,8 +228,10 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   /// 서버에서 되살린 궤적 점 — 구역이 궤적보다 늦게 만들어지면 여기서 다시 센다.
   List<NLatLng> _journeyRestored = const [];
 
-  /// 근접 판정 후보 — 스팟 마커가 카메라 idle 마다 불러오는 목록을 그대로 쓴다(따로 조회하지 않는다).
-  List<Spot> _proximityCandidates = const [];
+  /// 근접 판정 후보 — **내 위치 기준으로 불러온 스팟만** 쓴다([ProximityCandidates]). 평소엔
+  /// 스팟 마커 조회 결과를 그대로 받고(따로 조회하지 않는다), 📍 모드에서 마커가 화면 중심으로
+  /// 바뀌어도 이 목록은 내 위치 기준으로 남는다([_reloadSpotsIfMoved]).
+  final _proximityCandidates = ProximityCandidates();
 
   /// 지금 알리고 있는 스팟과 단계. null 이면 알릴 것이 없다.
   SpotProximity? _proximity;
@@ -556,7 +558,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     final next = (lat == null || lng == null)
         ? null
         : resolveSpotProximity(
-            candidates: _proximityCandidates,
+            candidates: _proximityCandidates.spots,
             lat: lat,
             lng: lng,
             visitedSpotIds: _visitedSpotIds,
@@ -733,9 +735,11 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   }
 
   /// 내 위치가 마지막 조회 지점에서 충분히 멀어졌으면 내 주변 스팟을 다시 불러온다.
-  /// 📍 모드에서는 안 한다 — 화면 중심이 기준이다.
+  ///
+  /// 📍 모드에서는 **마커는 건드리지 않고**(화면 중심이 기준이다) 근접 판정 후보만 내 위치로
+  /// 따로 받는다([_loadProximityCandidates]). 예전엔 📍 모드면 여기서 그냥 돌아가, 지도를 멀리
+  /// 민 채 걸어서 스팟에 닿아도 「인증 가능」이 뜨지 않았다.
   void _reloadSpotsIfMoved(double lat, double lng) {
-    if (_searchHereMode) return;
     final last = _spotLoadMyPosition;
     if (last != null &&
         Geolocator.distanceBetween(last.latitude, last.longitude, lat, lng) < _spotReloadDistanceMeters) {
@@ -743,8 +747,29 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     }
     final here = NLatLng(lat, lng);
     _spotLoadMyPosition = here;
+    _proximityCandidates.expectLoadAt(lat: lat, lng: lng);
+    if (_searchHereMode) {
+      unawaited(_loadProximityCandidates(here));
+      return;
+    }
     _lastLoadCenter = here;
     unawaited(_spotMarkers?.loadAround(here));
+  }
+
+  /// 📍 모드에서 근접 판정 후보만 내 위치 기준으로 받는다 — 마커는 화면 중심 목록을 그대로 둔다.
+  /// 실패하면 이전 후보를 그대로 쓴다(근접은 보조 기능이라 지도를 막지 않는다).
+  Future<void> _loadProximityCandidates(NLatLng here) async {
+    try {
+      final spots = await ref.read(spotServiceProvider).fetchNearby(
+            lat: here.latitude,
+            lng: here.longitude,
+            radiusMeters: SpotMarkerController.radiusMeters,
+          );
+      if (!mounted) return;
+      if (_proximityCandidates.offer(spots, lat: here.latitude, lng: here.longitude)) _recomputeProximity();
+    } catch (e) {
+      debugPrint('[MapScreen] 근접 후보 조회 실패: $e');
+    }
   }
 
   /// 지도의 "발자취 남기기" 버튼(#118). GPS로 현재 위치를 새로 측정해 정확도가
@@ -1026,9 +1051,12 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       controller,
       ref.read(spotServiceProvider),
       icons: spotIcons,
-      onSpotsLoaded: (spots) {
-        _proximityCandidates = spots;
-        _recomputeProximity();
+      onSpotsLoaded: (spots, center) {
+        // 내 위치 기준 조회일 때만 근접 후보로 받는다 — 📍 화면 중심 조회·첫 측위 전 임시
+        // 조회는 버린다([ProximityCandidates]).
+        if (_proximityCandidates.offer(spots, lat: center.latitude, lng: center.longitude)) {
+          _recomputeProximity();
+        }
         // fetchNearby는 가까운 순으로 내려주므로 첫 번째가 현재 보고 있는 지역의 대표 스팟이다.
         if (mounted) {
           setState(() {
