@@ -39,7 +39,7 @@ class OutsideKoreaMask {
       coords: _cover,
       holes: [
         for (final ring in rings)
-          if (ring.length >= 3) ring
+          if (ring.length >= 3) ring,
       ],
       color: seaColor,
     )..setGlobalZIndex(_globalZIndex);
