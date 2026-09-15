@@ -16,7 +16,7 @@ NLatLng _movedNorth(NLatLng from, double meters) =>
 void main() {
   // 서울 시청 근처. 위도 37.5 에서 경도 보정이 실제로 걸린다.
   const seoul = NLatLng(37.5665, 126.9780);
-  const cell = FogOverlayController.trailRadiusMeters; // 15m
+  const cell = FogOverlayController.trailCellMeters; // 15m — 중복 판정 눈금(반경과 다르다)
 
   test('같은 칸을 다시 밟으면 같은 키다 — 구멍이 늘지 않는다', () {
     // 5m 이동은 15m 격자 안에서 같은 칸일 수도, 경계를 넘을 수도 있다.
@@ -70,7 +70,7 @@ void main() {
 
     // 15m 격자에서는 다른 칸
     expect(fogTrailKey(p, 15), isNot(fogTrailKey(seoul, 15)));
-    // 150m 격자(인증 반경)에서는 같은 칸 — 반경이 곧 칸 크기라는 관계를 고정한다
+    // 150m 격자에서는 같은 칸
     expect(fogTrailKey(p, 150), fogTrailKey(seoul, 150));
   });
 
@@ -104,10 +104,12 @@ void main() {
     expect(isTrailWorthyAccuracy(trailMaxAccuracyMeters + 0.1), isFalse);
   });
 
-  test('상한이 궤적 반경보다 «크다» — 그래야 걷는 동안 길이 안 끊긴다', () {
-    // 상한을 반경(15m)까지 조이면 실외에서도 자주 걸려 길이 점선이 된다.
-    // 반대로 너무 열면 「걸어온 자리」가 아니라 「그 근처 어딘가」가 된다.
-    expect(trailMaxAccuracyMeters, greaterThan(FogOverlayController.trailRadiusMeters));
+  test('상한은 궤적 반경 «이하» — 튄 만큼은 원 안에 들어와야 한다', () {
+    // 오차가 반경보다 크면 원이 실제 자리를 아예 못 덮는다 — 「걸어온 자리」가 아니라
+    // 「그 근처 어딘가」다. 반대로 상한을 너무 조이면 실외에서도 자주 걸려 길이 끊긴다.
+    // 격자 눈금(15m)은 여기 안 낀다 — 중복 판정용이지 걷어내는 크기가 아니다.
+    expect(trailMaxAccuracyMeters, lessThanOrEqualTo(FogOverlayController.trailRadiusMeters));
     expect(trailMaxAccuracyMeters, lessThan(maxConfirmableAccuracyMeters));
+    expect(FogOverlayController.trailCellMeters, lessThan(FogOverlayController.trailRadiusMeters));
   });
 }

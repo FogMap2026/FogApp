@@ -17,6 +17,7 @@ import '../services/favorite_spot_store.dart';
 import '../services/fog_location_tracker.dart';
 import '../services/fog_overlay_controller.dart';
 import '../services/province_boundary_overlay.dart';
+import '../services/fog_regions.dart';
 import '../services/journey_service.dart';
 import '../services/footprint_location_gate.dart';
 import '../services/footprint_marker_controller.dart';
@@ -193,9 +194,21 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   /// 이미 인증한 스팟 id 목록(#46) — 이 스팟들은 반경에 들어와도 알리지 않는다.
   Set<int> _visitedSpotIds = const {};
 
-  /// 이미 인증한 스팟의 좌표(#117) — 해금된 스팟 반경(150m) 안에 있는지 판정해
-  /// 발자취 조회 반경을 넓히는 데 쓴다.
+  /// 이미 인증한 스팟의 좌표(#117) — 그 스팟의 구역이 걷히고([_applyRegionHoles]), 그 구역
+  /// 안에 있으면 발자취 조회 반경을 넓힌다.
   Map<int, NLatLng> _visitedSpotCoords = const {};
+
+  /// 안개 구역([FogRegions]) — 전국 스팟 좌표를 받아 만든다. 만들기 전엔 null 이고, 그동안
+  /// 들어온 위치·궤적은 [_journeyRestored]·[_journeyBuffer] 에 남아 있다가 만들어지면 반영된다.
+  FogRegions? _fogRegions;
+
+  /// 들어가 본 빈 땅 구역(씨앗 index). 서버에 따로 저장하지 않는다 — 궤적(`journey_points`)이
+  /// 이미 «어디를 지났나»이고, 점→구역 변환은 앱이 하면 된다. 앱을 켤 때 [_restoreJourney] 가
+  /// 받은 점으로 되살린다. 스팟 구역은 여기 없다: 인증해야 걷히고, 그건 [_visitedSpotCoords] 다.
+  final Set<int> _enteredEmptyRegions = {};
+
+  /// 서버에서 되살린 궤적 점 — 구역이 궤적보다 늦게 만들어지면 여기서 다시 센다.
+  List<NLatLng> _journeyRestored = const [];
 
   /// 근접 판정 후보 — 스팟 마커가 카메라 idle 마다 불러오는 목록을 그대로 쓴다(따로 조회하지 않는다).
   List<Spot> _proximityCandidates = const [];
@@ -328,6 +341,11 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       _myLng = position.longitude;
       _myAccuracy = position.accuracy;
       if (!hadLocation && mounted) setState(() {});
+      // 빈 땅 구역은 들어가기만 하면 걷힌다 — 정확도 게이트는 궤적과 같다(튄 점 하나가 구역
+      // 하나를 영영 걷어낸다).
+      if (isTrailWorthyAccuracy(position.accuracy)) {
+        _enterRegionAt(position.latitude, position.longitude);
+      }
 
       // 첫 측위에 한 번만 내 위치로 줌을 맞춘다(#144). 이게 없으면 권한을 허용해도
       // 전국 뷰에 머물러 "회색 화면에 점 하나"로 보인다 — 스팟이 없어서가 아니라
@@ -343,7 +361,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       // (FogLocationTracker.locationSettings) 갱신마다 15m 원을 뚫으면 원들이
       // 맞닿아 끊기지 않는 길이 된다.
       //
-      // ⚠️ 인증(150m)과 «다른 축»이다 — 이건 지나간 자리 표시일 뿐 정복률에는
+      // ⚠️ 인증(스팟 반경)과 «다른 축»이다 — 이건 지나간 자리 표시일 뿐 정복률에는
       //    영향이 없다. 걸어서 걷힌 안개가 정복으로 세어지면 사진 인증을 할 이유가
       //    없어진다(planning.md 3장 「도달 → 인증 → 해제」).
       //
@@ -377,16 +395,89 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     });
   }
 
-  /// 해금된(방문 인증한) 스팟의 안개 걷힘 반경(150m) 안에 있는지(#117) — 발자취
-  /// 조회 반경을 50m에서 150m로 넓힐지 판단하는 데 쓴다(문서 3-3).
-  static const _unlockedSpotRadiusMeters = 150.0;
-
+  /// 해금된(방문 인증한) 스팟의 구역 안에 있는지(#117) — 발자취 조회 반경을 50m에서 넓힐지
+  /// 판단하는 데 쓴다(문서 3-3). 안개가 걷힌 곳과 같은 기준이다 — 「밝힌 동네」 안이면
+  /// 발자취도 넓게 보인다. 구역이 아직 없으면(좌표 받는 중) 스팟 150m 로 대신한다.
   bool _isInsideUnlockedSpot(double lat, double lng) {
+    final regions = _fogRegions;
+    if (regions != null) {
+      final spotId = regions.nearest(lat, lng)?.spotId;
+      return spotId != null && _visitedSpotIds.contains(spotId);
+    }
     for (final coord in _visitedSpotCoords.values) {
-      final distance = Geolocator.distanceBetween(lat, lng, coord.latitude, coord.longitude);
-      if (distance <= _unlockedSpotRadiusMeters) return true;
+      if (Geolocator.distanceBetween(lat, lng, coord.latitude, coord.longitude) <= 150) return true;
     }
     return false;
+  }
+
+  // ── 안개 구역 ───────────────────────────────────────────────────────────
+
+  /// 전국 스팟 좌표(`GET /api/spots/coords`, 기기 캐시)와 시/도 경계로 구역을 만든다. 지도가
+  /// 준비되면 한 번. 만들어지면 그때까지 받아 둔 방문 목록·궤적으로 걷힌 구역을 센다.
+  ///
+  /// 실패하면 조금 있다 다시 한다([_fogRegionsRetries]) — 첫 실행은 좌표를 받아야 해서 잠깐의
+  /// 연결 끊김(터널 재접속 등)에 통째로 걸리고, 그러면 이번 세션 내내 구역 없는 지도가 된다.
+  Future<void> _buildFogRegions() async {
+    try {
+      final coords = await ref.read(spotServiceProvider).fetchAllCoords();
+      final rings = await FogOverlayController.loadProvinceRings();
+      final sw = Stopwatch()..start();
+      final regions = FogRegions.build(coords, land: LandMask.fromRings(rings));
+      debugPrint('[FogRegions] 스팟 ${coords.length} → 씨앗 ${regions.seeds.length} (${sw.elapsedMilliseconds}ms)');
+      if (!mounted) return;
+      _fogRegions = regions;
+      for (final p in _journeyRestored) {
+        _markEmptyRegion(p.latitude, p.longitude);
+      }
+      for (final p in _journeyBuffer) {
+        _markEmptyRegion(p.lat, p.lng);
+      }
+      final lat = _myLat;
+      final lng = _myLng;
+      final accuracy = _myAccuracy;
+      if (lat != null && lng != null && accuracy != null && isTrailWorthyAccuracy(accuracy)) {
+        _markEmptyRegion(lat, lng);
+      }
+      _applyRegionHoles();
+    } catch (e) {
+      // 구역 없이도 지도는 돈다 — 궤적 원은 그대로 걷힌다.
+      debugPrint('[FogRegions] 구역 생성 실패: $e');
+      if (_fogRegionsRetries++ < 3 && mounted) {
+        unawaited(
+          Future<void>.delayed(const Duration(seconds: 20), () {
+            if (mounted && _fogRegions == null) unawaited(_buildFogRegions());
+          }),
+        );
+      }
+    }
+  }
+
+  int _fogRegionsRetries = 0;
+
+  /// [lat],[lng] 가 빈 땅 구역이면 «들어간 구역»에 넣는다. 스팟 구역은 넣지 않는다 —
+  /// 그건 인증해야 걷힌다(시진, 09-15). 새로 들어간 구역이면 true.
+  bool _markEmptyRegion(double lat, double lng) {
+    final seed = _fogRegions?.nearest(lat, lng);
+    if (seed == null || seed.isSpot) return false;
+    return _enteredEmptyRegions.add(seed.index);
+  }
+
+  void _enterRegionAt(double lat, double lng) {
+    if (_markEmptyRegion(lat, lng)) _applyRegionHoles();
+  }
+
+  /// 걷힌 구역 = 인증한 스팟의 구역 + 들어가 본 빈 땅 구역. 셀을 다시 잘라 통째로 준다 —
+  /// 많아야 수백 개고 셀 하나가 이웃 수십 개만 보므로 몇 ms 다.
+  void _applyRegionHoles() {
+    final regions = _fogRegions;
+    final fog = _fogOverlay;
+    if (regions == null || fog == null) return;
+    final seeds = <FogRegionSeed>{
+      for (final i in _enteredEmptyRegions) regions.seeds[i],
+      for (final id in _visitedSpotIds)
+        if (regions.seedOfSpot(id) case final seed?) seed,
+    };
+    fog.setRegionHoles(regions.cellsOf(seeds));
   }
 
   /// 카메라를 마지막으로 받은 내 위치로 이동한다. SDK 기본 위치 버튼
@@ -616,8 +707,15 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     try {
       final points = await ref.read(journeyServiceProvider).fetchMine();
       if (!mounted || points.isEmpty) return;
+      _journeyRestored = points;
       // 점마다 부르지 않는다 — landmass 하나당 setHoles 한 번으로 끝낸다.
       _fogOverlay?.clearTrails(points);
+      // 지나간 빈 땅 구역도 되살린다 — 점→구역은 앱이 센다(서버엔 궤적만 있다).
+      var entered = false;
+      for (final p in points) {
+        entered = _markEmptyRegion(p.latitude, p.longitude) || entered;
+      }
+      if (entered) _applyRegionHoles();
     } catch (e) {
       debugPrint('[Journey] 궤적 복원 실패: $e');
     }
@@ -765,8 +863,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       // 마커도 바로 «밝힌» 색으로 — 마커는 서버가 준 unlocked 로 그리므로 같은 자리를 다시
       // 불러온다(300m 움직여야 다시 부르던 것을 기다리면 인증하고도 한참 잠긴 색이다, 시진 09-15).
       if (_lastLoadCenter case final center?) _loadSpotsAt(center);
-      // 안개 걷힘 연출(#49) — 스팟 좌표 기준 반경을 퍼지듯 넓혀가며 걷어낸다.
-      unawaited(_fogOverlay?.clearCircleAnimated(spot.id.toString(), NLatLng(spot.lat, spot.lng)));
+      // 그 스팟의 구역이 통째로 걷힌다 — 「한 칸 채웠다」.
+      _applyRegionHoles();
       unawaited(_openUnlockedSpotDetail(spot));
     }
   }
@@ -812,10 +910,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
         _visitedSpotIds = visits.map((v) => v.spotId).toSet();
         _visitedSpotCoords = {for (final v in visits) v.spotId: NLatLng(v.lat, v.lng)};
       });
-      _recomputeProximity();
-      // 애니메이션 없이 즉시 걷어낸다 — 이미 걷힌 영역을 매번 앱을 켤 때마다 다시
-      // "퍼지는" 연출로 보여줄 이유는 없다(#49 to-do: 재진입 시 유지).
-      _fogOverlay?.clearCircles({for (final v in visits) v.spotId.toString(): NLatLng(v.lat, v.lng)});
+      // 인증한 스팟의 구역을 걷는다(#49 재진입 시 유지). 구역이 아직 없으면 만들어질 때 센다.
+      _applyRegionHoles();
     } catch (_) {
       // no-op
     }
@@ -831,6 +927,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     // 걸어온 자리를 서버에서 되살린다(#131). 인증 안개를 GET /api/visits 로 복원하는
     // 것(_loadVisitedSpots)과 같은 자리다 — 오버레이가 붙은 «뒤»라야 구멍을 낼 수 있다.
     unawaited(_restoreJourney());
+    // 구역은 전국 좌표를 받아야 해서 늦게 온다 — 그동안의 방문·궤적은 만들어질 때 반영된다.
+    unawaited(_buildFogRegions());
     _spotMarkers = SpotMarkerController(
       controller,
       ref.read(spotServiceProvider),
