@@ -13,6 +13,7 @@ import '../models/nearby_traveler.dart';
 import '../models/spot.dart';
 import '../services/character_overlay.dart';
 import '../services/conquest_service.dart';
+import '../services/favorite_spot_store.dart';
 import '../services/fog_location_tracker.dart';
 import '../services/fog_overlay_controller.dart';
 import '../services/province_boundary_overlay.dart';
@@ -28,6 +29,7 @@ import '../services/spot_proximity.dart';
 import '../services/spot_service.dart';
 import '../services/traveler_marker_controller.dart';
 import '../services/traveler_service.dart';
+import '../services/traveler_sharing.dart';
 import '../services/visit_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/footprint_card.dart';
@@ -38,7 +40,6 @@ import 'footprint_nearby_create_screen.dart';
 import 'match_candidates_screen.dart';
 import 'match_list_screen.dart';
 import 'profile_screen.dart';
-import 'social/personality_test_screen.dart';
 import 'spot_detail_screen.dart';
 import 'visit_verify_screen.dart';
 
@@ -145,8 +146,26 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   /// 이후의 모든 장애를 영영 숨기면, 서버가 다시 죽었을 때 또 아무 말도 못 하게 된다.
   bool _serverErrorDismissed = false;
 
-  /// 마지막으로 스팟을 불러온 카메라 중심(#146). "다시 시도"가 쓴다.
+  /// 마지막으로 스팟을 불러온 중심(#146). "다시 시도"가 쓴다.
   NLatLng? _lastLoadCenter;
+
+  /// 마지막으로 «내 위치 기준» 스팟을 불러왔을 때의 내 위치. 여기서
+  /// [_spotReloadDistanceMeters] 이상 벗어나면 다시 불러온다.
+  NLatLng? _spotLoadMyPosition;
+
+  /// 📍 「이 지역 스팟 보기」 토글. 켜면 스팟을 **화면 중심** 기준으로 불러오고, 지도를
+  /// 움직여 멈출 때마다 다시 불러온다. 조회 범위(3km)를 원으로 그려 화면 중심을 따라
+  /// 움직이게 한다 — 「지금 어디를 뒤지고 있나」가 보여야 지도를 어디까지 밀지 안다.
+  /// 끄면 내 위치 기준으로 되돌아간다.
+  bool _searchHereMode = false;
+
+  /// 켜져 있는 동안 화면 중심을 따라다니는 조회 범위 원. 꺼지면 지운다.
+  NCircleOverlay? _searchRangeCircle;
+
+  /// 스팟은 내 위치 3km 안을 불러온다. 15m 마다 다시 부르면 요청이 쏟아지고 결과도
+  /// 거의 같으므로, 이만큼 움직였을 때만 다시 부른다 — 반경(3km)의 1/10 이라
+  /// 가장자리 스팟이 빠지거나 새로 들어오는 것이 한 박자 늦어도 표가 안 난다.
+  static const _spotReloadDistanceMeters = 300.0;
 
   /// 아직 서버에 못 올린 궤적(#131). 위치가 갱신될 때마다 쌓이고, [_journeyBatchSize]
   /// 가 차거나 앱이 백그라운드로 갈 때 한 번에 올린다.
@@ -208,11 +227,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
 
   TravelerMarkerController? _travelerMarkers;
 
-  /// 내 위치 공유(#133) 여부. **기본값 꺼짐** — 신고 접수본의 opt-in 요건이다.
-  /// "주변 여행자 보기"와는 별개다 — 그건 공유 여부와 무관하게 항상 켜져 있다.
-  bool _travelerSharingEnabled = false;
-
-  /// 30분마다 위치를 다시 게시하는 타이머. 공유가 꺼져 있으면 null이다.
+  /// 내 위치 공유(#133) 게시 타이머. 스위치는 프로필 화면에 있고([travelerSharingProvider]),
+  /// 여기는 켜져 있을 때 [_travelerSharePeriod]마다 내 위치를 올리는 쪽이다. 꺼져 있으면 null.
   Timer? _travelerShareTimer;
 
   @override
@@ -263,7 +279,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
         controller.setLocationTrackingMode(NLocationTrackingMode.follow);
         _startGeofenceTracking();
       }
-      if (_travelerSharingEnabled) {
+      if (ref.read(travelerSharingProvider)) {
         _startTravelerShareTimer();
       }
     } else if (state == AppLifecycleState.paused) {
@@ -320,6 +336,9 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
         _didZoomToFirstFix = true;
         _moveToMyLocation(position.latitude, position.longitude);
       }
+      // 스팟은 «내 위치» 기준으로 불러온다 — 카메라가 아니라. 지도를 밀어도 내 주변
+      // 스팟이 그대로 남고, 300m 이상 걸었을 때만 다시 부른다.
+      _reloadSpotsIfMoved(position.latitude, position.longitude);
       // 걸어온 자리의 안개를 걷는다. 스트림이 15m 이상 움직였을 때만 오므로
       // (FogLocationTracker.locationSettings) 갱신마다 15m 원을 뚫으면 원들이
       // 맞닿아 끊기지 않는 길이 된다.
@@ -497,6 +516,66 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     final center = _lastLoadCenter;
     if (center == null) return;
     unawaited(_spotMarkers?.loadAround(center));
+  }
+
+  /// 📍 토글. 켜면 화면 중심 기준 + 범위 원, 끄면 내 위치 기준으로 즉시 되돌린다.
+  ///
+  /// 스팟은 평소 내 위치 주변만 불러오므로, 지도를 멀리 밀어 「거기엔 뭐가 있나」를
+  /// 볼 길이 이것이다. 한 번 누를 때 한 번만 불러오는 방식도 써봤는데, 지도를 조금
+  /// 옮길 때마다 다시 눌러야 해서 토글로 바꿨다(시진, 09-14).
+  void _toggleSearchHere() {
+    final controller = _controller;
+    if (controller == null) return;
+    // ignore: experimental_member_use
+    final target = controller.nowCameraPosition.target;
+    setState(() => _searchHereMode = !_searchHereMode);
+
+    if (_searchHereMode) {
+      final circle = NCircleOverlay(
+        id: 'spot-search-range',
+        center: target,
+        radius: SpotMarkerController.radiusMeters,
+        color: AppColors.primary.withValues(alpha: 0.08),
+        outlineColor: AppColors.primary.withValues(alpha: 0.6),
+        outlineWidth: 1.5,
+      );
+      _searchRangeCircle = circle;
+      unawaited(controller.addOverlay(circle));
+      _loadSpotsAt(target);
+      return;
+    }
+
+    final circle = _searchRangeCircle;
+    _searchRangeCircle = null;
+    if (circle != null) unawaited(controller.deleteOverlay(circle.info));
+    // 내 위치 기준으로 «지금» 되돌린다 — 300m 걸을 때까지 화면 중심 스팟이 남아 있으면
+    // 끈 것 같지 않다.
+    final lat = _myLat;
+    final lng = _myLng;
+    if (lat != null && lng != null) {
+      _spotLoadMyPosition = null;
+      _reloadSpotsIfMoved(lat, lng);
+    }
+  }
+
+  void _loadSpotsAt(NLatLng center) {
+    _lastLoadCenter = center;
+    unawaited(_spotMarkers?.loadAround(center));
+  }
+
+  /// 내 위치가 마지막 조회 지점에서 충분히 멀어졌으면 내 주변 스팟을 다시 불러온다.
+  /// 📍 모드에서는 안 한다 — 화면 중심이 기준이다.
+  void _reloadSpotsIfMoved(double lat, double lng) {
+    if (_searchHereMode) return;
+    final last = _spotLoadMyPosition;
+    if (last != null &&
+        Geolocator.distanceBetween(last.latitude, last.longitude, lat, lng) < _spotReloadDistanceMeters) {
+      return;
+    }
+    final here = NLatLng(lat, lng);
+    _spotLoadMyPosition = here;
+    _lastLoadCenter = here;
+    unawaited(_spotMarkers?.loadAround(here));
   }
 
   /// 지도의 "발자취 남기기" 버튼(#118). GPS로 현재 위치를 새로 측정해 정확도가
@@ -683,6 +762,9 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       // 자리에 선 채로 «지금 인증하기»가 계속 떠 있다.
       _recomputeProximity();
       unawaited(_refreshConquest());
+      // 마커도 바로 «밝힌» 색으로 — 마커는 서버가 준 unlocked 로 그리므로 같은 자리를 다시
+      // 불러온다(300m 움직여야 다시 부르던 것을 기다리면 인증하고도 한참 잠긴 색이다, 시진 09-15).
+      if (_lastLoadCenter case final center?) _loadSpotsAt(center);
       // 안개 걷힘 연출(#49) — 스팟 좌표 기준 반경을 퍼지듯 넓혀가며 걷어낸다.
       unawaited(_fogOverlay?.clearCircleAnimated(spot.id.toString(), NLatLng(spot.lat, spot.lng)));
       unawaited(_openUnlockedSpotDetail(spot));
@@ -772,6 +854,9 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       },
       onSpotTapped: _onSpotTapped,
     );
+    // 찜한 스팟은 조회와 무관하게 항상 지도에 둔다 — 컨트롤러가 생기자마자 넘기고,
+    // 이후 변경은 build 의 ref.listen 이 넘긴다.
+    unawaited(_spotMarkers!.setFavorites(ref.read(favoriteSpotsProvider)));
     // 발자취 아이콘은 위젯을 이미지로 구워 만든다 — 마커마다 만들지 않고 한 번만 만들어
     // 공유한다. 앞선 await 이후라 context를 쓰기 전에 mounted를 확인한다.
     if (!mounted) return;
@@ -821,7 +906,9 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     final initialPosition = controller.nowCameraPosition;
     final initialTarget = initialPosition.target;
     _footprintMarkers?.setZoom(initialPosition.zoom);
+    _spotMarkers?.setZoom(initialPosition.zoom);
     unawaited(_lookupRegion(initialTarget));
+    // 첫 측위 전의 임시 조회 — 내 위치가 오면 [_reloadSpotsIfMoved] 가 그쪽으로 바꾼다.
     _lastLoadCenter = initialTarget;
     unawaited(_spotMarkers?.loadAround(initialTarget));
     unawaited(_refreshNearbyTravelers(initialTarget));
@@ -878,10 +965,17 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     // 줌 임계값에 따른 발자취 표시/숨김(#117)은 카메라가 멈추기 전에도 즉시
     // 반영한다 — 핀치 줌 도중에도 "확대하면 보인다"가 바로 느껴져야 한다.
     _footprintMarkers?.setZoom(params.position.zoom);
+    // 스팟 마커도 줌에 맞춰 줄인다 — 줌을 빼면 밀집 지역에서 마커가 서로 덮는다.
+    _spotMarkers?.setZoom(params.position.zoom);
+    // 📍 모드의 범위 원은 손가락을 따라 «즉시» 움직인다 — 멈춘 뒤에 옮기면 원이 끌려오는
+    // 것처럼 보인다.
+    _searchRangeCircle?.setCenter(params.position.target);
     if (!params.isIdle) return;
     unawaited(_lookupRegion(params.position.target));
-    _lastLoadCenter = params.position.target;
-    unawaited(_spotMarkers?.loadAround(params.position.target));
+    // 스팟은 평소 내 위치 기준([_reloadSpotsIfMoved])이라 여기서 안 부른다 — 지도를 밀
+    // 때마다 요청이 나가고 내 주변 스팟이 사라지던 것을 없앴다. 📍 모드일 때만 화면
+    // 중심으로 다시 부른다.
+    if (_searchHereMode) _loadSpotsAt(params.position.target);
     unawaited(_refreshNearbyTravelers(params.position.target));
   }
 
@@ -918,34 +1012,24 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     );
   }
 
-  /// 내 위치 공유(#133) 토글. 기본값 꺼짐 — 켤 때만 [_travelerSharePeriod]마다 위치를 게시한다.
-  Future<void> _toggleTravelerSharing() async {
-    if (_travelerSharingEnabled) {
-      _travelerShareTimer?.cancel();
-      _travelerShareTimer = null;
-      if (mounted) setState(() => _travelerSharingEnabled = false);
-      try {
-        await ref.read(travelerServiceProvider).stopSharing();
-      } catch (e) {
-        // 로컬 상태는 이미 껐다 — 서버 쪽이 실패해도 사용자에게는 꺼진 것으로 보이는
-        // 게 맞다(다시 켤 때 UPSERT가 갱신하므로 오래 남을 걱정은 없다).
-        debugPrint('[MapScreen] 위치 공유 끄기 실패: $e');
-      }
+  /// 프로필의 「내 위치 공유」 스위치가 바뀌면 여기로 온다([travelerSharingProvider]).
+  /// 켜지면 바로 한 번 올리고 타이머를 돌린다 — 아직 위치를 모르면 [_shareMyPosition] 이
+  /// 조용히 건너뛰고 다음 주기에 올린다. 꺼지면 타이머를 멈추고 서버 행을 지운다.
+  Future<void> _onTravelerSharingChanged(bool enabled) async {
+    if (enabled) {
+      unawaited(_shareMyPosition());
+      _startTravelerShareTimer();
       return;
     }
-
-    final lat = _myLat;
-    final lng = _myLng;
-    if (lat == null || lng == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('위치를 확인한 뒤 다시 시도해주세요.')),
-      );
-      return;
+    _travelerShareTimer?.cancel();
+    _travelerShareTimer = null;
+    try {
+      await ref.read(travelerServiceProvider).stopSharing();
+    } catch (e) {
+      // 스위치는 이미 꺼졌다 — 서버 쪽이 실패해도 사용자에게는 꺼진 것으로 보이는 게
+      // 맞다(다시 켤 때 UPSERT가 갱신하므로 오래 남을 걱정은 없다).
+      debugPrint('[MapScreen] 위치 공유 끄기 실패: $e');
     }
-
-    setState(() => _travelerSharingEnabled = true);
-    unawaited(_shareMyPosition());
-    _startTravelerShareTimer();
   }
 
   /// 게시 주기 — **서버 컷오프(30분, `TravelerService.DELAY_MINUTES`)보다 반드시
@@ -1051,6 +1135,12 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
 
   @override
   Widget build(BuildContext context) {
+    // 스팟 상세에서 찜을 켜고 돌아오면 마커 색이 바로 바뀌어야 한다 — 조회 없이 합친다.
+    ref.listen(favoriteSpotsProvider, (_, favorites) {
+      unawaited(_spotMarkers?.setFavorites(favorites));
+    });
+    // 프로필의 「내 위치 공유」 스위치 — 게시는 내 위치를 아는 여기서 한다.
+    ref.listen(travelerSharingProvider, (_, enabled) => unawaited(_onTravelerSharingChanged(enabled)));
     final safeAreaPadding = MediaQuery.paddingOf(context);
     final locationIssue = _locationIssue;
 
@@ -1148,6 +1238,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                         onZoomIn: () => _zoomBy(1),
                         onZoomOut: () => _zoomBy(-1),
                         onRecenter: _myLat != null ? _recenterToMe : null,
+                        onSearchHere: _mapReady ? _toggleSearchHere : null,
+                        searchHereActive: _searchHereMode,
                       ),
                     ),
                   ),
@@ -1182,17 +1274,10 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                                 mainAxisSize: MainAxisSize.min,
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  FilledButton.tonal(
-                                    // 지도 위 탐험 UI가 준비될 때까지 성향 테스트(#31)로 가는 임시 진입점.
-                                    onPressed: () => Navigator.of(context).push(
-                                      MaterialPageRoute(builder: (_) => const PersonalityTestScreen()),
-                                    ),
-                                    child: const Text('여행 성향 테스트 하기'),
-                                  ),
-                                  const SizedBox(height: 8),
+                                  // 성향 테스트(#31) 진입점은 프로필 화면에 있다 — 지도 메뉴에 또 두면
+                                  // 같은 화면으로 가는 버튼이 둘이라 뺐다(시진, 09-14).
                                   FilledButton.tonalIcon(
-                                    // 제대로 된 네비게이션(하단 바 등)이 붙기 전까지의 최소 진입점(#73) —
-                                    // 성향 테스트 버튼과 같은 임시 성격이다.
+                                    // 제대로 된 네비게이션(하단 바 등)이 붙기 전까지의 최소 진입점(#73).
                                     onPressed: () => Navigator.of(context).push(
                                       MaterialPageRoute(builder: (_) => const ProfileScreen()),
                                     ),
@@ -1244,18 +1329,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                                       ),
                                     ),
                                   const SizedBox(height: 8),
-                                  // 내 위치 공유(#133). 기본값 꺼짐 — "주변 여행자 보기"
-                                  // 자체는 이 토글과 무관하게 항상 동작한다.
-                                  FilledButton.tonalIcon(
-                                    onPressed: _toggleTravelerSharing,
-                                    icon: Icon(
-                                      _travelerSharingEnabled ? Icons.people : Icons.people_outline,
-                                    ),
-                                    label: Text(
-                                      _travelerSharingEnabled ? '내 위치 공유 중 (끄기)' : '내 위치 공유하기',
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
+                                  // 내 위치 공유(#133) 스위치는 프로필 화면으로 옮겼다(시진, 09-14) —
+                                  // 지도 메뉴는 «지금 할 행동»만 남긴다.
                                 ],
                               )
                             : const SizedBox.shrink(),
@@ -1464,7 +1539,7 @@ class _EmptyAreaNotice extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    '이 근처에는 아직 탐험할 곳이 없어요',
+                    '이 근처에는 탐험할 곳이 없어요',
                     style: theme.textTheme.titleSmall,
                   ),
                 ),
@@ -1476,18 +1551,8 @@ class _EmptyAreaNotice extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 2),
-            // ⚠️ "서울·부산·제주"는 서버의 TOUR_COLLECT_AREA_CODES(1,6,39)와 묶여 있다.
-            //    수집 지역을 넓히면(#144 1번) 이 문구도 함께 고칠 것 — 안 고치면
-            //    스팟이 있는 지역인데도 "없는 지역"이라고 잘못 안내하게 된다.
-            Text(
-              'FogApp은 실제로 그 장소에 도착해야 안개가 걷히는 앱이에요. '
-              '지금은 서울·부산·제주의 관광 스팟이 준비돼 있어요 — '
-              '그 지역에서 열면 주변에 숨겨진 스팟이 나타납니다.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
+            // 설명 문단은 뺐다(시진, 09-14) — 「서울·부산·제주만 준비」는 전국 수집 뒤 낡은
+            // 정보였고, 한 줄 제목으로 충분하다.
           ],
         ),
       ),
