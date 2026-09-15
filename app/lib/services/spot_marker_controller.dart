@@ -223,7 +223,11 @@ class SpotMarkerController {
     return table.last.$2;
   }
 
-  Size _sizeForScale() => _scale >= 1.0 ? NMarker.autoSize : Size(_baseSize.width * _scale, _baseSize.height * _scale);
+  Size _sizeForScale() => sizeForScale(_scale);
+
+  /// 배율 → 마커 크기. 발자취 마커([FootprintMarkerController])도 같은 표를 써서 함께 줄어든다.
+  static Size sizeForScale(double scale) =>
+      scale >= 1.0 ? NMarker.autoSize : Size(_baseSize.width * scale, _baseSize.height * scale);
 
   /// 좌표가 같은 스팟끼리 벌린 자리. [spreadMeters] 반지름 원 위에 id 순으로 고르게 놓는다 —
   /// 같은 무리면 조회 순서와 무관하게 늘 같은 자리다. 혼자인 스팟은 목록에 없다.

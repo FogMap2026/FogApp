@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
@@ -7,69 +6,46 @@ import 'package:geolocator/geolocator.dart';
 
 import '../models/footprint.dart';
 import 'footprint_service.dart';
+import 'spot_marker_controller.dart';
 
-/// 지도 위에 발자취를 작은 마름모로 그린다(#117).
+/// 지도 위에 발자취를 스팟과 같은 핀 마커로 그린다(#117).
 ///
-/// 스팟은 기본 핀 마커([SpotMarkerController])라 형태가 확실히 구분된다 —
-/// 발자취는 스팟보다 훨씬 많아질 것이라(docs/footprint-redesign.md 4-1) 겹쳐 보여도
-/// 스팟이 묻히지 않아야 한다.
+/// 처음엔 작은 마름모(16dp)였는데 실기기에서 «너무 작아서 있는 줄 모른다»(시진, 09-15). 스팟과
+/// 같은 기본 핀에 **보라색**을 칠해 한눈에 구분되면서도 같은 크기로 보이게 했다 — 색만으로
+/// 스팟(초록·민트·주황)과 갈린다. 줌을 빼면 스팟과 같은 표([SpotMarkerController.scaleForZoom])로
+/// 함께 줄어든다.
 ///
-/// **크기는 화면 기준(dp)이다.** 미터 단위 오버레이(`NCircleOverlay`)로 그리면 줌아웃할수록
-/// 화면에서 작아져, 임계 줌 근처에서는 지름이 몇 dp밖에 안 돼 보이지도 탭되지도 않는다
-/// (PR #130 리뷰). 아이콘을 dp로 고정하면 어느 줌에서 보이든 항상 같은 크기로 탭할 수 있고,
-/// 줌 임계값은 "얼마나 촘촘하게 뜨는가"만 정하는 값이 된다.
+/// 조회 반경은 **내 위치 1km** 고정이다(서버 상한 `FootprintService.MAX_RADIUS_METERS`). 예전엔
+/// 이동 중 50m·해금 스팟 안 150m 였는데, 그러면 바로 옆 골목 글도 안 보여 발자취가 있는지
+/// 없는지 알 수 없었다. 1km 면 걸어서 갈 만한 범위의 글이 다 보이고, 서버가 최대 200건으로
+/// 끊어 준다.
 ///
-/// 조회 반경은 이동 중 50m, 해금된 스팟의 안개 걷힘 반경(150m — fog_overlay_controller.dart의
-/// `radiusMeters`와 같은 값) 안에서는 150m로 넓어진다(문서 3-2·3-3) — 호출부가
-/// [updatePosition]의 `insideUnlockedSpot`으로 알려준다.
-///
-/// 위치가 갱신될 때마다 다시 조회하면 걷는 내내 요청이 쏟아지므로(근접 판정 [resolveSpotProximity]와
-/// 달리 이 컨트롤러는 실제 네트워크 호출을 한다), 일정 거리 이상 움직였을 때만(또는 반경
-/// 모드가 바뀌었을 때만) 다시 불러온다. **숨겨진 줌에서는 아예 조회하지 않고**, 다시
-/// 보이게 되는 순간 마지막 위치로 한 번 채운다.
+/// 위치가 갱신될 때마다 다시 조회하면 걷는 내내 요청이 쏟아지므로 [_minMoveMeters] 이상 움직였을
+/// 때만 다시 불러온다. 보이기는 둘이 정한다 — 줌([_minVisibleZoom] 미만이면 숨김)과 사용자 토글
+/// ([setUserVisible], 우측 컨트롤 다섯째 버튼). **숨겨진 동안은 조회하지 않고**, 다시 보이게 되는
+/// 순간 마지막 위치로 한 번 채운다.
 class FootprintMarkerController {
-  FootprintMarkerController(
-    this._mapController,
-    this._footprintService, {
-    required NOverlayImage icon,
-    this.onTapped,
-  }) : _icon = icon;
+  FootprintMarkerController(this._mapController, this._footprintService, {this.onTapped});
 
   final NaverMapController _mapController;
   final FootprintService _footprintService;
-  final NOverlayImage _icon;
 
-  /// 도형을 탭했을 때 호출된다 — 글귀 팝업 진입점.
+  /// 핀을 탭했을 때 호출된다 — 글귀 팝업 진입점.
   final void Function(Footprint footprint)? onTapped;
 
-  /// 이동 중 조회 반경(문서 3-2).
-  static const _nearbyRadiusMeters = 50.0;
+  /// 조회 반경 — 서버 상한과 같다.
+  static const radiusMeters = 1000.0;
 
-  /// 해금된 스팟 안에서의 조회 반경 — 안개 걷힘 반경과 같은 값이어야 한다(문서 3-3).
-  static const _insideSpotRadiusMeters = 150.0;
+  /// 위치가 이만큼 이상 움직여야 다시 조회한다. 반경 1km 에 200m 면 화면 밖으로 밀려나는
+  /// 글이 생기기 전에 갱신되면서도, 걷는 동안 요청이 15m 마다 나가진 않는다.
+  static const _minMoveMeters = 200.0;
 
-  /// 위치가 이만큼 이상 움직여야 다시 조회한다.
-  static const _minMoveMeters = 15.0;
+  /// 이 줌보다 낮으면(멀리서 보면) 숨긴다. 1km 안 최대 200개라 줌 14(동네)부터는 핀이 서로
+  /// 덮이기 시작한다 — 스팟 마커가 같이 줄어드는 구간이기도 하다.
+  static const _minVisibleZoom = 14.0;
 
-  /// 이 줌보다 낮으면(멀리서 보면) 숨긴다. 아이콘이 dp 고정이라 이제 크기 문제가 아니라
-  /// **밀도 문제**만 남는다 — 위도 37.5에서 줌 17이면 조회 반경 50m가 화면에서 지름
-  /// 200px쯤 되어 도형 몇 개가 서로 떨어져 보이고, 한 단계만 낮아져도 절반으로 뭉친다.
-  /// 실제 밀도를 보고 조정할 튜닝값이다(문서 4-1).
-  static const _minVisibleZoom = 17.0;
-
-  /// 아이콘 크기(dp). 마름모 자체는 이보다 작게 그리고 남는 여백은 투명하게 둔다 —
-  /// 보이기는 작게, 탭 영역은 손가락에 맞게 확보하기 위함이다(PR #130 리뷰).
-  static const iconSize = Size(36, 36);
-
-  /// 발자취 도형 아이콘을 만든다. 여러 마커가 같은 이미지를 공유하도록 한 번만 만들어
-  /// 재사용한다(`NOverlayImage` 문서 권장).
-  static Future<NOverlayImage> createIcon(BuildContext context) {
-    return NOverlayImage.fromWidget(
-      context: context,
-      size: iconSize,
-      widget: const _FootprintDiamond(),
-    );
-  }
+  /// 발자취 핀 색 — 스팟의 초록(밝힘)·민트(잠김)·주황(찜) 어느 것과도 겹치지 않는 보라.
+  static const tint = Color(0xFF8E6CF0);
 
   final Map<int, NMarker> _markersByFootprintId = {};
 
@@ -77,92 +53,92 @@ class FootprintMarkerController {
   /// 때의 값을 클로저에 가두지 않고 여기서 찾아 쓴다.
   final Map<int, Footprint> _footprintsById = {};
 
-  bool _visible = true;
+  bool _zoomVisible = true;
+  bool _userVisible = true;
+  bool get _visible => _zoomVisible && _userVisible;
+  double _scale = 1.0;
   bool _loading = false;
 
   double? _lastFetchLat;
   double? _lastFetchLng;
-  double? _lastFetchRadius;
 
   /// 마지막으로 받은 위치. 숨겨진 동안에도 계속 기록해두었다가, 다시 보이게 될 때
   /// 이 자리로 한 번 조회한다 — 새 위치 이벤트를 기다리면 제자리에 서 있는 동안
   /// 빈 지도가 된다(위치 스트림이 `distanceFilter: 15`라 움직이지 않으면 오지 않는다).
   double? _lastKnownLat;
   double? _lastKnownLng;
-  bool _lastKnownInsideUnlockedSpot = false;
 
-  /// 카메라 줌이 바뀔 때마다 호출한다. 보이기/숨기기를 전환하고, 다시 보이게 될 때만
-  /// 마지막 위치로 한 번 채운다.
+  /// 카메라 줌이 바뀔 때마다 호출한다. 크기를 스팟과 같은 배율로 맞추고, 임계 줌을 넘나들면
+  /// 보이기/숨기기를 전환한다.
   void setZoom(double zoom) {
-    final visible = zoom >= _minVisibleZoom;
-    if (visible == _visible) return;
-    _visible = visible;
-    for (final marker in _markersByFootprintId.values) {
-      marker.setIsVisible(visible);
+    final scale = (SpotMarkerController.scaleForZoom(zoom) * 50).round() / 50;
+    if (scale != _scale) {
+      _scale = scale;
+      for (final marker in _markersByFootprintId.values) {
+        marker.setSize(_sizeForScale());
+      }
     }
-    if (!visible) return;
+    _setZoomVisible(zoom >= _minVisibleZoom);
+  }
 
+  /// 우측 컨트롤 다섯째 버튼 — 발자취 보이기/숨기기.
+  void setUserVisible(bool visible) {
+    if (_userVisible == visible) return;
+    final was = _visible;
+    _userVisible = visible;
+    _applyVisibility(was);
+  }
+
+  void _setZoomVisible(bool visible) {
+    if (_zoomVisible == visible) return;
+    final was = _visible;
+    _zoomVisible = visible;
+    _applyVisibility(was);
+  }
+
+  /// 실제 보이기가 바뀌었을 때만 마커를 건드리고, 다시 보이게 되면 마지막 위치로 한 번 채운다.
+  void _applyVisibility(bool was) {
+    final now = _visible;
+    if (was == now) return;
+    for (final marker in _markersByFootprintId.values) {
+      marker.setIsVisible(now);
+    }
+    if (!now) return;
     final lat = _lastKnownLat;
     final lng = _lastKnownLng;
     if (lat == null || lng == null) return;
-    unawaited(
-      _fetchAround(
-        lat: lat,
-        lng: lng,
-        insideUnlockedSpot: _lastKnownInsideUnlockedSpot,
-      ),
-    );
+    unawaited(_fetchAround(lat: lat, lng: lng));
   }
 
-  /// 새 위치를 반영한다.
-  ///
-  /// **숨겨진 줌에서는 조회하지 않는다.** 축소한 채 걸으면 15m마다 요청이 나가는데
-  /// 받아온 발자취는 곧바로 숨겨져, 화면에 아무것도 안 뜨는 채로 요청만 나갔다
-  /// (PR #130 리뷰). 다시 보이게 되는 순간은 [setZoom]이 채운다.
-  Future<void> updatePosition({
-    required double lat,
-    required double lng,
-    required bool insideUnlockedSpot,
-  }) async {
+  /// 새 위치를 반영한다. **숨겨진 동안은 조회하지 않는다** — 받아온 발자취가 곧바로 숨겨져
+  /// 요청만 나갔다(PR #130 리뷰). 다시 보이게 되는 순간은 [_applyVisibility] 가 채운다.
+  Future<void> updatePosition({required double lat, required double lng}) async {
     _lastKnownLat = lat;
     _lastKnownLng = lng;
-    _lastKnownInsideUnlockedSpot = insideUnlockedSpot;
     if (!_visible) return;
-    await _fetchAround(lat: lat, lng: lng, insideUnlockedSpot: insideUnlockedSpot);
+    await _fetchAround(lat: lat, lng: lng);
   }
 
-  /// 일정 거리 이상 움직였거나 조회 반경 모드가 바뀌었을 때만(예: 해금된 스팟 반경
-  /// 진입/이탈) 실제로 서버에 다시 묻는다.
-  Future<void> _fetchAround({
-    required double lat,
-    required double lng,
-    required bool insideUnlockedSpot,
-  }) async {
-    final radius = insideUnlockedSpot ? _insideSpotRadiusMeters : _nearbyRadiusMeters;
-
+  Future<void> _fetchAround({required double lat, required double lng}) async {
     final lastLat = _lastFetchLat;
     final lastLng = _lastFetchLng;
-    final radiusChanged = radius != _lastFetchRadius;
-    if (!radiusChanged && lastLat != null && lastLng != null) {
-      final moved = Geolocator.distanceBetween(lastLat, lastLng, lat, lng);
-      if (moved < _minMoveMeters) return;
+    if (lastLat != null && lastLng != null) {
+      if (Geolocator.distanceBetween(lastLat, lastLng, lat, lng) < _minMoveMeters) return;
     }
 
     if (_loading) return;
     _loading = true;
     _lastFetchLat = lat;
     _lastFetchLng = lng;
-    _lastFetchRadius = radius;
     try {
-      final footprints = await _footprintService.fetchNearby(lat: lat, lng: lng, radiusMeters: radius);
+      final footprints = await _footprintService.fetchNearby(lat: lat, lng: lng, radiusMeters: radiusMeters);
       await _render(footprints);
     } catch (e) {
-      // 실패한 자리를 "조회한 자리"로 남겨두면 15m를 더 걸어야 다시 시도하게 된다 —
+      // 실패한 자리를 "조회한 자리"로 남겨두면 200m 를 더 걸어야 다시 시도하게 된다 —
       // 서버가 잠깐 끊기면 그동안 발자취가 통째로 안 보인다(PR #130 리뷰). 되돌려서
       // 다음 위치 갱신이 곧바로 다시 시도하게 한다.
       _lastFetchLat = null;
       _lastFetchLng = null;
-      _lastFetchRadius = null;
       debugPrint('[FootprintMarker] 발자취 로드 실패: $e');
     } finally {
       _loading = false;
@@ -208,14 +184,14 @@ class FootprintMarkerController {
     }
   }
 
+  Size _sizeForScale() => SpotMarkerController.sizeForScale(_scale);
+
   NMarker _toMarker(Footprint footprint) {
     final marker = NMarker(
       id: 'footprint-${footprint.id}',
       position: NLatLng(footprint.lat!, footprint.lng!),
-      icon: _icon,
-      size: iconSize,
-      // 핀이 아니라 대칭 도형이므로 좌표에 정중앙을 맞춘다(기본값은 핀 끝 기준).
-      anchor: const NPoint(0.5, 0.5),
+      size: _sizeForScale(),
+      iconTintColor: tint,
     );
     final onTap = onTapped;
     if (onTap != null) {
@@ -233,37 +209,5 @@ class FootprintMarkerController {
     }
     _markersByFootprintId.clear();
     _footprintsById.clear();
-  }
-}
-
-/// 발자취 도형. 스팟의 핀과 형태가 겹치지 않도록 마름모로 그리고, 안개 낀 지도 위에서
-/// 눈에 띄도록 따뜻한 톤에 흰 테두리를 둘렀다.
-///
-/// 바깥 여백은 투명하게 남는다 — 도형은 작게 보이되 탭 영역은 [FootprintMarkerController.iconSize]
-/// 전체가 된다.
-class _FootprintDiamond extends StatelessWidget {
-  const _FootprintDiamond();
-
-  static const _color = Color(0xFFF2B84B);
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Transform.rotate(
-        angle: pi / 4,
-        child: Container(
-          width: 16,
-          height: 16,
-          decoration: BoxDecoration(
-            color: _color,
-            borderRadius: BorderRadius.circular(3),
-            border: Border.all(color: Colors.white, width: 2),
-            boxShadow: const [
-              BoxShadow(color: Color(0x33000000), blurRadius: 3, offset: Offset(0, 1)),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 }

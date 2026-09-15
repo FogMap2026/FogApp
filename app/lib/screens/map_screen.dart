@@ -385,29 +385,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       // ⚠️ 아래 둘은 «정확도 판정 밖»이다 — 화면 표시라 튀어도 다음 갱신에 되돌아온다.
       //    되돌아오지 않는 것(구멍·서버 저장)만 거른다.
       _recomputeProximity();
-      unawaited(
-        _footprintMarkers?.updatePosition(
-          lat: position.latitude,
-          lng: position.longitude,
-          insideUnlockedSpot: _isInsideUnlockedSpot(position.latitude, position.longitude),
-        ),
-      );
+      unawaited(_footprintMarkers?.updatePosition(lat: position.latitude, lng: position.longitude));
     });
-  }
-
-  /// 해금된(방문 인증한) 스팟의 구역 안에 있는지(#117) — 발자취 조회 반경을 50m에서 넓힐지
-  /// 판단하는 데 쓴다(문서 3-3). 안개가 걷힌 곳과 같은 기준이다 — 「밝힌 동네」 안이면
-  /// 발자취도 넓게 보인다. 구역이 아직 없으면(좌표 받는 중) 스팟 150m 로 대신한다.
-  bool _isInsideUnlockedSpot(double lat, double lng) {
-    final regions = _fogRegions;
-    if (regions != null) {
-      final spotId = regions.nearest(lat, lng)?.spotId;
-      return spotId != null && _visitedSpotIds.contains(spotId);
-    }
-    for (final coord in _visitedSpotCoords.values) {
-      if (Geolocator.distanceBetween(lat, lng, coord.latitude, coord.longitude) <= 150) return true;
-    }
-    return false;
   }
 
   // ── 안개 구역 ───────────────────────────────────────────────────────────
@@ -622,6 +601,14 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
           ? SpotViewMode.here
           : SpotViewMode.nearby;
   bool _spotsHidden = false;
+
+  /// 다섯 번째 버튼: 발자취 보이기/숨기기. 마커만 감춘다 — 남기기·조회는 그대로다.
+  bool _footprintsHidden = false;
+
+  void _toggleFootprintsHidden() {
+    setState(() => _footprintsHidden = !_footprintsHidden);
+    _footprintMarkers?.setUserVisible(!_footprintsHidden);
+  }
 
   void _cycleSpotViewMode() {
     switch (_spotViewMode.next) {
@@ -978,26 +965,13 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     // 찜한 스팟은 조회와 무관하게 항상 지도에 둔다 — 컨트롤러가 생기자마자 넘기고,
     // 이후 변경은 build 의 ref.listen 이 넘긴다.
     unawaited(_spotMarkers!.setFavorites(ref.read(favoriteSpotsProvider)));
-    // 발자취 아이콘은 위젯을 이미지로 구워 만든다 — 마커마다 만들지 않고 한 번만 만들어
-    // 공유한다. 앞선 await 이후라 context를 쓰기 전에 mounted를 확인한다.
     if (!mounted) return;
-    NOverlayImage? footprintIcon;
-    try {
-      footprintIcon = await FootprintMarkerController.createIcon(context);
-    } catch (e) {
-      // 아이콘을 못 구우면 발자취만 안 뜬다 — 지도·스팟·안개는 그대로 동작해야 하므로
-      // 여기서 멈추지 않는다.
-      debugPrint('[MapScreen] 발자취 아이콘 생성 실패: $e');
-    }
-    if (!mounted) return;
-    if (footprintIcon != null) {
-      _footprintMarkers = FootprintMarkerController(
-        controller,
-        ref.read(footprintServiceProvider),
-        icon: footprintIcon,
-        onTapped: _onFootprintTapped,
-      );
-    }
+    // 발자취는 스팟과 같은 기본 핀(보라)이라 아이콘을 따로 굽지 않는다.
+    _footprintMarkers = FootprintMarkerController(
+      controller,
+      ref.read(footprintServiceProvider),
+      onTapped: _onFootprintTapped,
+    );
     // 내 위치를 기본 점 대신 캐릭터로 그린다(#131). 실패해도 SDK 기본 표시가 남으므로
     // 지도 사용에는 지장이 없다 — 발자취 아이콘과 같은 원칙.
     if (!mounted) return;
@@ -1366,6 +1340,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                         onRecenter: _myLat != null ? _recenterToMe : null,
                         onSpotMode: _mapReady ? _cycleSpotViewMode : null,
                         spotMode: _spotViewMode,
+                        onToggleFootprints: _mapReady ? _toggleFootprintsHidden : null,
+                        footprintsHidden: _footprintsHidden,
                       ),
                     ),
                   ),

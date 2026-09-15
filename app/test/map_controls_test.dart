@@ -51,6 +51,7 @@ void main() {
     expect(find.byIcon(Icons.remove), findsOneWidget);
     expect(find.byIcon(Icons.my_location), findsOneWidget);
     expect(find.byIcon(Icons.location_on_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.edit_location_alt), findsOneWidget);
     // 폭을 고정했으므로 버튼이 넘치지 않는지 함께 본다.
     expect(tester.takeException(), isNull);
   });
@@ -137,5 +138,27 @@ void main() {
       isFalse,
       reason: '컨트롤이 발자취 버튼과 겹친다 — 탭이 가로채진다',
     );
+  });
+
+  testWidgets('발자취 버튼은 보일 때 채워지고 숨기면 비워진다', (tester) async {
+    var hidden = false;
+    await tester.pumpWidget(
+      _host(
+        StatefulBuilder(
+          builder: (context, setState) => MapControls(
+            onZoomIn: _noop,
+            onZoomOut: _noop,
+            onRecenter: _noop,
+            onSpotMode: _noop,
+            onToggleFootprints: () => setState(() => hidden = !hidden),
+            footprintsHidden: hidden,
+          ),
+        ),
+      ),
+    );
+    expect(find.byIcon(Icons.edit_location_alt), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.edit_location_alt));
+    await tester.pump();
+    expect(find.byIcon(Icons.edit_location_alt_outlined), findsOneWidget);
   });
 }
