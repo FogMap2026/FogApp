@@ -21,9 +21,8 @@ import 'spot_marker_controller.dart';
 /// 끊어 준다.
 ///
 /// 위치가 갱신될 때마다 다시 조회하면 걷는 내내 요청이 쏟아지므로 [_minMoveMeters] 이상 움직였을
-/// 때만 다시 불러온다. 보이기는 둘이 정한다 — 줌([_minVisibleZoom] 미만이면 숨김)과 사용자 토글
-/// ([setUserVisible], 우측 컨트롤 다섯째 버튼). **숨겨진 동안은 조회하지 않고**, 다시 보이게 되는
-/// 순간 마지막 위치로 한 번 채운다.
+/// 때만 다시 불러온다. 보이기는 사용자 토글([setUserVisible], 우측 컨트롤 다섯째 버튼)이 정한다.
+/// **숨겨진 동안은 조회하지 않고**, 다시 보이게 되는 순간 마지막 위치로 한 번 채운다.
 class FootprintMarkerController {
   FootprintMarkerController(
     this._mapController,
@@ -54,10 +53,6 @@ class FootprintMarkerController {
   /// 글이 생기기 전에 갱신되면서도, 걷는 동안 요청이 15m 마다 나가진 않는다.
   static const _minMoveMeters = 200.0;
 
-  /// 이 줌보다 낮으면(멀리서 보면) 숨긴다. 1km 안 최대 200개라 줌 14(동네)부터는 핀이 서로
-  /// 덮이기 시작한다 — 스팟 마커가 같이 줄어드는 구간이기도 하다.
-  static const _minVisibleZoom = 14.0;
-
   /// 발자취 핀 색 — 스팟의 초록(밝힘)·민트(잠김)·주황(찜) 어느 것과도 겹치지 않는 보라.
   static const tint = Color(0xFF8E6CF0);
 
@@ -67,9 +62,7 @@ class FootprintMarkerController {
   /// 때의 값을 클로저에 가두지 않고 여기서 찾아 쓴다.
   final Map<int, Footprint> _footprintsById = {};
 
-  bool _zoomVisible = true;
-  bool _userVisible = true;
-  bool get _visible => _zoomVisible && _userVisible;
+  bool _visible = true;
   double _scale = 1.0;
   bool _loading = false;
 
@@ -82,42 +75,26 @@ class FootprintMarkerController {
   double? _lastKnownLat;
   double? _lastKnownLng;
 
-  /// 카메라 줌이 바뀔 때마다 호출한다. 크기를 스팟과 같은 배율로 맞추고, 임계 줌을 넘나들면
-  /// 보이기/숨기기를 전환한다.
+  /// 카메라 줌이 바뀔 때마다 호출한다. 크기를 스팟과 같은 배율로 맞춘다 — 줌으로 숨기지는
+  /// 않는다(예전 마름모 때는 17 미만이면 숨겼는데, 핀은 스팟처럼 줄어들면 되고 1km 안 200개는
+  /// 스팟과 같은 밀도다. 시진, 09-15).
   void setZoom(double zoom) {
     final scale = (SpotMarkerController.scaleForZoom(zoom) * 50).round() / 50;
-    if (scale != _scale) {
-      _scale = scale;
-      for (final marker in _markersByFootprintId.values) {
-        marker.setSize(_sizeForScale());
-      }
-    }
-    _setZoomVisible(zoom >= _minVisibleZoom);
-  }
-
-  /// 우측 컨트롤 다섯째 버튼 — 발자취 보이기/숨기기.
-  void setUserVisible(bool visible) {
-    if (_userVisible == visible) return;
-    final was = _visible;
-    _userVisible = visible;
-    _applyVisibility(was);
-  }
-
-  void _setZoomVisible(bool visible) {
-    if (_zoomVisible == visible) return;
-    final was = _visible;
-    _zoomVisible = visible;
-    _applyVisibility(was);
-  }
-
-  /// 실제 보이기가 바뀌었을 때만 마커를 건드리고, 다시 보이게 되면 마지막 위치로 한 번 채운다.
-  void _applyVisibility(bool was) {
-    final now = _visible;
-    if (was == now) return;
+    if (scale == _scale) return;
+    _scale = scale;
     for (final marker in _markersByFootprintId.values) {
-      marker.setIsVisible(now);
+      marker.setSize(_sizeForScale());
     }
-    if (!now) return;
+  }
+
+  /// 우측 컨트롤 다섯째 버튼 — 발자취 보이기/숨기기. 다시 보이게 되면 마지막 위치로 한 번 채운다.
+  void setUserVisible(bool visible) {
+    if (_visible == visible) return;
+    _visible = visible;
+    for (final marker in _markersByFootprintId.values) {
+      marker.setIsVisible(visible);
+    }
+    if (!visible) return;
     final lat = _lastKnownLat;
     final lng = _lastKnownLng;
     if (lat == null || lng == null) return;
@@ -125,7 +102,7 @@ class FootprintMarkerController {
   }
 
   /// 새 위치를 반영한다. **숨겨진 동안은 조회하지 않는다** — 받아온 발자취가 곧바로 숨겨져
-  /// 요청만 나갔다(PR #130 리뷰). 다시 보이게 되는 순간은 [_applyVisibility] 가 채운다.
+  /// 요청만 나갔다(PR #130 리뷰). 다시 보이게 되는 순간은 [setUserVisible] 이 채운다.
   Future<void> updatePosition({required double lat, required double lng}) async {
     _lastKnownLat = lat;
     _lastKnownLng = lng;
@@ -258,18 +235,18 @@ class _PinPainter extends CustomPainter {
     final cx = w / 2;
     final cy = r + 1.5; // 테두리 여유
     final tipY = size.height - 1.5;
-    // 꼬리가 머리 원에 접하는 각도 — 원 중심에서 꼬리 끝까지의 거리로 구한다.
+    // 머리(원)와 꼬리(접점 두 개 + 끝점 삼각형)를 합집합으로 — 호 각도를 손으로 맞추다 반이
+    // 잘린 모양이 나왔다(실기기, 09-15). 합집합이면 각도 계산이 필요 없다.
     final d = tipY - cy;
-    final a = acos(r / d);
-    // 접점: 중심에서 아래(+y)로 a 만큼 벌어진 두 점. 오른쪽 접점에서 시작해 원을 위로 돌아
-    // 왼쪽 접점까지 그린 뒤 꼬리 끝으로 닫는다.
-    final start = pi / 2 - a; // 오른쪽 접점 각(화면 좌표, 아래가 +)
-    final sweep = 2 * pi - 2 * a; // 꼬리 쪽 틈(2a)을 뺀 나머지
-    final path = Path()
+    final a = acos(r / d); // 중심에서 본 접점의 벌어진 각(아래 방향 기준)
+    final head = Path()..addOval(Rect.fromCircle(center: Offset(cx, cy), radius: r));
+    final tail = Path()
       ..moveTo(cx, tipY)
-      ..lineTo(cx + r * cos(start), cy + r * sin(start))
-      ..arcTo(Rect.fromCircle(center: Offset(cx, cy), radius: r), start, sweep, false)
+      ..lineTo(cx + r * sin(a), cy + r * cos(a))
+      ..lineTo(cx, cy)
+      ..lineTo(cx - r * sin(a), cy + r * cos(a))
       ..close();
+    final path = Path.combine(PathOperation.union, head, tail);
     canvas.drawShadow(path, const Color(0x66000000), 2, false);
     canvas.drawPath(path, Paint()..color = color);
     canvas.drawPath(
