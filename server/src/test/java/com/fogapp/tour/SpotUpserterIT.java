@@ -75,6 +75,20 @@ class SpotUpserterIT {
     }
 
     @Test
+    void 좌표가_완전히_같은_스팟은_새로_만들지_않는다() {
+        upserter.upsertAll(List.of(item("UP-5", "인천애뜰", 37.4550873442, 126.7060989801)));
+        CollectResult second = upserter.upsertAll(List.of(
+                item("UP-6", "한복사랑 인천시민 놀이마당", 37.4550873442, 126.7060989801)));
+
+        assertThat(second.created()).isZero();
+        assertThat(second.skipped()).isEqualTo(1);
+        assertThat(spotRepository.findByContentId("UP-6")).isEmpty();
+        // 기존 스팟(같은 content_id)의 갱신은 좌표가 같아도 막지 않는다.
+        CollectResult update = upserter.upsertAll(List.of(item("UP-5", "인천애뜰 광장", 37.4550873442, 126.7060989801)));
+        assertThat(update.updated()).isEqualTo(1);
+    }
+
+    @Test
     void contentId나_title이_비면_스킵한다() {
         CollectResult result = upserter.upsertAll(List.of(
                 item(null, "아이디없음", 37.0, 127.0),
