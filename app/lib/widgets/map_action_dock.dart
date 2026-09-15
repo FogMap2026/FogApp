@@ -12,13 +12,18 @@ import 'map_pin.dart';
 /// 같은 모양으로 두면 눌러 본 뒤에도 켠 건지 끈 건지 모른다.
 class MapMenuEntry {
   const MapMenuEntry({
-    required this.icon,
+    this.icon,
+    this.iconBuilder,
     required this.label,
     required this.onTap,
     this.active,
-  });
+  }) : assert((icon == null) != (iconBuilder == null), 'icon 과 iconBuilder 중 하나만');
 
-  final IconData icon;
+  /// Material 아이콘. 없으면 [iconBuilder] 로 그린다.
+  final IconData? icon;
+
+  /// 직접 그린 아이콘(예: [HumanFootprint]) — 글자색을 받아 18px 상자에 그린다.
+  final Widget Function(Color color)? iconBuilder;
   final String label;
 
   /// null 이면 비활성(아직 준비 안 됨).
@@ -304,7 +309,12 @@ class _MenuChip extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(entry.icon, size: 18, color: foreground),
+                SizedBox.square(
+                  dimension: 18,
+                  child: entry.icon != null
+                      ? Icon(entry.icon, size: 18, color: foreground)
+                      : entry.iconBuilder!(foreground),
+                ),
                 const SizedBox(width: 6),
                 Text(
                   entry.label,

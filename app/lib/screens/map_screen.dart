@@ -41,6 +41,7 @@ import '../widgets/conquest_pill.dart';
 import '../widgets/footprint_card.dart';
 import '../widgets/footprint_region_taken_dialog.dart';
 import '../widgets/map_action_dock.dart';
+import '../widgets/map_pin.dart';
 import '../widgets/map_compass_button.dart';
 import '../widgets/map_top_bar.dart';
 import 'footprint_nearby_create_screen.dart';
@@ -262,9 +263,10 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   /// 늘어난 것"이라 접어서 해결한다.
   bool _actionsExpanded = false;
 
-  /// ☰ 메뉴의 「다른 사람 발자취」 토글. 켜짐이 기본 — 걷다 보면 남의 글귀를 만나는 것이
-  /// 이 앱의 재미라서, 끄는 것은 «지금은 내 지도만 보고 싶다»는 선택이다.
-  bool _footprintsVisible = true;
+  /// ☰ 메뉴의 「발자취 숨기기」 토글. 보이는 게 기본 — 걷다 보면 남의 글귀를 만나는 것이
+  /// 이 앱의 재미라서, 숨기는 것은 «지금은 내 지도만 보고 싶다»는 선택이다. 「스팟 숨기기」와
+  /// 같은 꼴(끄는 토글)로 맞춘다(시진, 09-15) — 하나는 «보기» 하나는 «숨기기»면 켜진 뜻이 엇갈린다.
+  bool _footprintsHidden = false;
 
   /// 지도 방위(도). **`setState` 로 들고 있지 않다** — 지도를 돌리는 동안 카메라 이벤트가
   /// 프레임마다 오는데, 그때마다 이 화면 전체를 다시 그리면 오버레이·마커까지 재빌드된다.
@@ -741,11 +743,11 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     }
   }
 
-  /// ☰ 메뉴의 「다른 사람 발자취」 토글. 마커를 숨기고 조회도 멈춘다
+  /// ☰ 메뉴의 「발자취 숨기기」 토글. 마커를 숨기고 조회도 멈춘다
   /// ([FootprintMarkerController.setUserVisible]).
-  void _toggleFootprintsVisible() {
-    setState(() => _footprintsVisible = !_footprintsVisible);
-    _footprintMarkers?.setUserVisible(_footprintsVisible);
+  void _toggleFootprintsHidden() {
+    setState(() => _footprintsHidden = !_footprintsHidden);
+    _footprintMarkers?.setUserVisible(!_footprintsHidden);
   }
 
   void _loadSpotsAt(NLatLng center) {
@@ -1388,10 +1390,11 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
           onTap: _mapReady ? _toggleSpotsHidden : null,
         ),
         MapMenuEntry(
-          icon: Icons.directions_walk,
-          label: '다른 사람 발자취',
-          active: _footprintsVisible,
-          onTap: _footprintMarkers == null ? null : _toggleFootprintsVisible,
+          // 지도의 발자취 핀과 같은 발에 대각선 — 「스팟 숨기기」(location_off)와 한 짝.
+          iconBuilder: (color) => HumanFootprint(color: color, slashed: true),
+          label: '발자취 숨기기',
+          active: _footprintsHidden,
+          onTap: _footprintMarkers == null ? null : _toggleFootprintsHidden,
         ),
         MapMenuEntry(
           icon: Icons.people_outline,

@@ -68,7 +68,7 @@ void main() {
           menuOpen: true,
           entries: [
             MapMenuEntry(icon: Icons.travel_explore, label: '멀리 있는 스팟 보기', onTap: () {}),
-            MapMenuEntry(icon: Icons.directions_walk, label: '다른 사람 발자취', onTap: () {}),
+            MapMenuEntry(icon: Icons.directions_walk, label: '발자취 숨기기', onTap: () {}),
             MapMenuEntry(icon: Icons.settings_outlined, label: '설정', onTap: () {}),
           ],
         ),
@@ -107,7 +107,7 @@ void main() {
           entries: [
             MapMenuEntry(
               icon: Icons.directions_walk,
-              label: '다른 사람 발자취',
+              label: '발자취 숨기기',
               active: true,
               onTap: () {},
             ),
