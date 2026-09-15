@@ -5,6 +5,7 @@ import '../models/footprint.dart';
 import '../models/personality.dart';
 import '../models/profile.dart';
 import '../services/footprint_service.dart';
+import '../services/conquest_service.dart';
 import '../services/profile_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/footprint_card.dart';
@@ -185,17 +186,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 const SizedBox(height: 16),
                 // 탐험 현황(#51)은 프로필 안에서 들어간다(시진, 09-15) — 지도 위 탐험률 숫자는
                 // 보기만 하는 표시고, 「내가 어디까지 밝혔나」는 내 이야기라 프로필이 맞다.
-                Card(
-                  clipBehavior: Clip.antiAlias,
-                  margin: EdgeInsets.zero,
-                  child: ListTile(
-                    leading: const Icon(Icons.map_outlined),
-                    title: const Text('탐험 현황'),
-                    subtitle: const Text('시/도별 배지와 밝힌 스팟'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const ConquestScreen()),
-                    ),
+                _ConquestEntry(
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const ConquestScreen()),
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -439,6 +432,67 @@ class _PersonalitySection extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// 「탐험 현황 · 12%」 — 전국 탐험률(밝힌 스팟 / 전체 스팟)을 제목 옆에 적는다(시진, 09-15).
+/// 숫자는 탐험 현황 화면과 같은 계산이라 들어가면 같은 값이 크게 보인다. 못 받으면 숫자만 뺀다.
+class _ConquestEntry extends ConsumerStatefulWidget {
+  const _ConquestEntry({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  ConsumerState<_ConquestEntry> createState() => _ConquestEntryState();
+}
+
+class _ConquestEntryState extends ConsumerState<_ConquestEntry> {
+  late final Future<int?> _percent = _loadPercent();
+
+  Future<int?> _loadPercent() async {
+    try {
+      final regions = await ref.read(conquestServiceProvider).myConquest();
+      final total = regions.fold<int>(0, (sum, r) => sum + r.totalSpots);
+      final visited = regions.fold<int>(0, (sum, r) => sum + r.visitedSpots);
+      return total == 0 ? 0 : (visited / total * 100).round();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      margin: EdgeInsets.zero,
+      child: ListTile(
+        leading: const Icon(Icons.map_outlined),
+        title: FutureBuilder<int?>(
+          future: _percent,
+          builder: (context, snapshot) {
+            final percent = snapshot.data;
+            return Row(
+              children: [
+                const Text('탐험 현황'),
+                if (percent != null) ...[
+                  const SizedBox(width: 8),
+                  Text(
+                    '$percent%',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ],
+            );
+          },
+        ),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: widget.onTap,
       ),
     );
   }
