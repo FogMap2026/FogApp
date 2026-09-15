@@ -51,8 +51,33 @@ void main() {
     expect(find.byIcon(Icons.remove), findsOneWidget);
     expect(find.byIcon(Icons.my_location), findsOneWidget);
     expect(find.byIcon(Icons.location_on_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.visibility_outlined), findsOneWidget);
     // 폭을 고정했으므로 버튼이 넘치지 않는지 함께 본다.
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('스팟을 숨기면 눈 감은 아이콘으로 바뀌고 다시 누르면 돌아온다', (tester) async {
+    var hidden = false;
+    await tester.pumpWidget(
+      _host(
+        StatefulBuilder(
+          builder: (context, setState) => MapControls(
+            onZoomIn: _noop,
+            onZoomOut: _noop,
+            onRecenter: _noop,
+            onSearchHere: _noop,
+            onToggleSpots: () => setState(() => hidden = !hidden),
+            spotsHidden: hidden,
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byIcon(Icons.visibility_outlined));
+    await tester.pump();
+    expect(find.byIcon(Icons.visibility_off), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.visibility_off));
+    await tester.pump();
+    expect(find.byIcon(Icons.visibility_outlined), findsOneWidget);
   });
 
   testWidgets('내 위치를 모르면 그 버튼만 비활성', (tester) async {

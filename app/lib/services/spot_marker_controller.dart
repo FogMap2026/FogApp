@@ -251,6 +251,18 @@ class SpotMarkerController {
     return out;
   }
 
+  /// 마커 전부를 감추거나 보인다 — 「스팟 숨기기」 토글. 조회·동기화는 그대로 돌고 그리기만
+  /// 끈다: 새로 만드는 마커도 이 값을 따른다([_toMarker]).
+  void setVisible(bool visible) {
+    if (_visible == visible) return;
+    _visible = visible;
+    for (final marker in _markersBySpotId.values) {
+      marker.setIsVisible(visible);
+    }
+  }
+
+  bool _visible = true;
+
   NMarker _toMarker(Spot spot, {required bool favorite, required NLatLng position}) {
     final marker = NMarker(
       id: 'spot-${spot.id}',
@@ -268,6 +280,7 @@ class SpotMarkerController {
     if (onTapped != null) {
       marker.setOnTapListener((_) => onTapped(spot));
     }
+    if (!_visible) marker.setIsVisible(false);
     return marker;
   }
 
