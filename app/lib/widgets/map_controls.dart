@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'map_pin.dart';
+
 /// 지도 우측 상단 컨트롤(내 위치·스팟 보기 방식·발자취). 세로로 쌓인 아이콘 버튼 한 줄이다.
 ///
 /// 확대/축소 버튼은 뺐다(시진, 09-15) — 핀치로 되는 일이고, 「내 위치로」가 반경 3km 로 기준 배율을
@@ -100,11 +102,24 @@ class MapControls extends StatelessWidget {
               color: spotMode == SpotViewMode.nearby ? null : Theme.of(context).colorScheme.primary,
             ),
             const Divider(height: 1),
-            _button(
-              icon: footprintsHidden ? Icons.edit_location_alt_outlined : Icons.edit_location_alt,
+            // 발자취 버튼 — 지도 핀과 같은 발자국 그림(시진, 09-15). 보일 때는 강조색(켜짐), 숨기면 옅게.
+            IconButton(
               onPressed: onToggleFootprints,
+              icon: SizedBox(
+                width: _iconSize,
+                height: _iconSize,
+                child: HumanFootprint(
+                  color: onToggleFootprints == null
+                      ? Theme.of(context).disabledColor
+                      : footprintsHidden
+                          ? Theme.of(context).colorScheme.onSurfaceVariant
+                          : Theme.of(context).colorScheme.primary,
+                ),
+              ),
               tooltip: footprintsHidden ? '발자취 보이기' : '발자취 숨기기',
-              color: footprintsHidden ? null : Theme.of(context).colorScheme.primary,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: _buttonSize, height: _buttonSize),
+              visualDensity: VisualDensity.compact,
             ),
           ],
         ),

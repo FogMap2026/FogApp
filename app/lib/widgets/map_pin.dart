@@ -93,47 +93,96 @@ class PinDot extends StatelessWidget {
   }
 }
 
-/// 사람 발자국 — 발바닥(길쭉한 타원, 발꿈치 쪽이 좁다) + 발가락 다섯 개. 흰색.
+/// 사람 발자국 — 발바닥 윤곽선(안쪽 아치가 들어간 오른발) + 발가락 다섯 개. 핀 안(흰색)과
+/// 컨트롤 버튼(아이콘색) 양쪽에서 같은 그림을 쓴다(시진, 09-15 참고 이미지).
 class HumanFootprint extends StatelessWidget {
-  const HumanFootprint({super.key});
+  const HumanFootprint({this.color = Colors.white, super.key});
+
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
-    return const CustomPaint(painter: _HumanFootprintPainter());
+    return CustomPaint(painter: _HumanFootprintPainter(color));
   }
 }
 
 class _HumanFootprintPainter extends CustomPainter {
-  const _HumanFootprintPainter();
+  const _HumanFootprintPainter(this.color);
+
+  final Color color;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = Colors.white;
-    final cx = size.width / 2;
     final h = size.height;
-    // 발바닥: 앞볼이 넓고 발꿈치가 좁은 모양 — 위쪽 타원(앞볼)과 아래쪽 작은 타원(발꿈치)을
-    // 잇는 둥근 사다리꼴로 그린다.
+    final cx = size.width / 2;
+    Offset p(double x, double y) => Offset(cx + x * h, y * h);
+    // 발바닥 윤곽 — 앞볼 위를 왼쪽에서 오른쪽으로, 안쪽(오른쪽) 아치를 파고, 발꿈치를 돌아 바깥
+    // (왼쪽)으로 올라온다. 좌표는 높이 기준 비율.
     final sole = Path()
-      ..moveTo(cx - h * 0.17, h * 0.36)
-      ..quadraticBezierTo(cx - h * 0.20, h * 0.60, cx - h * 0.10, h * 0.82)
-      ..quadraticBezierTo(cx, h * 0.92, cx + h * 0.10, h * 0.82)
-      ..quadraticBezierTo(cx + h * 0.20, h * 0.60, cx + h * 0.17, h * 0.36)
-      ..quadraticBezierTo(cx, h * 0.28, cx - h * 0.17, h * 0.36)
+      ..moveTo(p(-0.22, 0.34).dx, p(-0.22, 0.34).dy)
+      ..cubicTo(
+        p(-0.20, 0.18).dx,
+        p(-0.20, 0.18).dy,
+        p(0.26, 0.16).dx,
+        p(0.26, 0.16).dy,
+        p(0.25, 0.40).dx,
+        p(0.25, 0.40).dy,
+      )
+      ..cubicTo(
+        p(0.24, 0.52).dx,
+        p(0.24, 0.52).dy,
+        p(0.06, 0.56).dx,
+        p(0.06, 0.56).dy,
+        p(0.08, 0.66).dx,
+        p(0.08, 0.66).dy,
+      )
+      ..cubicTo(
+        p(0.10, 0.74).dx,
+        p(0.10, 0.74).dy,
+        p(0.18, 0.78).dx,
+        p(0.18, 0.78).dy,
+        p(0.15, 0.88).dx,
+        p(0.15, 0.88).dy,
+      )
+      ..cubicTo(
+        p(0.10, 0.98).dx,
+        p(0.10, 0.98).dy,
+        p(-0.14, 0.98).dx,
+        p(-0.14, 0.98).dy,
+        p(-0.16, 0.84).dx,
+        p(-0.16, 0.84).dy,
+      )
+      ..cubicTo(
+        p(-0.19, 0.70).dx,
+        p(-0.19, 0.70).dy,
+        p(-0.27, 0.50).dx,
+        p(-0.27, 0.50).dy,
+        p(-0.22, 0.34).dx,
+        p(-0.22, 0.34).dy,
+      )
       ..close();
-    canvas.drawPath(sole, paint);
-    // 발가락: 엄지가 크고 새끼로 갈수록 작아지며 살짝 아래로 내려간다.
-    const toes = <(double dx, double dy, double r)>[
-      (-0.13, 0.20, 0.060), // 엄지
-      (-0.04, 0.16, 0.045),
-      (0.04, 0.16, 0.040),
-      (0.11, 0.19, 0.036),
-      (0.17, 0.24, 0.032), // 새끼
+    canvas.drawPath(
+      sole,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = h * 0.08
+        ..strokeJoin = StrokeJoin.round,
+    );
+    // 발가락: 엄지(오른쪽 위)가 크고 새끼로 갈수록 작아지며 아래로 내려간다.
+    final fill = Paint()..color = color;
+    const toes = <(double x, double y, double rx, double ry)>[
+      (0.20, 0.10, 0.055, 0.07),
+      (0.06, 0.07, 0.045, 0.055),
+      (-0.06, 0.10, 0.040, 0.050),
+      (-0.15, 0.16, 0.035, 0.045),
+      (-0.23, 0.24, 0.030, 0.040),
     ];
-    for (final (dx, dy, r) in toes) {
-      canvas.drawCircle(Offset(cx + h * dx, h * dy), h * r, paint);
+    for (final (x, y, rx, ry) in toes) {
+      canvas.drawOval(Rect.fromCenter(center: p(x, y), width: 2 * rx * h, height: 2 * ry * h), fill);
     }
   }
 
   @override
-  bool shouldRepaint(_HumanFootprintPainter old) => false;
+  bool shouldRepaint(_HumanFootprintPainter old) => old.color != color;
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fogapp/widgets/map_controls.dart';
+import 'package:fogapp/widgets/map_pin.dart';
 
 /// 지도 우하단 컨트롤의 **폭**을 지킨다.
 ///
@@ -49,7 +50,7 @@ void main() {
 
     expect(find.byIcon(Icons.my_location), findsOneWidget);
     expect(find.byIcon(Icons.location_on_outlined), findsOneWidget);
-    expect(find.byIcon(Icons.edit_location_alt), findsOneWidget);
+    expect(find.byType(HumanFootprint), findsOneWidget);
     // 폭을 고정했으므로 버튼이 넘치지 않는지 함께 본다.
     expect(tester.takeException(), isNull);
   });
@@ -136,7 +137,7 @@ void main() {
     );
   });
 
-  testWidgets('발자취 버튼은 보일 때 채워지고 숨기면 비워진다', (tester) async {
+  testWidgets('발자취 버튼은 발자국 그림이고, 누르면 토글된다', (tester) async {
     var hidden = false;
     await tester.pumpWidget(
       _host(
@@ -150,9 +151,11 @@ void main() {
         ),
       ),
     );
-    expect(find.byIcon(Icons.edit_location_alt), findsOneWidget);
-    await tester.tap(find.byIcon(Icons.edit_location_alt));
+    final before = tester.widget<HumanFootprint>(find.byType(HumanFootprint)).color;
+    await tester.tap(find.byType(HumanFootprint));
     await tester.pump();
-    expect(find.byIcon(Icons.edit_location_alt_outlined), findsOneWidget);
+    final after = tester.widget<HumanFootprint>(find.byType(HumanFootprint)).color;
+    expect(hidden, isTrue);
+    expect(after, isNot(before)); // 켜짐(강조색) ↔ 숨김(옅은 색)
   });
 }
