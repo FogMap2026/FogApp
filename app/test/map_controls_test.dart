@@ -20,7 +20,7 @@ Widget _host(Widget child) {
 }
 
 MapControls _controls({VoidCallback? onRecenter = _noop}) {
-  return MapControls(onZoomIn: _noop, onZoomOut: _noop, onRecenter: onRecenter, onSearchHere: _noop);
+  return MapControls(onZoomIn: _noop, onZoomOut: _noop, onRecenter: onRecenter, onSpotMode: _noop);
 }
 
 void _noop() {}
@@ -51,13 +51,12 @@ void main() {
     expect(find.byIcon(Icons.remove), findsOneWidget);
     expect(find.byIcon(Icons.my_location), findsOneWidget);
     expect(find.byIcon(Icons.location_on_outlined), findsOneWidget);
-    expect(find.byIcon(Icons.visibility_outlined), findsOneWidget);
     // 폭을 고정했으므로 버튼이 넘치지 않는지 함께 본다.
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('스팟을 숨기면 눈 감은 아이콘으로 바뀌고 다시 누르면 돌아온다', (tester) async {
-    var hidden = false;
+  testWidgets('네 번째 버튼은 내 주변 → 화면 중심 → 숨김 → 내 주변 순으로 돈다', (tester) async {
+    var mode = SpotViewMode.nearby;
     await tester.pumpWidget(
       _host(
         StatefulBuilder(
@@ -65,19 +64,22 @@ void main() {
             onZoomIn: _noop,
             onZoomOut: _noop,
             onRecenter: _noop,
-            onSearchHere: _noop,
-            onToggleSpots: () => setState(() => hidden = !hidden),
-            spotsHidden: hidden,
+            onSpotMode: () => setState(() => mode = mode.next),
+            spotMode: mode,
           ),
         ),
       ),
     );
-    await tester.tap(find.byIcon(Icons.visibility_outlined));
+    expect(find.byIcon(Icons.location_on_outlined), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.location_on_outlined));
     await tester.pump();
-    expect(find.byIcon(Icons.visibility_off), findsOneWidget);
-    await tester.tap(find.byIcon(Icons.visibility_off));
+    expect(find.byIcon(Icons.location_on), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.location_on));
     await tester.pump();
-    expect(find.byIcon(Icons.visibility_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.location_off), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.location_off));
+    await tester.pump();
+    expect(find.byIcon(Icons.location_on_outlined), findsOneWidget);
   });
 
   testWidgets('내 위치를 모르면 그 버튼만 비활성', (tester) async {

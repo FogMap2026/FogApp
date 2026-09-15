@@ -614,12 +614,27 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   /// 스팟은 평소 내 위치 주변만 불러오므로, 지도를 멀리 밀어 「거기엔 뭐가 있나」를
   /// 볼 길이 이것이다. 한 번 누를 때 한 번만 불러오는 방식도 써봤는데, 지도를 조금
   /// 옮길 때마다 다시 눌러야 해서 토글로 바꿨다(시진, 09-14).
-  /// 「스팟 숨기기」 — 마커만 감춘다. 근접 카드·안개는 그대로다: 스팟이 안 보여도 인증은 된다.
+  /// 네 번째 버튼: 내 주변 → 화면 중심 → 숨김 → 내 주변. 숨김은 마커만 감춘다 — 근접 카드·안개는
+  /// 그대로다: 스팟이 안 보여도 인증은 된다.
+  SpotViewMode get _spotViewMode => _spotsHidden
+      ? SpotViewMode.hidden
+      : _searchHereMode
+          ? SpotViewMode.here
+          : SpotViewMode.nearby;
   bool _spotsHidden = false;
 
-  void _toggleSpotsHidden() {
-    setState(() => _spotsHidden = !_spotsHidden);
-    _spotMarkers?.setVisible(!_spotsHidden);
+  void _cycleSpotViewMode() {
+    switch (_spotViewMode.next) {
+      case SpotViewMode.here:
+        _toggleSearchHere(); // nearby → here
+      case SpotViewMode.hidden:
+        _toggleSearchHere(); // here → nearby 로 되돌린 뒤 숨긴다 — 숨김을 풀면 «내 주변»이 되게.
+        setState(() => _spotsHidden = true);
+        _spotMarkers?.setVisible(false);
+      case SpotViewMode.nearby:
+        setState(() => _spotsHidden = false);
+        _spotMarkers?.setVisible(true);
+    }
   }
 
   void _toggleSearchHere() {
@@ -1349,10 +1364,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                         onZoomIn: () => _zoomBy(1),
                         onZoomOut: () => _zoomBy(-1),
                         onRecenter: _myLat != null ? _recenterToMe : null,
-                        onSearchHere: _mapReady ? _toggleSearchHere : null,
-                        searchHereActive: _searchHereMode,
-                        onToggleSpots: _mapReady ? _toggleSpotsHidden : null,
-                        spotsHidden: _spotsHidden,
+                        onSpotMode: _mapReady ? _cycleSpotViewMode : null,
+                        spotMode: _spotViewMode,
                       ),
                     ),
                   ),

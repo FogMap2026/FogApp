@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// 지도 우측 상단 컨트롤(확대·축소·내 위치·이 지역 스팟·스팟 숨기기). 세로로 쌓인 아이콘 버튼 한 줄이다.
+/// 지도 우측 상단 컨트롤(확대·축소·내 위치·스팟 보기 방식). 세로로 쌓인 아이콘 버튼 한 줄이다.
 ///
 /// **폭을 [_width] 로 고정한다.** 안 그러면 화면 전체를 덮는다 —
 /// [Divider] 는 고유 폭이 없어 주어진 최대 폭까지 늘어나고, `Column` 의
@@ -12,16 +12,30 @@ import 'package:flutter/material.dart';
 /// 지금은 상단 정보 바 아래 우측에 놓여 좌하단 버튼과 아예 만나지 않지만,
 /// **폭 고정은 그대로 둔다** — 배치가 다시 바뀌어도 같은 사고가 나지 않게 하는
 /// 것이 이 값의 목적이고, `map_controls_test.dart` 가 그걸 지킨다.
+/// 스팟 보기 방식 — 네 번째 버튼이 이 순서로 돈다(시진, 09-15). 버튼을 하나 더 두지 않은 것은
+/// «스팟을 어떻게 볼까»가 한 자리에서 정해져야 해서다.
+enum SpotViewMode {
+  /// 내 위치 3km — 기본.
+  nearby,
+
+  /// 화면 중심 3km 원 — 지도를 움직일 때마다 따라온다.
+  here,
+
+  /// 마커 전부 숨김 — 안개가 어디까지 걷혔는지만 보고 싶을 때, 도심에서 지도를 읽고 싶을 때.
+  /// 조회·근접 카드·인증은 그대로 돈다.
+  hidden;
+
+  SpotViewMode get next => SpotViewMode.values[(index + 1) % SpotViewMode.values.length];
+}
+
 class MapControls extends StatelessWidget {
   const MapControls({
     super.key,
     required this.onZoomIn,
     required this.onZoomOut,
     required this.onRecenter,
-    required this.onSearchHere,
-    this.searchHereActive = false,
-    this.onToggleSpots,
-    this.spotsHidden = false,
+    required this.onSpotMode,
+    this.spotMode = SpotViewMode.nearby,
   });
 
   /// 패널 폭. 아이콘(20) + 좌우 여백이 들어가는 최소치다.
@@ -31,7 +45,7 @@ class MapControls extends StatelessWidget {
   /// 무리가 없는 선이면서 지도 시야를 덜 먹는다.
   static const double _width = 40;
 
-  /// 버튼 하나의 높이. 정사각형으로 두어 다섯 개가 40×200 한 덩어리가 된다.
+  /// 버튼 하나의 높이. 정사각형으로 두어 네 개가 40×160 한 덩어리가 된다.
   static const double _buttonSize = 40;
 
   /// 기본값(24)보다 작게 — 패널이 작아진 만큼 아이콘도 같이 줄여야 답답해 보이지 않는다.
@@ -43,21 +57,12 @@ class MapControls extends StatelessWidget {
   /// 아직 내 위치를 모르면 null — 버튼이 비활성화된다.
   final VoidCallback? onRecenter;
 
-  /// 「이 지역 스팟 보기」 토글 — 스팟은 평소 내 위치 주변만 불러오는데, 켜면 화면
-  /// 중심 주변을 불러오고 지도를 움직일 때마다 따라온다. 지도가 아직 준비 전이면 null.
-  final VoidCallback? onSearchHere;
+  /// 스팟 보기 방식 버튼 — 누를 때마다 [SpotViewMode] 순서로 돈다. 지도가 아직 준비 전이면 null.
+  final VoidCallback? onSpotMode;
 
-  /// 토글이 켜져 있는지. 켜지면 아이콘을 채우고 강조색으로 그려 «지금 화면 기준»임을
-  /// 알린다 — 안 그러면 내 주변 스팟이 왜 안 뜨는지 모른다.
-  final bool searchHereActive;
-
-  /// 「스팟 숨기기」 토글 — 마커를 전부 감춘다. 안개가 어디까지 걷혔는지만 보고 싶을 때, 마커가
-  /// 빽빽한 도심에서 지도를 읽고 싶을 때(시진, 09-15). 조회는 그대로 돈다 — 다시 켜면 바로 뜬다.
-  final VoidCallback? onToggleSpots;
-
-  /// 숨긴 상태인지. 숨기면 눈 감은 아이콘을 강조색으로 그려 «지금 안 보이는 건 내가 껐기 때문»임을
-  /// 알린다 — 안 그러면 스팟이 왜 안 뜨는지 모른다(searchHereActive 와 같은 원칙).
-  final bool spotsHidden;
+  /// 지금 방식. 기본(내 주변)이 아니면 아이콘을 강조색으로 그려 «지금 스팟이 이렇게 보이는 건
+  /// 내가 바꿨기 때문»임을 알린다 — 안 그러면 내 주변 스팟이 왜 안 뜨는지 모른다.
+  final SpotViewMode spotMode;
 
   @override
   Widget build(BuildContext context) {
@@ -77,17 +82,18 @@ class MapControls extends StatelessWidget {
             _button(icon: Icons.my_location, onPressed: onRecenter, tooltip: '내 위치로'),
             const Divider(height: 1),
             _button(
-              icon: searchHereActive ? Icons.location_on : Icons.location_on_outlined,
-              onPressed: onSearchHere,
-              tooltip: searchHereActive ? '내 위치 기준으로' : '이 지역 스팟 보기',
-              color: searchHereActive ? Theme.of(context).colorScheme.primary : null,
-            ),
-            const Divider(height: 1),
-            _button(
-              icon: spotsHidden ? Icons.visibility_off : Icons.visibility_outlined,
-              onPressed: onToggleSpots,
-              tooltip: spotsHidden ? '스팟 보이기' : '스팟 숨기기',
-              color: spotsHidden ? Theme.of(context).colorScheme.primary : null,
+              icon: switch (spotMode) {
+                SpotViewMode.nearby => Icons.location_on_outlined,
+                SpotViewMode.here => Icons.location_on,
+                SpotViewMode.hidden => Icons.location_off,
+              },
+              onPressed: onSpotMode,
+              tooltip: switch (spotMode) {
+                SpotViewMode.nearby => '이 지역 스팟 보기',
+                SpotViewMode.here => '스팟 숨기기',
+                SpotViewMode.hidden => '내 주변 스팟 보기',
+              },
+              color: spotMode == SpotViewMode.nearby ? null : Theme.of(context).colorScheme.primary,
             ),
           ],
         ),
