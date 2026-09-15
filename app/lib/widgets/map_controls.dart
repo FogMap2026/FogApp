@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
-/// 지도 우측 상단 컨트롤(확대·축소·내 위치·스팟 보기 방식·발자취). 세로로 쌓인 아이콘 버튼 한 줄이다.
+/// 지도 우측 상단 컨트롤(내 위치·스팟 보기 방식·발자취). 세로로 쌓인 아이콘 버튼 한 줄이다.
+///
+/// 확대/축소 버튼은 뺐다(시진, 09-15) — 핀치로 되는 일이고, 「내 위치로」가 반경 3km 로 기준 배율을
+/// 잡아 준다.
 ///
 /// **폭을 [_width] 로 고정한다.** 안 그러면 화면 전체를 덮는다 —
 /// [Divider] 는 고유 폭이 없어 주어진 최대 폭까지 늘어나고, `Column` 의
@@ -31,8 +34,6 @@ enum SpotViewMode {
 class MapControls extends StatelessWidget {
   const MapControls({
     super.key,
-    required this.onZoomIn,
-    required this.onZoomOut,
     required this.onRecenter,
     required this.onSpotMode,
     this.spotMode = SpotViewMode.nearby,
@@ -47,16 +48,15 @@ class MapControls extends StatelessWidget {
   /// 무리가 없는 선이면서 지도 시야를 덜 먹는다.
   static const double _width = 40;
 
-  /// 버튼 하나의 높이. 정사각형으로 두어 다섯 개가 40×200 한 덩어리가 된다.
+  /// 버튼 하나의 높이. 정사각형으로 두어 세 개가 40×120 한 덩어리가 된다.
   static const double _buttonSize = 40;
 
   /// 기본값(24)보다 작게 — 패널이 작아진 만큼 아이콘도 같이 줄여야 답답해 보이지 않는다.
   static const double _iconSize = 20;
 
-  final VoidCallback onZoomIn;
-  final VoidCallback onZoomOut;
+  /// 아직 내 위치를 모르면 null — 버튼이 비활성화된다. 누르면 내 위치를 가운데 두고 반경 3km 가
+  /// 들어오는 배율로 맞춘다.
 
-  /// 아직 내 위치를 모르면 null — 버튼이 비활성화된다.
   final VoidCallback? onRecenter;
 
   /// 스팟 보기 방식 버튼 — 누를 때마다 [SpotViewMode] 순서로 돈다. 지도가 아직 준비 전이면 null.
@@ -83,10 +83,6 @@ class MapControls extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _button(icon: Icons.add, onPressed: onZoomIn, tooltip: '확대'),
-            const Divider(height: 1),
-            _button(icon: Icons.remove, onPressed: onZoomOut, tooltip: '축소'),
-            const Divider(height: 1),
             _button(icon: Icons.my_location, onPressed: onRecenter, tooltip: '내 위치로'),
             const Divider(height: 1),
             _button(

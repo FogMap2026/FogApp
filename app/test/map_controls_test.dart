@@ -20,7 +20,7 @@ Widget _host(Widget child) {
 }
 
 MapControls _controls({VoidCallback? onRecenter = _noop}) {
-  return MapControls(onZoomIn: _noop, onZoomOut: _noop, onRecenter: onRecenter, onSpotMode: _noop);
+  return MapControls(onRecenter: onRecenter, onSpotMode: _noop);
 }
 
 void _noop() {}
@@ -44,11 +44,9 @@ void main() {
     expect(width, 40);
   });
 
-  testWidgets('세 버튼이 다 있고 잘리지 않는다', (tester) async {
+  testWidgets('버튼이 다 있고 잘리지 않는다', (tester) async {
     await tester.pumpWidget(_host(_controls()));
 
-    expect(find.byIcon(Icons.add), findsOneWidget);
-    expect(find.byIcon(Icons.remove), findsOneWidget);
     expect(find.byIcon(Icons.my_location), findsOneWidget);
     expect(find.byIcon(Icons.location_on_outlined), findsOneWidget);
     expect(find.byIcon(Icons.edit_location_alt), findsOneWidget);
@@ -62,8 +60,6 @@ void main() {
       _host(
         StatefulBuilder(
           builder: (context, setState) => MapControls(
-            onZoomIn: _noop,
-            onZoomOut: _noop,
             onRecenter: _noop,
             onSpotMode: () => setState(() => mode = mode.next),
             spotMode: mode,
@@ -93,7 +89,7 @@ void main() {
     }
 
     expect(buttonFor(Icons.my_location).onPressed, isNull);
-    expect(buttonFor(Icons.add).onPressed, isNotNull);
+    expect(buttonFor(Icons.location_on_outlined).onPressed, isNotNull);
   });
 
   testWidgets('좌하단 버튼을 덮지 않는다', (tester) async {
@@ -146,8 +142,6 @@ void main() {
       _host(
         StatefulBuilder(
           builder: (context, setState) => MapControls(
-            onZoomIn: _noop,
-            onZoomOut: _noop,
             onRecenter: _noop,
             onSpotMode: _noop,
             onToggleFootprints: () => setState(() => hidden = !hidden),

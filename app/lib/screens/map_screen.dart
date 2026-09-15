@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
@@ -473,7 +474,27 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     final lat = _myLat;
     final lng = _myLng;
     if (lat == null || lng == null) return;
-    _moveToMyLocation(lat, lng);
+    _fitAroundMe(lat, lng);
+  }
+
+  /// 「내 위치로」 버튼이 보여주는 범위 — 스팟 조회 반경과 같다. 버튼 하나로 «내 주변 스팟이
+  /// 다 보이는» 화면이 되게(시진, 09-15). 확대/축소 버튼은 뺐다 — 핀치로 되는 일이고, 이 버튼이
+  /// 기준 배율을 잡아 준다.
+  static const _recenterRadiusMeters = SpotMarkerController.radiusMeters;
+
+  /// 내 위치를 가운데 두고 반경 [_recenterRadiusMeters] 가 화면에 들어오게 맞춘다. 줌 값을 박지
+  /// 않고 경계로 맞추는 이유: 화면 폭·밀도마다 같은 줌이 다른 거리를 보여준다.
+  void _fitAroundMe(double lat, double lng) {
+    final controller = _controller;
+    if (controller == null) return;
+    const mPerLat = 111320.0;
+    final dLat = _recenterRadiusMeters / mPerLat;
+    final dLng = _recenterRadiusMeters / (mPerLat * cos(lat * pi / 180));
+    controller.updateCamera(
+      NCameraUpdate.fitBounds(
+        NLatLngBounds(southWest: NLatLng(lat - dLat, lng - dLng), northEast: NLatLng(lat + dLat, lng + dLng)),
+      ),
+    );
   }
 
   /// 내 위치를 볼 때 쓰는 줌. 위도 37.5에서 약 3.8m/px라 100m 떨어진 스팟이 26px쯤
@@ -1223,10 +1244,6 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     }
   }
 
-  void _zoomBy(double delta) {
-    _controller?.updateCamera(NCameraUpdate.zoomBy(delta));
-  }
-
   _LocationIssue? get _locationIssue {
     if (_locationServiceEnabled == false) {
       return _LocationIssue(
@@ -1363,8 +1380,6 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                     child: Align(
                       alignment: Alignment.centerRight,
                       child: MapControls(
-                        onZoomIn: () => _zoomBy(1),
-                        onZoomOut: () => _zoomBy(-1),
                         onRecenter: _myLat != null ? _recenterToMe : null,
                         onSpotMode: _mapReady ? _cycleSpotViewMode : null,
                         spotMode: _spotViewMode,
