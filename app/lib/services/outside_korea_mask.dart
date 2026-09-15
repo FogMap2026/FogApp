@@ -56,18 +56,52 @@ class OutsideKoreaMask {
     for (var i = 0; i < rings.length; i++) {
       final ring = rings[i];
       if (ring.length < 3) continue;
+      final box = _bbox(ring);
+      final centroid = _centroid(ring);
       var nested = false;
       for (var j = 0; j < rings.length && !nested; j++) {
         if (i == j || rings[j].length < 3) continue;
-        // 첫 점 하나로 판정한다 — 시/도 고리는 서로 겹치지 않아 한 점이 안이면 전부 안이다.
-        nested = FogGrid.pointInRing(ring.first, rings[j]);
+        // 🔴 첫 점으로 재면 안 된다 — 이웃 시/도와 «공유하는 경계» 위의 점이라 안팎 판정이 흔들려
+        //    충남·전남 같은 큰 고리가 통째로 빠졌다(실기기, 09-15). 상자가 완전히 안에 들고(이웃끼리는
+        //    나란해서 안 든다) 무게중심이 안일 때만 «안에 든 고리»다.
+        final outer = _bbox(rings[j]);
+        if (!outer.strictlyContains(box)) continue;
+        nested = FogGrid.pointInRing(centroid, rings[j]);
       }
       if (!nested) out.add(ring);
     }
     return out;
   }
 
+  static NLatLng _centroid(List<NLatLng> ring) {
+    var lat = 0.0, lng = 0.0;
+    for (final p in ring) {
+      lat += p.latitude;
+      lng += p.longitude;
+    }
+    return NLatLng(lat / ring.length, lng / ring.length);
+  }
+
+  static _Box _bbox(List<NLatLng> ring) {
+    var minLat = ring.first.latitude, maxLat = minLat, minLng = ring.first.longitude, maxLng = minLng;
+    for (final p in ring) {
+      if (p.latitude < minLat) minLat = p.latitude;
+      if (p.latitude > maxLat) maxLat = p.latitude;
+      if (p.longitude < minLng) minLng = p.longitude;
+      if (p.longitude > maxLng) maxLng = p.longitude;
+    }
+    return _Box(minLat, maxLat, minLng, maxLng);
+  }
+
   void dispose() {
     _mapController.deleteOverlay(_overlay.info);
   }
+}
+
+class _Box {
+  const _Box(this.minLat, this.maxLat, this.minLng, this.maxLng);
+
+  final double minLat, maxLat, minLng, maxLng;
+
+  bool strictlyContains(_Box o) => o.minLat > minLat && o.maxLat < maxLat && o.minLng > minLng && o.maxLng < maxLng;
 }

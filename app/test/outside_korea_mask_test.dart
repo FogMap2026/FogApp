@@ -11,4 +11,12 @@ void main() {
     final out = OutsideKoreaMask.outermostRings([outer, inner, island]);
     expect(out, [outer, island]);
   });
+
+  test('경계를 공유하는 이웃 고리는 둘 다 남는다 — 첫 점이 경계 위라도', () {
+    // 충남·전북처럼 한 변을 공유: 오른쪽 고리의 첫 점이 왼쪽 고리의 변 위에 있다.
+    const west = [NLatLng(0, 0), NLatLng(0, 10), NLatLng(10, 10), NLatLng(10, 0)];
+    const east = [NLatLng(0, 10), NLatLng(0, 20), NLatLng(10, 20), NLatLng(10, 10)];
+    final out = OutsideKoreaMask.outermostRings([west, east]);
+    expect(out, [west, east]);
+  });
 }
