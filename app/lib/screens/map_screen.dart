@@ -625,7 +625,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       case ConquestPillMode.near:
         return '${proximity.spot.title} 근처 · 약 ${distance}m';
       case ConquestPillMode.verifiable:
-        return '${proximity.spot.title} 인증 가능 · 눌러서 스팟 보기';
+        return '${proximity.spot.title} 인증 가능';
     }
   }
 

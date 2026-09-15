@@ -80,14 +80,10 @@ class MapTopBar extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: AppSpacing.xs),
-        // 정복률 배터리 — 알림과 무관하게 늘 정복률만 보인다.
-        ConquestPill(
-          mode: ConquestPillMode.progress,
-          rate: conquestRate,
-          message: null,
-          onTap: onPillTap,
-        ),
+        const SizedBox(height: AppSpacing.xxs),
+        // 정복률 — 알약 없이 숫자만, 프로필 바로 아래(시진, 09-15). 배터리는 자리를 먹고 알림과
+        // 헷갈렸다. 누르면 전국 탐험 현황.
+        _ConquestRateText(rate: conquestRate, onTap: onPillTap, width: _profileSize),
       ],
     );
   }
@@ -166,7 +162,8 @@ class ProximityBanner extends StatelessWidget {
           onTap: onTap,
           customBorder: const StadiumBorder(),
           child: SizedBox(
-            height: ConquestPill.height,
+            // 프로필 버튼과 같은 높이 — 한 줄에 나란히 서는 둘의 키가 같아야 한 식구로 읽힌다.
+            height: MapTopBar._profileSize,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
               child: Row(
@@ -198,6 +195,46 @@ class ProximityBanner extends StatelessWidget {
                   ),
                 ],
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 정복률 숫자 — 「12%」. 지도 위라 흰 테두리(그림자)로 글자를 띄운다.
+class _ConquestRateText extends StatelessWidget {
+  const _ConquestRateText({required this.rate, required this.onTap, required this.width});
+
+  final double? rate;
+  final VoidCallback onTap;
+  final double width;
+
+  @override
+  Widget build(BuildContext context) {
+    final value = rate;
+    final label = value == null ? '--%' : '${(value * 100).round()}%';
+    return Semantics(
+      button: true,
+      label: '이 지역 탐험률 ${value == null ? '알 수 없음' : label}. 눌러서 전국 탐험 현황 보기',
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: SizedBox(
+          width: width,
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: AppColors.ink,
+              height: 1.2,
+              shadows: [
+                Shadow(color: Colors.white, blurRadius: 4),
+                Shadow(color: Colors.white, blurRadius: 8),
+              ],
             ),
           ),
         ),
