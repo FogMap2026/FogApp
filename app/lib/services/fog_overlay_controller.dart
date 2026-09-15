@@ -61,14 +61,19 @@ bool isTrailWorthyAccuracy(double accuracyMeters) => accuracyMeters > 0 && accur
 /// 사각형 대신 실제 국토 외곽선(본토+도서 각각의 폴리곤, [_boundaryAssetPath])으로
 /// 안개를 그리므로 바다나 이웃 나라 위에는 안개가 덮이지 않는다. 네이버 지도의
 /// [NPolygonOverlay]는 좌표 기준(geo-anchored)이라 줌/이동해도 지도와 함께 자연스럽게
-/// 움직인다. 스팟 인증으로 걷어낼 영역은 해당 landmass 폴리곤의 구멍(holes)으로
-/// 표현한다 — Phase 3(#28 스팟 마커 · 안개 걷힘)에서 [clearCircle]을 호출해 채워나가면 된다.
+/// 움직인다. 걷힌 자리는 landmass 폴리곤의 구멍(holes)이다 — 둘이 있다:
+///
+/// - **궤적**([clearTrail]): 걸어온 자리 100m 원. 격자 합집합으로 굽는다.
+/// - **구역**([setRegionHoles]): 스팟마다 하나인 구역(`FogRegions`) 통째로. 인증한 스팟의
+///   구역과 들어가 본 빈 땅 구역이 여기로 온다.
+///
+/// 둘은 겹치지 않는다 — 폴리곤 구멍은 짝홀이라 겹친 자리가 도로 안개가 되므로, 구역 안에
+/// 든 궤적 셀은 지우고 새 궤적도 구역 안이면 굽지 않는다.
 class FogOverlayController {
   FogOverlayController._(this._mapController, this._landmasses);
 
   final NaverMapController _mapController;
   final List<_Landmass> _landmasses;
-  bool _disposed = false;
 
   /// 안개 색상/투명도. 짙은 청회색 + 85% 불투명도로, 아래 지도가 은은히 비치되 스팟은 가려지도록 한다.
   ///
@@ -86,22 +91,26 @@ class FogOverlayController {
   /// 지도가 준비된 뒤 호출한다. 국경 데이터를 읽어 landmass별 폴리곤 오버레이를
   /// 만들고 한 번에 지도에 추가한다.
   static Future<FogOverlayController> attach(NaverMapController mapController) async {
-    final raw = await rootBundle.loadString(_boundaryAssetPath);
-    // 시/도마다 고리가 여럿(본토 조각 + 섬). 안개는 시/도를 가리지 않으므로 전부 펴서
-    // landmass 하나씩으로 둔다. 좌표는 GeoJSON 순서 [경도, 위도] — 뒤집어 넣는다.
-    final json = jsonDecode(raw) as Map<String, dynamic>;
-    final rings = <List<NLatLng>>[
-      for (final province in json['provinces'] as List)
-        for (final ring in province['rings'] as List)
-          [for (final c in ring as List) NLatLng((c[1] as num).toDouble(), (c[0] as num).toDouble())],
-    ];
-
+    final rings = await loadProvinceRings();
     final landmasses = [
       for (var i = 0; i < rings.length; i++) _Landmass(index: i, outerRing: rings[i], mapController: mapController),
     ];
 
     await mapController.addOverlayAll(landmasses.map((l) => l.overlay).toSet());
     return FogOverlayController._(mapController, landmasses);
+  }
+
+  /// 시/도 경계 고리 전부. 시/도마다 고리가 여럿(본토 조각 + 섬)인데 안개는 시/도를 가리지
+  /// 않으므로 전부 펴서 landmass 하나씩으로 쓴다. 좌표는 GeoJSON 순서 [경도, 위도] — 뒤집는다.
+  /// 안개 구역의 땅/바다 마스크(`LandMask`)도 같은 고리를 쓴다.
+  static Future<List<List<NLatLng>>> loadProvinceRings() async {
+    final raw = await rootBundle.loadString(_boundaryAssetPath);
+    final json = jsonDecode(raw) as Map<String, dynamic>;
+    return [
+      for (final province in json['provinces'] as List)
+        for (final ring in province['rings'] as List)
+          [for (final c in ring as List) NLatLng((c[1] as num).toDouble(), (c[0] as num).toDouble())],
+    ];
   }
 
   /// 궤적 점을 «같은 자리»로 묶는 격자 크기. 위치 스트림의 `distanceFilter`(15m)와
@@ -120,13 +129,9 @@ class FogOverlayController {
   /// 도로 안개가 된다.
   static const trailRadiusMeters = 100.0;
 
-  /// 방문 인증한 스팟 둘레를 걷어낼 반경. 인증은 스팟 100m 안에서만 되니 이 원은
-  /// 「그 동네를 밝혔다」는 보상이다 — 150m 는 스팟 마당만 보여 500m 로(시진, 09-15).
-  static const spotRadiusMeters = 500.0;
-
   /// 걸어온 자리의 안개를 걷어낸다.
   ///
-  /// **인증([spotRadiusMeters])과 다른 축이다.** 이건 「지나간 자리」 표시일 뿐이고 **정복률에는
+  /// **인증(구역, [setRegionHoles])과 다른 축이다.** 이건 「지나간 자리」 표시일 뿐이고 **정복률에는
   /// 영향이 없다** — 정복률은 서버가 `visits` 로 계산한다(`GET /api/conquest`).
   /// 걸어서 걷힌 안개가 정복으로 세어지면 사진 인증을 할 이유가 없어진다.
   ///
@@ -153,8 +158,8 @@ class FogOverlayController {
   /// 궤적으로 안개를 복원할 때 쓴다.
   ///
   /// [clearTrail] 을 점 수만큼 반복하면 호출마다 landmass 의 구멍 «전체»를 다시
-  /// 지도에 보내므로(`setHoles`) 총 비용이 O(n²) 가 된다 — [clearCircles] 가 스팟에
-  /// 대해 푼 것과 같은 문제다. 여기서는 모아둔 뒤 landmass 하나당 한 번만 반영한다.
+  /// 지도에 보내므로(`setHoles`) 총 비용이 O(n²) 가 된다. 여기서는 모아둔 뒤 landmass
+  /// 하나당 한 번만 반영한다.
   void clearTrails(Iterable<NLatLng> centers, {double radiusMeters = trailRadiusMeters}) {
     final touched = <_Landmass>{};
     for (final center in centers) {
@@ -169,66 +174,24 @@ class FogOverlayController {
     }
   }
 
-  /// [spotId] 위치의 반경 [radiusMeters] 안 안개를 걷어낸다(방문 인증 시 호출 예정).
+  /// 구역 구멍 전체를 다시 준다 — 인증한 스팟의 구역 + 들어가 본 빈 땅 구역(`FogRegions.cell`).
+  /// 구역은 서로 겹치지 않아 짝홀 문제가 없다. 구역 안에 이미 굽힌 궤적 셀은 지운다.
   ///
-  /// [center]를 포함하는 landmass 폴리곤을 찾아 그 폴리곤에만 구멍을 낸다.
-  /// 어떤 landmass에도 속하지 않으면(예: 좌표 오차로 해안선 바로 바깥) 아무 일도 하지 않는다.
-  void clearCircle(String spotId, NLatLng center, {double radiusMeters = spotRadiusMeters}) {
-    final landmass = _landmassFor(center);
-    landmass._addHole(spotId, center, radiusMeters: radiusMeters);
-    landmass._applyHoles();
-  }
-
-  /// [spots]({스팟 id: 좌표}) 전체를 **한 번에** 걷어낸다(#49) — 지도 진입 시 이미
-  /// 인증한 스팟 목록으로 안개 상태를 복원할 때 쓴다.
-  ///
-  /// [clearCircle]을 스팟 수만큼 반복 호출하면 호출마다 해당 landmass의 구멍 전체
-  /// 목록을 다시 지도에 보내므로(`setHoles`), 스팟이 많아질수록(수백 개) 총 비용이
-  /// O(n²)로 늘어난다. 여기서는 구멍을 모두 계산해 landmass별로 모아둔 뒤,
-  /// landmass 하나당 `setHoles`를 **한 번만** 호출해 O(n)으로 끝낸다.
-  void clearCircles(Map<String, NLatLng> spots, {double radiusMeters = spotRadiusMeters}) {
-    final touched = <_Landmass>{};
-    for (final entry in spots.entries) {
-      final landmass = _landmassFor(entry.value);
-      landmass._addHole(entry.key, entry.value, radiusMeters: radiusMeters);
-      touched.add(landmass);
+  /// 매번 전체를 주는 이유: 구역은 많아야 수백 개고, «어느 구역이 걷혔나»는 지도 화면이
+  /// 방문 목록·궤적에서 매번 다시 세는 값이라 여기서 증분을 관리할 이유가 없다.
+  void setRegionHoles(List<List<NLatLng>> rings) {
+    final byLandmass = <_Landmass, List<List<NLatLng>>>{};
+    for (final ring in rings) {
+      if (ring.length < 3) continue;
+      byLandmass.putIfAbsent(_landmassFor(ring.first), () => []).add(ring);
     }
-    for (final landmass in touched) {
-      landmass._applyHoles();
-    }
-  }
-
-  /// 방문 인증 성공 직후 호출한다(#49). 반경을 0에서 [radiusMeters]까지 [steps]단계로
-  /// 넓혀가며 "즉시 사라지지 않고 퍼지듯" 걷히는 연출을 만든다.
-  ///
-  /// 지도를 벗어나는 등 도중에 [dispose]되면 남은 단계를 건너뛴다 — 이미 없어진
-  /// 오버레이에 계속 `setHoles`를 보내지 않기 위함.
-  Future<void> clearCircleAnimated(
-    String spotId,
-    NLatLng center, {
-    double radiusMeters = spotRadiusMeters,
-    Duration duration = const Duration(milliseconds: 600),
-    int steps = 12,
-  }) async {
-    final landmass = _landmassFor(center);
-    final stepDelay = duration ~/ steps;
-    for (var i = 1; i <= steps; i++) {
-      if (_disposed) return;
-      landmass._addHole(spotId, center, radiusMeters: radiusMeters * i / steps);
-      landmass._applyHoles();
-      if (i < steps) await Future.delayed(stepDelay);
-    }
-  }
-
-  /// 다시 안개로 덮는다(주로 테스트/디버그용).
-  void reFog(String spotId) {
     for (final landmass in _landmasses) {
-      landmass.reFog(spotId);
+      landmass._setRegionRings(byLandmass[landmass] ?? const []);
+      landmass._applyHoles();
     }
   }
 
   void dispose() {
-    _disposed = true;
     for (final landmass in _landmasses) {
       _mapController.deleteOverlay(landmass.overlay.info);
       // 섬 폴리곤도 같은 방식으로 지도에 직접 올라가므로 같이 지운다 — 안 지우면 지도
@@ -262,16 +225,38 @@ class _Landmass {
   /// 걷힌 자리 — «격자 셀의 합집합». 셀 키 → 그 셀을 덮는 원의 수(참조 카운트).
   ///
   /// 원마다 구멍을 하나씩 뚫지 않는 이유: 폴리곤은 구멍을 짝홀(even-odd)로 채워서
-  /// **구멍 둘이 겹친 자리는 도로 안개가 된다**(구멍의 구멍). 15m 마다 50m 원을
+  /// **구멍 둘이 겹친 자리는 도로 안개가 된다**(구멍의 구멍). 15m 마다 100m 원을
   /// 뚫으면 거의 전부 겹치므로 길이 통째로 안개가 됐다. 합집합으로 들고 외곽선만
   /// 구멍으로 내면 겹침 자체가 없다.
   final Map<int, int> _cellCount = {};
 
-  /// 지웠다 되돌릴 수 있어야 하는 것(스팟 — 인증 연출 중 반경이 자라고 [reFog] 가
-  /// 있다)만 어느 셀을 덮었는지 기억한다. 궤적은 되돌릴 일이 없어 키만 남긴다 —
-  /// 하루치 궤적 수천 점의 셀 목록을 다 들고 있으면 메모리가 수십 MB 다.
-  final Map<String, List<int>> _spotCells = {};
+  /// 궤적은 되돌릴 일이 없어 키만 남긴다 — 하루치 궤적 수천 점의 셀 목록을 다 들고
+  /// 있으면 메모리가 수십 MB 다.
   final Set<String> _trailKeys = {};
+
+  /// 구역 구멍([FogOverlayController.setRegionHoles])과 그 상자(안팎 판정을 빨리 거르려고).
+  final List<List<NLatLng>> _regionRings = [];
+  final List<_Bbox> _regionBboxes = [];
+
+  bool _insideRegion(NLatLng p) {
+    for (var i = 0; i < _regionRings.length; i++) {
+      if (_regionBboxes[i].contains(p) && FogGrid.pointInRing(p, _regionRings[i])) return true;
+    }
+    return false;
+  }
+
+  void _setRegionRings(List<List<NLatLng>> rings) {
+    _regionRings
+      ..clear()
+      ..addAll(rings);
+    _regionBboxes
+      ..clear()
+      ..addAll(rings.map(_Bbox.of));
+    // 구역 안에 든 궤적 셀은 지운다 — 남겨 두면 그 외곽선이 구역 구멍과 겹쳐 도로 안개가 된다.
+    if (rings.isNotEmpty) {
+      _cellCount.removeWhere((key, _) => _insideRegion(FogGrid.cellCenter(key)));
+    }
+  }
 
   /// 안개 «섬» — 걷힌 띠가 고리를 이루면 그 안쪽은 안개로 남아야 하는데, 폴리곤은
   /// 「구멍 안의 채움」을 표현하지 못한다. 그런 섬은 따로 작은 안개 폴리곤으로 올린다.
@@ -284,37 +269,14 @@ class _Landmass {
     color: FogOverlayController.fogColor,
   );
 
-  bool _hasHole(String key) => _trailKeys.contains(key) || _spotCells.containsKey(key);
+  bool _hasHole(String key) => _trailKeys.contains(key);
 
-  /// 원을 격자에 굽는다(저장만). 같은 [key] 가 있으면 그 원을 먼저 걷어낸다 —
-  /// 인증 연출([FogOverlayController.clearCircleAnimated])이 반경을 키우며 다시 부른다.
+  /// 궤적 원을 격자에 굽는다(저장만). 이미 걷힌 구역 안의 셀은 굽지 않는다.
   void _addHole(String key, NLatLng center, {required double radiusMeters}) {
-    if (key.startsWith('trail:')) {
-      _trailKeys.add(key);
-      for (final cell in FogGrid.cellsInCircle(center, radiusMeters)) {
-        _cellCount.update(cell, (n) => n + 1, ifAbsent: () => 1);
-      }
-      return;
-    }
-    _releaseSpot(key);
-    final cells = FogGrid.cellsInCircle(center, radiusMeters);
-    for (final cell in cells) {
+    _trailKeys.add(key);
+    for (final cell in FogGrid.cellsInCircle(center, radiusMeters)) {
+      if (_regionRings.isNotEmpty && _insideRegion(FogGrid.cellCenter(cell))) continue;
       _cellCount.update(cell, (n) => n + 1, ifAbsent: () => 1);
-    }
-    _spotCells[key] = cells;
-  }
-
-  void _releaseSpot(String key) {
-    final cells = _spotCells.remove(key);
-    if (cells == null) return;
-    for (final cell in cells) {
-      final n = _cellCount[cell];
-      if (n == null) continue;
-      if (n <= 1) {
-        _cellCount.remove(cell);
-      } else {
-        _cellCount[cell] = n - 1;
-      }
     }
   }
 
@@ -324,7 +286,7 @@ class _Landmass {
   /// 받지 못하고, 그 예외는 `void async` 안에서 삼켜져 안개가 «그냥 안 걷힌다».
   void _applyHoles() {
     final outlines = FogGrid.outlines(_cellCount);
-    overlay.setHoles(outlines.holes);
+    overlay.setHoles([...outlines.holes, ..._regionRings]);
     _syncIslands(outlines.islands);
   }
 
@@ -348,12 +310,6 @@ class _Landmass {
       _mapController.deleteOverlay(island.info);
     }
     _islands.clear();
-  }
-
-  void reFog(String spotId) {
-    if (!_spotCells.containsKey(spotId)) return;
-    _releaseSpot(spotId);
-    _applyHoles();
   }
 
   bool _containsPoint(NLatLng point) {
@@ -409,6 +365,24 @@ class FogGrid {
   static int _key(int row, int col) => (row << _colBits) | col;
   static int _row(int key) => key >> _colBits;
   static int _col(int key) => key & _colMask;
+
+  /// 셀 [key] 의 중심 좌표.
+  static NLatLng cellCenter(int key) => NLatLng((_row(key) + 0.5) * _latStep, (_col(key) + 0.5) * _lngStep);
+
+  /// [p] 가 [ring] 안인지(짝홀, 반직선 교차 수).
+  static bool pointInRing(NLatLng p, List<NLatLng> ring) {
+    var inside = false;
+    for (var i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      final a = ring[i];
+      final b = ring[j];
+      if ((a.latitude > p.latitude) != (b.latitude > p.latitude) &&
+          p.longitude <
+              (b.longitude - a.longitude) * (p.latitude - a.latitude) / (b.latitude - a.latitude) + a.longitude) {
+        inside = !inside;
+      }
+    }
+    return inside;
+  }
 
   /// [center] 중심 반경 [radiusMeters] 원이 «중심을 덮는» 셀들.
   static List<int> cellsInCircle(NLatLng center, double radiusMeters) {
@@ -557,4 +531,25 @@ class FogOutlines {
 
   /// 걷힌 띠에 둘러싸여 남은 안개 — 별도 폴리곤(시계).
   final List<List<NLatLng>> islands;
+}
+
+/// 고리의 위경도 상자 — 안팎 판정 전에 싸게 거른다.
+class _Bbox {
+  const _Bbox(this.minLat, this.maxLat, this.minLng, this.maxLng);
+
+  factory _Bbox.of(List<NLatLng> ring) {
+    var minLat = ring.first.latitude, maxLat = minLat, minLng = ring.first.longitude, maxLng = minLng;
+    for (final p in ring) {
+      minLat = min(minLat, p.latitude);
+      maxLat = max(maxLat, p.latitude);
+      minLng = min(minLng, p.longitude);
+      maxLng = max(maxLng, p.longitude);
+    }
+    return _Bbox(minLat, maxLat, minLng, maxLng);
+  }
+
+  final double minLat, maxLat, minLng, maxLng;
+
+  bool contains(NLatLng p) =>
+      p.latitude >= minLat && p.latitude <= maxLat && p.longitude >= minLng && p.longitude <= maxLng;
 }
