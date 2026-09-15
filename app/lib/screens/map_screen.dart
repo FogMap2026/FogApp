@@ -116,6 +116,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
 
   /// 정복률(#51) 조회 결과 전체. 표시할 지역만 골라 쓴다.
   List<ConquestRegion> _conquest = const [];
+
   /// 카메라 중심에서 가장 가까운(=현재 보고 있는) 스팟. 정복률 표시 지역을 고르는 데 쓴다.
   Spot? _nearestLoadedSpot;
 
@@ -163,6 +164,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   /// 마지막으로 받은 내 위치. "내 위치로 이동" 버튼(#64)과 인증 화면 진입(#47)에 쓴다.
   double? _myLat;
   double? _myLng;
+
   /// 마지막 측위의 정확도(m). 위치공유(#133) 게시 전에 [isTrailWorthyAccuracy]로
   /// 거른다 — 3km 반경에서 최근접 스팟을 고르므로 오차 수백 m 면 다른 스팟이
   /// 잡힌다. 콜드 스타트 직후가 특히 그렇다(oorony, PR #201 리뷰).
@@ -170,9 +172,11 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
 
   /// 이미 인증한 스팟 id 목록(#46) — 이 스팟들은 반경에 들어와도 알리지 않는다.
   Set<int> _visitedSpotIds = const {};
+
   /// 이미 인증한 스팟의 좌표(#117) — 해금된 스팟 반경(150m) 안에 있는지 판정해
   /// 발자취 조회 반경을 넓히는 데 쓴다.
   Map<int, NLatLng> _visitedSpotCoords = const {};
+
   /// 근접 판정 후보 — 스팟 마커가 카메라 idle 마다 불러오는 목록을 그대로 쓴다(따로 조회하지 않는다).
   List<Spot> _proximityCandidates = const [];
 
@@ -189,6 +193,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   /// 남은 발자취 작성 횟수(#116, #118). null이면 아직 못 받아온 것 —
   /// 그동안은 버튼을 낙관적으로 활성 상태로 둔다(실제 소진 여부는 작성 시 429로도 걸러진다).
   int? _footprintQuota;
+
   /// GPS 측정+정확도 확인이 진행 중일 때 버튼 연타를 막는다.
   bool _footprintLocationChecking = false;
 
@@ -252,8 +257,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     final controller = _controller;
     if (controller == null) return;
     if (state == AppLifecycleState.resumed) {
-      if (_permission == LocationPermission.always ||
-          _permission == LocationPermission.whileInUse) {
+      if (_permission == LocationPermission.always || _permission == LocationPermission.whileInUse) {
         controller.setLocationTrackingMode(NLocationTrackingMode.follow);
         _startGeofenceTracking();
       }
@@ -284,8 +288,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     final permission = await LocationPermissionGate.request();
     if (mounted) setState(() => _permission = permission);
 
-    if (permission == LocationPermission.denied ||
-        permission == LocationPermission.deniedForever) {
+    if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
       return;
     }
 
@@ -418,6 +421,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
             lng: lng,
             visitedSpotIds: _visitedSpotIds,
             previous: previous,
+            accuracyMeters: _myAccuracy,
           );
 
     final becameVerifiable = next != null &&
@@ -619,8 +623,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     );
     if (written == true) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('발자취를 남겼어요.')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('발자취를 남겼어요.')));
       }
       unawaited(_loadFootprintQuota());
     }
@@ -633,10 +636,28 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
 
   /// 스팟 마커를 탭하면 상세 화면(#50)을 연다. 해금 전이면 잠긴 상태로,
   /// 해금 후면 명칭·주소·소개로 보여준다 — 발자취 작성(#70) 진입점도 그 화면에 있다.
-  Future<void> _onSpotTapped(Spot spot) async {
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute(builder: (_) => SpotDetailScreen(spot: spot)),
+  Future<void> _onSpotTapped(Spot spot) => _openSpotDetail(spot);
+
+  /// 스팟 상세를 연다. 내가 그 스팟의 인증 거리(100m) 안에 있으면 상세에 카메라 버튼이
+  /// 뜨고, 그걸 누르면 상세가 닫히면서 여기서 인증 화면을 이어 연다(시진, 09-15).
+  /// 거리는 우하단 근접 상태가 아니라 내 좌표로 직접 잰다 — 100m 안에 스팟이 둘이면
+  /// 근접 상태는 하나만 가리키지만, 다른 하나를 눌러도 인증할 수 있어야 한다.
+  Future<void> _openSpotDetail(Spot spot) async {
+    final action = await Navigator.of(context).push<SpotDetailAction>(
+      MaterialPageRoute(
+        builder: (_) => SpotDetailScreen(spot: spot, verifyAvailable: _canVerify(spot)),
+      ),
     );
+    if (action == SpotDetailAction.verify && mounted) {
+      await _openVisitVerify(spot);
+    }
+  }
+
+  bool _canVerify(Spot spot) {
+    final lat = _myLat;
+    final lng = _myLng;
+    if (lat == null || lng == null || spot.unlocked) return false;
+    return Geolocator.distanceBetween(lat, lng, spot.lat, spot.lng) <= SpotProximity.verifyEnterMeters;
   }
 
   /// 우하단 «인증 가능» 아이콘에서 실제 인증 화면(#47)으로 곧바로 들어간다.
@@ -1117,118 +1138,116 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                 // «대체»하지 않고 병합해야 알약 모양·글자 크기가 유지된다.
                 data: FilledButtonThemeData(style: mapActionButtonStyle(Theme.of(context))),
                 child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 64),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // 펼쳤을 때만 나온다. 접힘이 기본이라 지도가 그만큼 열린다.
-                    AnimatedSize(
-                      duration: const Duration(milliseconds: 180),
-                      curve: Curves.easeOut,
-                      alignment: Alignment.bottomLeft,
-                      child: _actionsExpanded
-                          ? Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                FilledButton.tonal(
-                                  // 지도 위 탐험 UI가 준비될 때까지 성향 테스트(#31)로 가는 임시 진입점.
-                                  onPressed: () => Navigator.of(context).push(
-                                    MaterialPageRoute(builder: (_) => const PersonalityTestScreen()),
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 64),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 펼쳤을 때만 나온다. 접힘이 기본이라 지도가 그만큼 열린다.
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 180),
+                        curve: Curves.easeOut,
+                        alignment: Alignment.bottomLeft,
+                        child: _actionsExpanded
+                            ? Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  FilledButton.tonal(
+                                    // 지도 위 탐험 UI가 준비될 때까지 성향 테스트(#31)로 가는 임시 진입점.
+                                    onPressed: () => Navigator.of(context).push(
+                                      MaterialPageRoute(builder: (_) => const PersonalityTestScreen()),
+                                    ),
+                                    child: const Text('여행 성향 테스트 하기'),
                                   ),
-                                  child: const Text('여행 성향 테스트 하기'),
-                                ),
-                                const SizedBox(height: 8),
-                                FilledButton.tonalIcon(
-                                  // 제대로 된 네비게이션(하단 바 등)이 붙기 전까지의 최소 진입점(#73) —
-                                  // 성향 테스트 버튼과 같은 임시 성격이다.
-                                  onPressed: () => Navigator.of(context).push(
-                                    MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                                  const SizedBox(height: 8),
+                                  FilledButton.tonalIcon(
+                                    // 제대로 된 네비게이션(하단 바 등)이 붙기 전까지의 최소 진입점(#73) —
+                                    // 성향 테스트 버튼과 같은 임시 성격이다.
+                                    onPressed: () => Navigator.of(context).push(
+                                      MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                                    ),
+                                    icon: const Icon(Icons.person_outline),
+                                    label: const Text('내 프로필'),
                                   ),
-                                  icon: const Icon(Icons.person_outline),
-                                  label: const Text('내 프로필'),
-                                ),
-                                const SizedBox(height: 8),
-                                FilledButton.tonalIcon(
-                                  // 같은 이유의 임시 진입점(5-1).
-                                  onPressed: () => Navigator.of(context).push(
-                                    MaterialPageRoute(builder: (_) => const MatchCandidatesScreen()),
+                                  const SizedBox(height: 8),
+                                  FilledButton.tonalIcon(
+                                    // 같은 이유의 임시 진입점(5-1).
+                                    onPressed: () => Navigator.of(context).push(
+                                      MaterialPageRoute(builder: (_) => const MatchCandidatesScreen()),
+                                    ),
+                                    icon: const Icon(Icons.people_outline),
+                                    label: const Text('동행 추천'),
                                   ),
-                                  icon: const Icon(Icons.people_outline),
-                                  label: const Text('동행 추천'),
-                                ),
-                                const SizedBox(height: 8),
-                                FilledButton.tonalIcon(
-                                  // 같은 이유의 임시 진입점(5-2).
-                                  onPressed: () => Navigator.of(context).push(
-                                    MaterialPageRoute(builder: (_) => const MatchListScreen()),
+                                  const SizedBox(height: 8),
+                                  FilledButton.tonalIcon(
+                                    // 같은 이유의 임시 진입점(5-2).
+                                    onPressed: () => Navigator.of(context).push(
+                                      MaterialPageRoute(builder: (_) => const MatchListScreen()),
+                                    ),
+                                    icon: const Icon(Icons.mark_email_unread_outlined),
+                                    label: const Text('내 동행 요청'),
                                   ),
-                                  icon: const Icon(Icons.mark_email_unread_outlined),
-                                  label: const Text('내 동행 요청'),
-                                ),
-                                const SizedBox(height: 8),
-                                FilledButton.tonalIcon(
-                                  // 발자취 남기기(#118). 위 임시 진입점들과 달리 계속 남을 기능이지만,
-                                  // 지도를 가리지 않는 쪽을 택해 같이 접는다.
-                                  onPressed: (_footprintQuota == 0 || _footprintLocationChecking)
-                                      ? null
-                                      : _openFootprintCreate,
-                                  icon: _footprintLocationChecking
-                                      ? const SizedBox(
-                                          width: 16,
-                                          height: 16,
-                                          child: CircularProgressIndicator(strokeWidth: 2),
-                                        )
-                                      : const Icon(Icons.edit_location_alt_outlined),
-                                  label: Text(
-                                    _footprintQuota == null
-                                        ? '발자취 남기기'
-                                        : '발자취 남기기 ($_footprintQuota)',
-                                  ),
-                                ),
-                                if (_footprintQuota == 0)
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 4, left: 4),
-                                    child: Text(
-                                      '스팟을 정복하면 다시 채워집니다',
-                                      style: Theme.of(context).textTheme.bodySmall,
+                                  const SizedBox(height: 8),
+                                  FilledButton.tonalIcon(
+                                    // 발자취 남기기(#118). 위 임시 진입점들과 달리 계속 남을 기능이지만,
+                                    // 지도를 가리지 않는 쪽을 택해 같이 접는다.
+                                    onPressed: (_footprintQuota == 0 || _footprintLocationChecking)
+                                        ? null
+                                        : _openFootprintCreate,
+                                    icon: _footprintLocationChecking
+                                        ? const SizedBox(
+                                            width: 16,
+                                            height: 16,
+                                            child: CircularProgressIndicator(strokeWidth: 2),
+                                          )
+                                        : const Icon(Icons.edit_location_alt_outlined),
+                                    label: Text(
+                                      _footprintQuota == null ? '발자취 남기기' : '발자취 남기기 ($_footprintQuota)',
                                     ),
                                   ),
-                                const SizedBox(height: 8),
-                                // 내 위치 공유(#133). 기본값 꺼짐 — "주변 여행자 보기"
-                                // 자체는 이 토글과 무관하게 항상 동작한다.
-                                FilledButton.tonalIcon(
-                                  onPressed: _toggleTravelerSharing,
-                                  icon: Icon(
-                                    _travelerSharingEnabled ? Icons.people : Icons.people_outline,
+                                  if (_footprintQuota == 0)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 4, left: 4),
+                                      child: Text(
+                                        '스팟을 정복하면 다시 채워집니다',
+                                        style: Theme.of(context).textTheme.bodySmall,
+                                      ),
+                                    ),
+                                  const SizedBox(height: 8),
+                                  // 내 위치 공유(#133). 기본값 꺼짐 — "주변 여행자 보기"
+                                  // 자체는 이 토글과 무관하게 항상 동작한다.
+                                  FilledButton.tonalIcon(
+                                    onPressed: _toggleTravelerSharing,
+                                    icon: Icon(
+                                      _travelerSharingEnabled ? Icons.people : Icons.people_outline,
+                                    ),
+                                    label: Text(
+                                      _travelerSharingEnabled ? '내 위치 공유 중 (끄기)' : '내 위치 공유하기',
+                                    ),
                                   ),
-                                  label: Text(
-                                    _travelerSharingEnabled ? '내 위치 공유 중 (끄기)' : '내 위치 공유하기',
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                              ],
-                            )
-                          : const SizedBox.shrink(),
-                    ),
-                    // 토글은 접든 펼치든 **같은 자리**에 있는다 — 목록이 위로만 자라므로
-                    // 연달아 누를 때 손가락을 옮기지 않아도 된다.
-                    FloatingActionButton.small(
-                      // Scaffold 의 FAB 이 아니라 Stack 안에 직접 놓은 것이라 Hero 태그가
-                      // 필요 없다. 두면 화면 전환 때 태그 충돌로 예외가 날 수 있다.
-                      heroTag: null,
-                      onPressed: () => setState(() {
-                        _actionsExpanded = !_actionsExpanded;
-                        // 우하단 근접 카드와 겹치지 않게 — 하나만 펼친다([_expandProximity]).
-                        if (_actionsExpanded) _proximityExpanded = false;
-                      }),
-                      tooltip: _actionsExpanded ? '메뉴 닫기' : '메뉴 열기',
-                      child: Icon(_actionsExpanded ? Icons.close : Icons.menu),
-                    ),
-                  ],
+                                  const SizedBox(height: 8),
+                                ],
+                              )
+                            : const SizedBox.shrink(),
+                      ),
+                      // 토글은 접든 펼치든 **같은 자리**에 있는다 — 목록이 위로만 자라므로
+                      // 연달아 누를 때 손가락을 옮기지 않아도 된다.
+                      FloatingActionButton.small(
+                        // Scaffold 의 FAB 이 아니라 Stack 안에 직접 놓은 것이라 Hero 태그가
+                        // 필요 없다. 두면 화면 전환 때 태그 충돌로 예외가 날 수 있다.
+                        heroTag: null,
+                        onPressed: () => setState(() {
+                          _actionsExpanded = !_actionsExpanded;
+                          // 우하단 근접 카드와 겹치지 않게 — 하나만 펼친다([_expandProximity]).
+                          if (_actionsExpanded) _proximityExpanded = false;
+                        }),
+                        tooltip: _actionsExpanded ? '메뉴 닫기' : '메뉴 열기',
+                        child: Icon(_actionsExpanded ? Icons.close : Icons.menu),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
               ),
             ),
           ),
@@ -1245,7 +1264,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                     expanded: _proximityExpanded,
                     onExpand: _expandProximity,
                     onCollapse: _collapseProximity,
-                    onVerify: () => _openVisitVerify(_proximity!.spot),
+                    onOpenSpot: () => _openSpotDetail(_proximity!.spot),
                     showVerifyLabel: !_actionsExpanded,
                   ),
                 ),
@@ -1480,4 +1499,3 @@ class _LocationBanner extends StatelessWidget {
     );
   }
 }
-
