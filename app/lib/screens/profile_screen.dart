@@ -7,6 +7,7 @@ import '../models/profile.dart';
 import '../services/auth_service.dart';
 import '../services/footprint_service.dart';
 import '../services/profile_service.dart';
+import '../services/traveler_service.dart';
 import '../services/traveler_sharing.dart';
 import '../theme/app_theme.dart';
 import '../widgets/footprint_card.dart';
@@ -214,6 +215,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen()),
                   ),
                 ),
+                // 로그아웃 — 계정은 그대로 두고 이 기기에서만 나간다. 탈퇴와 나란히 두되
+                // 색으로 가른다: 되돌릴 수 있는 것과 없는 것.
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.logout),
+                  title: const Text('로그아웃'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: _logout,
+                ),
                 // 회원 탈퇴(#182). 방침 4장·7장이 약속한 「즉시 파기」의 실제 경로다 —
                 // 그전에는 이행 수단이 «운영 DB 에 손으로 치는 SQL» 뿐이었다.
                 ListTile(
@@ -235,6 +245,45 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         ),
       ),
     );
+  }
+
+  /// 로그아웃. 계정·기록은 서버에 그대로 남고, 이 기기의 로그인만 푼다 — 다시 로그인하면
+  /// 인증·발자취·걷힌 자리가 그대로 돌아온다고 적어 탈퇴와 헷갈리지 않게 한다.
+  ///
+  /// 로그아웃하면 [AuthGate] 가 로그인 화면으로 바뀌는데, 이 화면은 지도 위에 push 된 것이라
+  /// 그대로 두면 로그인 화면 «위에» 남는다 — 먼저 첫 화면까지 걷어낸다.
+  Future<void> _logout() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('로그아웃'),
+        content: const Text('이 기기에서 로그아웃합니다. 인증한 스팟·발자취·걸어온 자리는 계정에 그대로 남아요.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('취소')),
+          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('로그아웃')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await _stopSharingBeforeLeaving();
+    if (!mounted) return;
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    await ref.read(authServiceProvider).signOut();
+  }
+
+  /// 로그아웃·탈퇴 전에 「내 위치 공유」를 끈다(#228 리뷰, 송건희). 세션 상태라 다음 사람이
+  /// 같은 기기에서 로그인하면 **켜진 채로 시작**하는데, 그건 신고 접수본의 opt-in(기본값 꺼짐)
+  /// 요건을 어긴다. 서버 행 삭제는 실패해도 넘어간다 — 로그아웃 자체는 진행돼야 하고, 남은 행은
+  /// 서버가 30분 뒤 알아서 거른다.
+  Future<void> _stopSharingBeforeLeaving() async {
+    if (ref.read(travelerSharingProvider)) {
+      try {
+        await ref.read(travelerServiceProvider).stopSharing();
+      } catch (e) {
+        debugPrint('[Profile] 위치 공유 끄기 실패(로그아웃은 진행): $e');
+      }
+    }
+    ref.read(travelerSharingProvider.notifier).set(false);
   }
 
   /// 회원 탈퇴(#182). ⛔ **되돌릴 수 없다** — 무엇이 지워지는지 나열하고 확인을 받는다.
@@ -276,8 +325,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
     try {
       await ref.read(profileServiceProvider).withdraw();
+      // 공유 상태를 끈다 — 계정은 서버에서 지워졌지만 provider 는 이 기기에 남는다.
+      ref.read(travelerSharingProvider.notifier).set(false);
       // 계정이 사라졌으니 토큰도 의미가 없다. 로그아웃하면 AuthGate 가 로그인 화면으로
-      // 되돌린다 — 화면을 직접 밀어내지 않는 것은 그 판정이 한 곳에 있어야 하기 때문이다.
+      // 되돌린다 — 그 판정은 한 곳(AuthGate)에 둔다. 다만 이 화면은 지도 위에 push 된
+      // 것이라 그대로 두면 로그인 화면 «위에» 남으므로 첫 화면까지 먼저 걷어낸다([_logout] 과 같다).
+      if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
       await ref.read(authServiceProvider).signOut();
     } catch (_) {
       if (!mounted) return;
