@@ -93,11 +93,12 @@ const _mapStyleId = '650c32b2-9a57-4187-a6ab-9be4638556b4';
 
 const _southKoreaCenter = NLatLng(36.5, 127.8);
 
-/// 지도 이동(pan) 가능 범위. FogApp은 국내 탐험이 목적이므로 대한민국 전역
-/// (마라도~독도) 정도만 여유 있게 덮는 범위로 제한한다.
+/// 지도 이동(pan) 가능 범위 — 대한민국 땅끝(마라도 33.11·고성 38.61·백령도 124.6·독도 131.87)에
+/// 20~30km 여유만. 이웃 나라 땅을 바다색으로 덮은 뒤로는(OutsideKoreaMask) 그 밖은 온통 바다라
+/// 움직일 이유가 없고, 넓으면 «어디까지 가야 하지»가 된다(시진, 09-15).
 const _mapExtent = NLatLngBounds(
-  southWest: NLatLng(32.5, 124.0),
-  northEast: NLatLng(39.0, 132.5),
+  southWest: NLatLng(32.9, 124.3),
+  northEast: NLatLng(38.9, 132.2),
 );
 
 /// 탐험의 메인 화면. Naver Map 기반 지도를 표시한다.
