@@ -37,6 +37,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
   bool _polling = false;
   Timer? _pollTimer;
 
+  /// 서버 조회(첫 로드·주기 조회)로 받은 가장 큰 id — 다음 조회의 `afterId`.
+  ///
+  /// ⚠️ **내가 보낸 메시지로는 옮기지 않는다.** 목록 끝(`_messages.last.id`)을 커서로 쓰면, 친구가 보낸
+  /// 11 을 아직 조회하기 전에 내가 12 를 보냈을 때 커서가 12 로 건너뛰어 11 이 영영 안 온다(#235 리뷰,
+  /// oorony). 보낸 메시지는 표시만 하고, 다음 조회에서 다시 오면 [_append] 의 중복 제거가 걸러 준다.
+  int? _cursorId;
+
   @override
   void initState() {
     super.initState();
@@ -76,6 +83,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
         _messages
           ..clear()
           ..addAll(messages);
+        _cursorId = messages.isEmpty ? null : messages.last.id;
         _loading = false;
       });
       _scrollToBottom();
@@ -99,9 +107,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
     if (_polling || _loading || _loadFailed) return;
     _polling = true;
     try {
-      final afterId = _messages.isEmpty ? null : _messages.last.id;
-      final incoming = await ref.read(messageServiceProvider).list(matchId: widget.friend.id, afterId: afterId);
+      final incoming = await ref.read(messageServiceProvider).list(matchId: widget.friend.id, afterId: _cursorId);
       if (!mounted || incoming.isEmpty) return;
+      _cursorId = incoming.last.id; // 서버가 id 오름차순으로 준다
       _append(incoming);
     } catch (e) {
       // 한 번 실패해도 다음 주기에 다시 묻는다 — 화면을 막지 않는다.
@@ -111,7 +119,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
     }
   }
 
-  /// 이미 있는 id 는 건너뛴다 — 내가 보낸 메시지가 전송 응답과 주기 조회로 두 번 올 수 있다.
+  /// 이미 있는 id 는 건너뛴다 — 내가 보낸 메시지가 전송 응답과 주기 조회로 두 번 온다([_cursorId] 참고).
   void _append(List<ChatMessage> incoming) {
     final known = _messages.map((m) => m.id).toSet();
     final fresh = incoming.where((m) => !known.contains(m.id)).toList();
@@ -272,7 +280,8 @@ class _Bubble extends StatelessWidget {
             Text(
               _timeLabel(message.createdAt),
               style: theme.textTheme.labelSmall?.copyWith(
-                color: mine ? Colors.white70 : AppColors.inkMuted,
+                // 흰 70% 는 파랑 위 대비 약 3:1 이라 작은 글씨로는 흐리다 — 흰색 그대로 4.6:1(#235 리뷰).
+                color: mine ? Colors.white : AppColors.inkMuted,
               ),
             ),
           ],
