@@ -22,6 +22,8 @@ public interface SpotRepository extends JpaRepository<Spot, Long> {
      * 주므로(광장과 그 광장의 축제), 수집기가 같은 자리에 둘째 스팟을 만들지 않게 막는다.
      */
     boolean existsByLatAndLng(Double lat, Double lng);
+
+    /**
      * 좌표가 있는 스팟 전부의 id·좌표(#223). 엔티티를 안 만들고 세 열만 읽는다 —
      * 12,600건을 엔티티로 올리면 overview(TEXT)까지 딸려 와 수 MB 다.
      */
