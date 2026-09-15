@@ -38,13 +38,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   Future<Profile> _loadProfile() async {
     final profile = await ref.read(profileServiceProvider).me();
     if (mounted) {
-      setState(() => _footprintsFuture = ref.read(footprintServiceProvider).listByUser(profile.id));
+      setState(() {
+        _footprintsFuture = ref.read(footprintServiceProvider).listByUser(profile.id);
+      });
     }
     return profile;
   }
 
   void _refreshFootprints(int userId) {
-    setState(() => _footprintsFuture = ref.read(footprintServiceProvider).listByUser(userId));
+    setState(() {
+      _footprintsFuture = ref.read(footprintServiceProvider).listByUser(userId);
+    });
   }
 
   /// 성향 테스트(#31) 화면에 다녀온 뒤 프로필을 다시 불러온다. 저장했는지 여부를
@@ -54,7 +58,41 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const PersonalityTestScreen()),
     );
-    if (mounted) setState(() => _profileFuture = _loadProfile());
+    if (mounted) {
+      setState(() {
+        _profileFuture = _loadProfile();
+      });
+    }
+  }
+
+  /// 닉네임 편집. 프로필 화면이 닉네임을 **보여주기만** 하던 것을 고친다 — 심사 계정
+  /// 닉네임을 서버 SQL 로 직접 넣어야 했던 이유가 이 UI 가 없어서였다(#158).
+  ///
+  /// 발자취·동행 화면에 닉네임이 없으면 「이름 없는 여행자」로 뜨는데, 그걸 스스로
+  /// 바꿀 길이 여기뿐이다. 빈 값은 저장을 막는다 — 빈 문자열을 보내면 서버는 받아
+  /// 주지만 결과는 「이름 없는 여행자」로 되돌아가는 것뿐이라 의미가 없다.
+  Future<void> _editNickname(Profile profile) async {
+    final newNickname = await showDialog<String>(
+      context: context,
+      builder: (_) => _NicknameDialog(initial: profile.nickname ?? ''),
+    );
+    if (newNickname == null || !mounted) return;
+    if (newNickname == (profile.nickname ?? '')) return;
+
+    try {
+      final updated = await ref.read(profileServiceProvider).updateNickname(newNickname);
+      if (!mounted) return;
+      setState(() {
+        // 서버가 돌려준 프로필을 그대로 쓴다 — 한 번 더 GET 할 이유가 없다.
+        _profileFuture = Future.value(updated);
+      });
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('닉네임을 저장하지 못했어요.')),
+        );
+      }
+    }
   }
 
   Future<void> _editFootprint(Footprint footprint, int userId) async {
@@ -132,7 +170,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     const Text('프로필을 불러오지 못했어요.'),
                     const SizedBox(height: 8),
                     TextButton(
-                      onPressed: () => setState(() => _profileFuture = _loadProfile()),
+                      onPressed: () => setState(() {
+                        _profileFuture = _loadProfile();
+                      }),
                       child: const Text('다시 시도'),
                     ),
                   ],
@@ -143,7 +183,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             return ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                _ProfileHeader(profile: profile),
+                _ProfileHeader(profile: profile, onEditNickname: () => _editNickname(profile)),
                 const SizedBox(height: 24),
                 _PersonalitySection(profile: profile, onRetakeTest: _openPersonalityTest),
                 const SizedBox(height: 24),
@@ -304,9 +344,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 }
 
 class _ProfileHeader extends StatelessWidget {
-  const _ProfileHeader({required this.profile});
+  const _ProfileHeader({required this.profile, required this.onEditNickname});
 
   final Profile profile;
+  final VoidCallback onEditNickname;
 
   @override
   Widget build(BuildContext context) {
@@ -328,9 +369,26 @@ class _ProfileHeader extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                (profile.nickname != null && profile.nickname!.isNotEmpty) ? profile.nickname! : '이름 없는 여행자',
-                style: theme.textTheme.titleMedium,
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      (profile.nickname != null && profile.nickname!.isNotEmpty) ? profile.nickname! : '이름 없는 여행자',
+                      style: theme.textTheme.titleMedium,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  // 이름 바로 옆에 둔다 — 「이름 없는 여행자」를 보고 바꾸고 싶어질 때
+                  // 손이 가는 자리가 여기다. 화면 아래 설정 항목으로 빼면 못 찾는다.
+                  IconButton(
+                    onPressed: onEditNickname,
+                    icon: const Icon(Icons.edit_outlined, size: 18),
+                    tooltip: '닉네임 바꾸기',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ],
               ),
               Text(
                 profile.email,
@@ -338,6 +396,64 @@ class _ProfileHeader extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 닉네임 입력 다이얼로그. 다이얼로그 안에서 «저장 가능 여부»가 바뀌어야 해서
+/// (빈 값이면 저장 비활성) 상태를 갖는다 — 발자취 수정 다이얼로그처럼 컨트롤러만
+/// 넘기면 버튼 상태를 못 바꾼다.
+class _NicknameDialog extends StatefulWidget {
+  const _NicknameDialog({required this.initial});
+
+  final String initial;
+
+  @override
+  State<_NicknameDialog> createState() => _NicknameDialogState();
+}
+
+class _NicknameDialogState extends State<_NicknameDialog> {
+  /// 서버 `ProfileUpdateRequest` 의 `@Size(max = 50)` 과 같은 값.
+  static const _maxLength = 50;
+
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initial);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  String get _trimmed => _controller.text.trim();
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('닉네임'),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        maxLength: _maxLength,
+        textInputAction: TextInputAction.done,
+        decoration: const InputDecoration(hintText: '다른 여행자에게 보이는 이름'),
+        onChanged: (_) => setState(() {}),
+        onSubmitted: (_) {
+          if (_trimmed.isNotEmpty) Navigator.of(context).pop(_trimmed);
+        },
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('취소')),
+        FilledButton(
+          onPressed: _trimmed.isEmpty ? null : () => Navigator.of(context).pop(_trimmed),
+          child: const Text('저장'),
         ),
       ],
     );

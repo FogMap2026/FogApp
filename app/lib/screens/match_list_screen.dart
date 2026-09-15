@@ -31,7 +31,9 @@ class _MatchListScreenState extends ConsumerState<MatchListScreen> {
   }
 
   void _refresh() {
-    setState(() => _matchesFuture = _load());
+    setState(() {
+      _matchesFuture = _load();
+    });
   }
 
   Future<void> _respond(Match match, String status) async {

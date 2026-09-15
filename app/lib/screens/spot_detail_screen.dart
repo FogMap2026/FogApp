@@ -42,7 +42,9 @@ class _SpotDetailScreenState extends ConsumerState<SpotDetailScreen> {
   }
 
   void _refreshFootprints() {
-    setState(() => _footprintsFuture = _loadFootprints());
+    setState(() {
+      _footprintsFuture = _loadFootprints();
+    });
   }
 
   Future<void> _openFootprintWrite() async {
