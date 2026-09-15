@@ -109,8 +109,8 @@
 ```bash
 pip install Pillow
 
-# 런처 아이콘(5개 밀도) + 스토어 512
-python tools/store_assets/make_icon.py app/android/app/src/main/res docs/store/icon-512.png
+# 런처 아이콘(5개 밀도) + 스토어 512 — 원본 그림(icon-source.png)에서 자르고 줄인다
+python tools/store_assets/make_icon_from_image.py docs/store/icon-source.png app/android/app/src/main/res docs/store/icon-512.png
 
 # 그래픽 이미지 (스크립트 폴더에서 실행 — make_icon 을 import 합니다)
 cd tools/store_assets && python make_graphic.py ../../docs/store/graphic-1024x578.png
@@ -121,8 +121,22 @@ cd tools/store_assets && python make_graphic.py ../../docs/store/graphic-1024x57
 
 ## 디자인 근거
 
-안개(짙은 남색) 속에서 **한 곳만 걷혀 밝아지고 그 자리에 핀이 서 있는** 그림입니다. 이 앱이 하는 일 자체입니다.
+### 아이콘 — 원본 그림에서 뽑습니다
 
-앰버 `#F2B84B`는 임의로 고른 색이 아니라 **지도 위 발자취 도형과 같은 값**입니다(`footprint_marker_controller.dart`) — 스토어에서 본 색이 앱을 열었을 때 그대로 나옵니다.
+아이콘은 이제 **코드로 그리지 않고 완성된 그림**([icon-source.png](icon-source.png), 1254 × 1254)을 원본으로 씁니다. 구름 사이로 한반도가 드러나는 지도 위에 워드마크를 얹은 그림입니다.
 
-런처 아이콘은 48px(mdpi)에서도 읽혀야 해서 요소를 **배경·걷힌 원·핀** 셋으로 제한했습니다.
+원본은 흰 바탕 위에 둥근 사각형이 놓인 모양이라 그대로 줄이면 런처에 흰 테두리가 보입니다. 그래서 `make_icon_from_image.py` 가:
+
+1. 흰 바탕을 뺀 둥근 사각형을 찾고
+2. 둥근 모서리의 흰 자투리가 안 들어오게 **안쪽으로 조금 더 잘라**(반경 × 0.293 + 8px) 꽉 찬 정사각형을 만들고
+3. 런처는 기존과 같은 규칙으로 **둥근 모서리 알파**(반경 = 크기 × 0.22)를, 스토어 512 는 **알파 없는 RGB** 로 저장합니다
+
+⚠️ **워드마크가 48px(mdpi)에서는 거의 안 읽힙니다.** 원본이 글자를 크게 품은 그림이라 줄이면 글자가 먼저 뭉개집니다. 런처에서는 색·구름·지도 윤곽으로 알아보게 되고, 이름은 아이콘 아래 앱 이름(`android:label`)이 맡습니다.
+
+> 📌 [make_icon.py](../../tools/store_assets/make_icon.py) 는 **옛 아이콘**(안개 속 걷힌 원 + 앰버 핀)을 그리던 스크립트입니다. 그래픽 이미지(`make_graphic.py`)가 그 색·핀 모양을 import 하므로 지우지 않았습니다 — **그래픽 이미지는 아직 옛 디자인**입니다.
+
+### 그래픽 이미지 (옛 디자인)
+
+안개(짙은 남색) 속에서 **한 곳만 걷혀 밝아지고 그 자리에 핀이 서 있는** 그림입니다.
+
+앰버 `#F2B84B`는 **지도 위 발자취 도형과 같은 값**입니다(`footprint_marker_controller.dart`).
