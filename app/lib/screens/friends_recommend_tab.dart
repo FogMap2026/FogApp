@@ -10,19 +10,22 @@ import 'social/personality_test_screen.dart';
 
 enum _LoadState { loading, needsPersonalityTest, ready, error }
 
-/// 동행 추천 화면(5-1). 성향이 비슷한 사용자를 추천받아 동행을 요청한다.
+/// 친구 화면의 「추천 친구」 탭(5-1). 성향이 비슷한 사용자를 추천받아 동행을 요청한다.
+///
+/// 예전엔 지도 메뉴의 「동행 추천」으로 따로 열리던 화면이다 — 친구 화면(`FriendsScreen`)
+/// 안으로 옮기면서 자체 Scaffold 를 뺐다(앱바·스낵바는 친구 화면 것을 쓴다).
 ///
 /// `GET /api/matches/candidates`는 "성향 테스트 안 함"과 "후보 0명"을 구분해
 /// 내려주지 않는다(둘 다 빈 목록) — 그래서 후보 조회 전에 내 프로필의
 /// `personalityType`을 먼저 확인해 두 상태를 나눈다.
-class MatchCandidatesScreen extends ConsumerStatefulWidget {
-  const MatchCandidatesScreen({super.key});
+class FriendsRecommendTab extends ConsumerStatefulWidget {
+  const FriendsRecommendTab({super.key});
 
   @override
-  ConsumerState<MatchCandidatesScreen> createState() => _MatchCandidatesScreenState();
+  ConsumerState<FriendsRecommendTab> createState() => _FriendsRecommendTabState();
 }
 
-class _MatchCandidatesScreenState extends ConsumerState<MatchCandidatesScreen> {
+class _FriendsRecommendTabState extends ConsumerState<FriendsRecommendTab> {
   _LoadState _state = _LoadState.loading;
   List<MatchCandidate> _candidates = const [];
   final Set<int> _requestedIds = {};
@@ -88,13 +91,6 @@ class _MatchCandidatesScreenState extends ConsumerState<MatchCandidatesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('동행 추천')),
-      body: SafeArea(child: _buildBody(context)),
-    );
-  }
-
-  Widget _buildBody(BuildContext context) {
     switch (_state) {
       case _LoadState.loading:
         return const Center(child: CircularProgressIndicator());
@@ -103,7 +99,7 @@ class _MatchCandidatesScreenState extends ConsumerState<MatchCandidatesScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('추천 후보를 불러오지 못했어요.'),
+              const Text('추천 친구를 불러오지 못했어요.'),
               const SizedBox(height: 8),
               TextButton(onPressed: _load, child: const Text('다시 시도')),
             ],
@@ -116,7 +112,7 @@ class _MatchCandidatesScreenState extends ConsumerState<MatchCandidatesScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('성향 테스트를 하면 동행을 추천받을 수 있어요.', textAlign: TextAlign.center),
+                const Text('성향 테스트를 하면 친구를 추천받을 수 있어요.', textAlign: TextAlign.center),
                 const SizedBox(height: 16),
                 FilledButton(onPressed: _openPersonalityTest, child: const Text('성향 테스트 하러 가기')),
               ],
@@ -128,7 +124,7 @@ class _MatchCandidatesScreenState extends ConsumerState<MatchCandidatesScreen> {
           return const Center(
             child: Padding(
               padding: EdgeInsets.all(24),
-              child: Text('아직 추천할 동행이 없어요. 나중에 다시 확인해보세요.', textAlign: TextAlign.center),
+              child: Text('아직 추천할 친구가 없어요. 나중에 다시 확인해보세요.', textAlign: TextAlign.center),
             ),
           );
         }

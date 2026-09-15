@@ -38,8 +38,7 @@ import '../widgets/map_controls.dart';
 import '../widgets/proximity_prompt.dart';
 import 'conquest_screen.dart';
 import 'footprint_nearby_create_screen.dart';
-import 'match_candidates_screen.dart';
-import 'match_list_screen.dart';
+import 'friends_screen.dart';
 import 'profile_screen.dart';
 import 'spot_detail_screen.dart';
 import 'visit_verify_screen.dart';
@@ -1389,21 +1388,13 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                                   ),
                                   const SizedBox(height: 8),
                                   FilledButton.tonalIcon(
-                                    // 같은 이유의 임시 진입점(5-1).
+                                    // 친구 — 「추천 친구」(5-1)·「동행 요청」(5-2) 두 탭. 예전엔 버튼이
+                                    // 각각 따로 있었다.
                                     onPressed: () => Navigator.of(context).push(
-                                      MaterialPageRoute(builder: (_) => const MatchCandidatesScreen()),
+                                      MaterialPageRoute(builder: (_) => const FriendsScreen()),
                                     ),
                                     icon: const Icon(Icons.people_outline),
-                                    label: const Text('동행 추천'),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  FilledButton.tonalIcon(
-                                    // 같은 이유의 임시 진입점(5-2).
-                                    onPressed: () => Navigator.of(context).push(
-                                      MaterialPageRoute(builder: (_) => const MatchListScreen()),
-                                    ),
-                                    icon: const Icon(Icons.mark_email_unread_outlined),
-                                    label: const Text('내 동행 요청'),
+                                    label: const Text('친구'),
                                   ),
                                   const SizedBox(height: 8),
                                   FilledButton.tonalIcon(
