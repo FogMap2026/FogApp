@@ -30,8 +30,7 @@ class FootprintMarkerController {
     required NOverlayImage icon,
     this.onTapped,
   }) : _icon = icon {
-    // 남이 방금 남긴 글도 제자리에 서서 보이게 — 위치 스트림은 안 움직이면 안 온다.
-    _refreshTimer = Timer.periodic(refreshInterval, (_) => refresh());
+    resume();
   }
 
   final NaverMapController _mapController;
@@ -61,6 +60,21 @@ class FootprintMarkerController {
   static const refreshInterval = Duration(seconds: 60);
 
   Timer? _refreshTimer;
+
+  /// 주기 갱신을 켠다 — 남이 방금 남긴 글도 제자리에 서서 보이게(위치 스트림은 안 움직이면 안 온다).
+  /// 앱이 앞에 있을 때만 돈다: 포그라운드 복귀 때 지도 화면이 부른다.
+  void resume() {
+    if (_refreshTimer != null) return;
+    _refreshTimer = Timer.periodic(refreshInterval, (_) => refresh());
+  }
+
+  /// 백그라운드에서는 멈춘다(#229 리뷰, 송건희). 위치 스트림이 끊긴 채 60초마다 옛 좌표로 조회가
+  /// 나가면 「위치정보는 앱 실행 중에만」이라는 신고서·방침 전제를 어긴다 — #201 의
+  /// `_travelerShareTimer` 와 같은 이유로 `paused` 에서 멈춘다.
+  void pause() {
+    _refreshTimer?.cancel();
+    _refreshTimer = null;
+  }
 
   /// 위치가 이만큼 이상 움직여야 다시 조회한다. 반경 1km 에 200m 면 화면 밖으로 밀려나는
   /// 글이 생기기 전에 갱신되면서도, 걷는 동안 요청이 15m 마다 나가진 않는다.
@@ -215,7 +229,7 @@ class FootprintMarkerController {
   }
 
   void dispose() {
-    _refreshTimer?.cancel();
+    pause();
     for (final marker in _markersByFootprintId.values) {
       _mapController.deleteOverlay(marker.info);
     }

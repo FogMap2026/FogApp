@@ -298,6 +298,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       if (ref.read(travelerSharingProvider)) {
         _startTravelerShareTimer();
       }
+      _footprintMarkers?.resume();
     } else if (state == AppLifecycleState.paused) {
       controller.setLocationTrackingMode(NLocationTrackingMode.none);
       _geofencePositionSubscription?.cancel();
@@ -308,6 +309,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       // (oorony, PR #201 리뷰).
       _travelerShareTimer?.cancel();
       _travelerShareTimer = null;
+      // 발자취 60초 갱신도 같은 이유로 멈춘다 — 옛 좌표로 조회가 나간다(#229 리뷰).
+      _footprintMarkers?.pause();
       // 화면을 벗어나기 전에 남은 궤적을 올린다 — 배치가 차기 전에 앱을 닫으면
       // 그 구간이 사라진다.
       unawaited(_flushJourney());
