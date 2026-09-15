@@ -60,11 +60,18 @@ class V11DedupeSpotsMigrationIT {
     @Test
     void 좌표가_같은_스팟은_행사가_아닌_쪽으로_합쳐지고_참조는_옮겨지며_다른_스팟은_그대로다() {
         // ── 심기 (V10 스키마) ──
-        // 같은 좌표: 행사 B(id 작음) + 관광지 A(id 큼) — «행사 아님»이 id 보다 앞선다
+        // 같은 좌표: 행사 B(id 가장 작음) + 타입 모름 D(id 작음) + 관광지 A(id 큼)
+        // — «행사 아님»과 «타입 앎»이 id 보다 앞선다. B·D 의 id 를 일부러 작게 심어 「낮은 id」만으로는
+        // A 가 못 이기게 한다.
         long eventB = spot("B", "15", "한복사랑 인천시민 놀이마당", LAT, LNG);
+        long unknownD = spot("D", null, "타입 모름", LAT, LNG);
         long placeA = spot("A", "12", "인천애뜰", LAT, LNG);
         // 좌표가 다른 스팟 C — 배제 단언용
         long otherC = spot("C", "12", "모래내시장", 37.4569, 126.7205);
+        // 또 다른 좌표: 문화시설 E(id 작음) + 관광지 F(id 큼) — 행사가 아닌 것끼리는 관광지가 남는다
+        // (남산골공원 타임캡슐광장 14 vs 남산골한옥마을 12).
+        long facilityE = spot("E", "14", "남산골공원서울천년타임캡슐광장", 37.5595, 126.9940);
+        long placeF = spot("F", "12", "남산골한옥마을", 37.5595, 126.9940);
 
         long user1 = user("u1"); // B 만 인증
         long user2 = user("u2"); // A·B 둘 다 인증
@@ -85,9 +92,10 @@ class V11DedupeSpotsMigrationIT {
                 .load()
                 .migrate();
 
-        // ── 남는 것: A. B 는 없다 ──
+        // ── 남는 것: A(행사 B·타입 모름 D 는 없다), C, F(문화시설 E 는 없다) ──
         List<Long> remaining = jdbc.queryForList("SELECT id FROM spots ORDER BY id", Long.class);
-        assertThat(remaining).containsExactly(placeA, otherC);
+        assertThat(remaining).containsExactly(placeA, otherC, placeF);
+        assertThat(remaining).doesNotContain(eventB, unknownD, facilityE);
 
         // 사용자 1 의 방문은 A 로 옮겨졌다
         assertThat(jdbc.queryForList("SELECT spot_id FROM visits WHERE user_id = ?", Long.class, user1))

@@ -6,8 +6,14 @@
 -- (실기기, 09-15). 앱에서는 마커가 포개져 하나만 보이고, 우하단 «인증 가능» 카드는
 -- 인천애뜰이라는데 마커를 누르면 위에 얹힌 한복사랑이 열렸다. 하나로 합친다.
 --
--- 어느 쪽을 남기나: **행사(content_type_id = '15')가 아닌 쪽**, 그다음 낮은 id.
--- 행사는 기간이 지나면 의미가 없고, 장소 자체가 스팟의 정체다.
+-- 어느 쪽을 남기나(순서대로): 관광지(content_type_id = '12') → 그 밖의 확실한 장소(14 문화시설,
+-- 28 레포츠 …) → 타입 모름(NULL) → 행사(15). 같은 급이면 낮은 id. 행사는 기간이 지나면 의미가
+-- 없고, 장소 자체가 스팟의 정체다 — 남산골한옥마을(12)과 그 안의 타임캡슐광장(14)이 같은
+-- 좌표면 한옥마을이 남아야 심사 계정의 인증 목록 이름도 그대로다(#222 리뷰, 송건희).
+--
+-- ⚠️ content_type_id 는 nullable 이라(수집기가 빈 필드를 NULL 로 넣는다) `= '15'` 는 세 값이
+-- 나온다. `ASC NULLS FIRST` 로 두면 타입 모름이 확실한 장소보다 먼저 남으므로 IS TRUE /
+-- IS NULL 로 단계를 갈라 쓴다(#222 리뷰, 박근호).
 --
 -- 참조는 살려서 옮긴다:
 --   visits             — 남는 스팟으로 옮긴다. 같은 사람이 양쪽을 다 인증했으면 한 건만 남긴다
@@ -22,7 +28,10 @@ WITH ranked AS (
     SELECT id,
            first_value(id) OVER (
                PARTITION BY lat, lng
-               ORDER BY (content_type_id = '15') ASC NULLS FIRST, id ASC
+               ORDER BY (content_type_id = '15') IS TRUE,     -- 행사는 맨 뒤
+                        content_type_id IS NULL,              -- 타입 모름은 그 앞
+                        (content_type_id = '12') IS NOT TRUE, -- 행사 아닌 것 중엔 관광지 먼저
+                        id
            ) AS keep_id
     FROM spots
     WHERE lat IS NOT NULL AND lng IS NOT NULL
