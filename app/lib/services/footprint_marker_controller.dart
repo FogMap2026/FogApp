@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
@@ -8,12 +9,11 @@ import '../models/footprint.dart';
 import 'footprint_service.dart';
 import 'spot_marker_controller.dart';
 
-/// 지도 위에 발자취를 스팟과 같은 핀 마커로 그린다(#117).
+/// 지도 위에 발자취를 스팟과 같은 크기의 **발바닥 핀**으로 그린다(#117).
 ///
-/// 처음엔 작은 마름모(16dp)였는데 실기기에서 «너무 작아서 있는 줄 모른다»(시진, 09-15). 스팟과
-/// 같은 기본 핀에 **보라색**을 칠해 한눈에 구분되면서도 같은 크기로 보이게 했다 — 색만으로
-/// 스팟(초록·민트·주황)과 갈린다. 줌을 빼면 스팟과 같은 표([SpotMarkerController.scaleForZoom])로
-/// 함께 줄어든다.
+/// 처음엔 작은 마름모(16dp)였는데 실기기에서 «너무 작아서 있는 줄 모른다»(시진, 09-15). 스팟 핀과
+/// 같은 크기(38×50dp)의 보라 핀에 흰 발바닥을 넣어, 멀리서는 스팟처럼 눈에 띄고 가까이서는
+/// 모양으로 갈린다. 줌을 빼면 스팟과 같은 표([SpotMarkerController.scaleForZoom])로 함께 줄어든다.
 ///
 /// 조회 반경은 **내 위치 1km** 고정이다(서버 상한 `FootprintService.MAX_RADIUS_METERS`). 예전엔
 /// 이동 중 50m·해금 스팟 안 150m 였는데, 그러면 바로 옆 골목 글도 안 보여 발자취가 있는지
@@ -25,10 +25,24 @@ import 'spot_marker_controller.dart';
 /// ([setUserVisible], 우측 컨트롤 다섯째 버튼). **숨겨진 동안은 조회하지 않고**, 다시 보이게 되는
 /// 순간 마지막 위치로 한 번 채운다.
 class FootprintMarkerController {
-  FootprintMarkerController(this._mapController, this._footprintService, {this.onTapped});
+  FootprintMarkerController(
+    this._mapController,
+    this._footprintService, {
+    required NOverlayImage icon,
+    this.onTapped,
+  }) : _icon = icon;
 
   final NaverMapController _mapController;
   final FootprintService _footprintService;
+  final NOverlayImage _icon;
+
+  /// 핀 크기(dp) — 스팟 기본 핀과 같다([SpotMarkerController] 실측 38×50).
+  static const iconSize = Size(38, 50);
+
+  /// 발바닥 핀 아이콘. 여러 마커가 같은 이미지를 공유하도록 한 번만 만들어 재사용한다.
+  static Future<NOverlayImage> createIcon(BuildContext context) {
+    return NOverlayImage.fromWidget(context: context, size: iconSize, widget: const _FootprintPin());
+  }
 
   /// 핀을 탭했을 때 호출된다 — 글귀 팝업 진입점.
   final void Function(Footprint footprint)? onTapped;
@@ -184,14 +198,16 @@ class FootprintMarkerController {
     }
   }
 
-  Size _sizeForScale() => SpotMarkerController.sizeForScale(_scale);
+  /// 배율 → 크기. 스팟은 1.0 에서 SDK 기본 크기(autoSize)를 쓰지만 우리 그림은 크기를 알고
+  /// 있으니 늘 직접 준다.
+  Size _sizeForScale() => Size(iconSize.width * _scale, iconSize.height * _scale);
 
   NMarker _toMarker(Footprint footprint) {
     final marker = NMarker(
       id: 'footprint-${footprint.id}',
       position: NLatLng(footprint.lat!, footprint.lng!),
+      icon: _icon,
       size: _sizeForScale(),
-      iconTintColor: tint,
     );
     final onTap = onTapped;
     if (onTap != null) {
@@ -210,4 +226,61 @@ class FootprintMarkerController {
     _markersByFootprintId.clear();
     _footprintsById.clear();
   }
+}
+
+/// 발바닥 핀 — 스팟 기본 핀과 같은 실루엣(둥근 머리 + 아래로 뾰족한 꼬리)에 보라를 칠하고 흰
+/// 발바닥([Icons.pets])을 넣는다. 흰 테두리는 안개 위에서 윤곽을 살린다.
+class _FootprintPin extends StatelessWidget {
+  const _FootprintPin();
+
+  @override
+  Widget build(BuildContext context) {
+    return const CustomPaint(
+      size: FootprintMarkerController.iconSize,
+      painter: _PinPainter(FootprintMarkerController.tint),
+      child: Padding(
+        padding: EdgeInsets.only(top: 6),
+        child: Align(alignment: Alignment.topCenter, child: Icon(Icons.pets, color: Colors.white, size: 18)),
+      ),
+    );
+  }
+}
+
+class _PinPainter extends CustomPainter {
+  const _PinPainter(this.color);
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final r = w * 0.42; // 머리 반지름
+    final cx = w / 2;
+    final cy = r + 1.5; // 테두리 여유
+    final tipY = size.height - 1.5;
+    // 꼬리가 머리 원에 접하는 각도 — 원 중심에서 꼬리 끝까지의 거리로 구한다.
+    final d = tipY - cy;
+    final a = acos(r / d);
+    // 접점: 중심에서 아래(+y)로 a 만큼 벌어진 두 점. 오른쪽 접점에서 시작해 원을 위로 돌아
+    // 왼쪽 접점까지 그린 뒤 꼬리 끝으로 닫는다.
+    final start = pi / 2 - a; // 오른쪽 접점 각(화면 좌표, 아래가 +)
+    final sweep = 2 * pi - 2 * a; // 꼬리 쪽 틈(2a)을 뺀 나머지
+    final path = Path()
+      ..moveTo(cx, tipY)
+      ..lineTo(cx + r * cos(start), cy + r * sin(start))
+      ..arcTo(Rect.fromCircle(center: Offset(cx, cy), radius: r), start, sweep, false)
+      ..close();
+    canvas.drawShadow(path, const Color(0x66000000), 2, false);
+    canvas.drawPath(path, Paint()..color = color);
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_PinPainter old) => old.color != color;
 }

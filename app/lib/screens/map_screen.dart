@@ -18,6 +18,7 @@ import '../services/fog_location_tracker.dart';
 import '../services/fog_overlay_controller.dart';
 import '../services/province_boundary_overlay.dart';
 import '../services/fog_regions.dart';
+import '../services/footprint_region_gate.dart';
 import '../services/journey_service.dart';
 import '../services/footprint_location_gate.dart';
 import '../services/footprint_marker_controller.dart';
@@ -34,6 +35,7 @@ import '../services/traveler_sharing.dart';
 import '../services/visit_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/footprint_card.dart';
+import '../widgets/footprint_region_taken_dialog.dart';
 import '../widgets/map_controls.dart';
 import '../widgets/proximity_prompt.dart';
 import 'conquest_screen.dart';
@@ -405,6 +407,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       debugPrint('[FogRegions] 스팟 ${coords.length} → 씨앗 ${regions.seeds.length} (${sw.elapsedMilliseconds}ms)');
       if (!mounted) return;
       _fogRegions = regions;
+      // 스팟 상세 등 다른 화면이 «여기가 어느 구역인가»를 물을 수 있게(발자취 구역당 하나).
+      ref.read(fogRegionsProvider.notifier).state = regions;
       for (final p in _journeyRestored) {
         _markEmptyRegion(p.latitude, p.longitude);
       }
@@ -807,6 +811,13 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   }
 
   Future<void> _writeFootprintAt(double lat, double lng) async {
+    // 발자취는 구역당 하나(시진, 09-15). 이미 남긴 구역이면 안내하고 끝낸다.
+    final check = await ref.read(footprintRegionGateProvider).check(lat: lat, lng: lng);
+    if (!mounted) return;
+    if (check is FootprintRegionTaken) {
+      await showFootprintRegionTakenDialog(context, check.existing);
+      return;
+    }
     final written = await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (_) => FootprintNearbyCreateScreen(lat: lat, lng: lng)),
     );
@@ -965,13 +976,26 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     // 찜한 스팟은 조회와 무관하게 항상 지도에 둔다 — 컨트롤러가 생기자마자 넘기고,
     // 이후 변경은 build 의 ref.listen 이 넘긴다.
     unawaited(_spotMarkers!.setFavorites(ref.read(favoriteSpotsProvider)));
+    // 발자취 아이콘(발바닥 핀)은 위젯을 이미지로 구워 만든다 — 마커마다 만들지 않고 한 번만
+    // 만들어 공유한다. 앞선 await 이후라 context를 쓰기 전에 mounted를 확인한다.
     if (!mounted) return;
-    // 발자취는 스팟과 같은 기본 핀(보라)이라 아이콘을 따로 굽지 않는다.
-    _footprintMarkers = FootprintMarkerController(
-      controller,
-      ref.read(footprintServiceProvider),
-      onTapped: _onFootprintTapped,
-    );
+    NOverlayImage? footprintIcon;
+    try {
+      footprintIcon = await FootprintMarkerController.createIcon(context);
+    } catch (e) {
+      // 아이콘을 못 구우면 발자취만 안 뜬다 — 지도·스팟·안개는 그대로 동작해야 하므로
+      // 여기서 멈추지 않는다.
+      debugPrint('[MapScreen] 발자취 아이콘 생성 실패: $e');
+    }
+    if (!mounted) return;
+    if (footprintIcon != null) {
+      _footprintMarkers = FootprintMarkerController(
+        controller,
+        ref.read(footprintServiceProvider),
+        icon: footprintIcon,
+        onTapped: _onFootprintTapped,
+      );
+    }
     // 내 위치를 기본 점 대신 캐릭터로 그린다(#131). 실패해도 SDK 기본 표시가 남으므로
     // 지도 사용에는 지장이 없다 — 발자취 아이콘과 같은 원칙.
     if (!mounted) return;
