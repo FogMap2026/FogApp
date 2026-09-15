@@ -74,9 +74,7 @@ class _VisitVerifyScreenState extends ConsumerState<VisitVerifyScreen> {
     } on CameraException catch (e) {
       if (!mounted) return;
       setState(() {
-        _cameraError = e.code == 'CameraAccessDenied'
-            ? '카메라 권한이 필요합니다. 설정에서 허용해주세요.'
-            : '카메라를 여는 중 문제가 발생했습니다.';
+        _cameraError = e.code == 'CameraAccessDenied' ? '카메라 권한이 필요합니다. 설정에서 허용해주세요.' : '카메라를 여는 중 문제가 발생했습니다.';
       });
     }
   }
@@ -155,9 +153,7 @@ class _VisitVerifyScreenState extends ConsumerState<VisitVerifyScreen> {
       // 형식·용량 문제(400)는 서버가 이미 구체적인 한국어 메시지를 내려준다
       // (예: "사진 용량은 5MB 이하만 업로드할 수 있습니다.") — 그대로 보여준다.
       final responseData = e.response?.data;
-      final serverMessage = statusCode == 400 && responseData is Map
-          ? responseData['message'] as String?
-          : null;
+      final serverMessage = statusCode == 400 && responseData is Map ? responseData['message'] as String? : null;
       setState(() {
         _errorMessage = serverMessage ?? '업로드 중 문제가 발생했습니다. 다시 시도해주세요.';
         _stage = _Stage.error;
@@ -184,8 +180,20 @@ class _VisitVerifyScreenState extends ConsumerState<VisitVerifyScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // 촬영·미리보기는 검은 바탕 — 카메라 화면은 어디서나 그렇고, 종이색 바탕에 뷰파인더를
+    // 띄우면 «사진 앱 안의 창»처럼 보인다(시진, 실기기 09-15). 나머지 단계는 앱의 종이 바탕.
+    final dark = _stage == _Stage.capturing || _stage == _Stage.preview;
     return Scaffold(
-      appBar: AppBar(title: Text(widget.spot.title)),
+      backgroundColor: dark ? Colors.black : null,
+      appBar: AppBar(
+        title: Text(widget.spot.title),
+        backgroundColor: dark ? Colors.black : null,
+        foregroundColor: dark ? Colors.white : null,
+        // 테마가 제목 글꼴을 검정으로 못 박아 두어 foregroundColor 만으로는 제목이 검은 바탕에 묻힌다.
+        titleTextStyle: dark ? Theme.of(context).appBarTheme.titleTextStyle?.copyWith(color: Colors.white) : null,
+        surfaceTintColor: dark ? Colors.black : null,
+        shape: dark ? const Border() : null,
+      ),
       body: SafeArea(
         child: switch (_stage) {
           _Stage.capturing => _buildCameraView(),
@@ -208,20 +216,69 @@ class _VisitVerifyScreenState extends ConsumerState<VisitVerifyScreen> {
     }
     final controller = _controller;
     if (controller == null || !controller.value.isInitialized) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: CircularProgressIndicator(color: Colors.white));
     }
+    // 🔴 Stack 을 expand 로 채울 것. 예전엔 Positioned.fill 프리뷰 + 정렬만 준 셔터였는데,
+    // Stack 은 «정렬만 된 자식»(셔터) 크기로 줄어들어 뷰파인더가 화면 왼쪽 위 손바닥만 한
+    // 검은 상자로 나왔다(시진, 실기기 09-15).
     return Stack(
-      alignment: Alignment.bottomCenter,
+      fit: StackFit.expand,
       children: [
-        Positioned.fill(child: CameraPreview(controller)),
-        Padding(
-          padding: const EdgeInsets.only(bottom: 32),
-          child: FloatingActionButton.large(
-            onPressed: _capture,
-            child: const Icon(Icons.camera_alt),
+        _fullBleedPreview(controller),
+        // 위쪽 안내 — 뷰파인더 위에 얹히니 글자 뒤에 옅은 그림자 띠를 깐다.
+        Positioned(
+          left: 0,
+          right: 0,
+          top: 0,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0x99000000), Color(0x00000000)],
+              ),
+            ),
+            child: Text(
+              '지금 이 자리에서 찍은 사진으로 인증해요',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.white),
+            ),
+          ),
+        ),
+        // 셔터 — 카메라 앱의 흰 원. 아래쪽 검은 띠 위에 놓는다.
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: Container(
+            padding: const EdgeInsets.only(top: 40, bottom: 28),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.bottomCenter,
+                end: Alignment.topCenter,
+                colors: [Color(0xB3000000), Color(0x00000000)],
+              ),
+            ),
+            child: Center(child: _ShutterButton(onPressed: _capture)),
           ),
         ),
       ],
+    );
+  }
+
+  /// 뷰파인더를 화면에 꽉 채운다. [CameraPreview] 는 센서 비율(3:4)대로만 그리므로, 그 비율의
+  /// 상자를 만들어 `BoxFit.cover` 로 늘리고 넘치는 가장자리는 잘라 낸다 — 사진 자체는 센서
+  /// 비율 그대로 찍히니 미리보기에서 잘린 부분도 사진에는 들어간다.
+  Widget _fullBleedPreview(CameraController controller) {
+    // previewSize 는 가로 기준(예: 1280×720)이라 세로 화면 상자는 폭·높이를 바꾼다.
+    final size = controller.value.previewSize;
+    if (size == null) return CameraPreview(controller);
+    return ClipRect(
+      child: FittedBox(
+        fit: BoxFit.cover,
+        child: SizedBox(width: size.height, height: size.width, child: CameraPreview(controller)),
+      ),
     );
   }
 
@@ -231,11 +288,23 @@ class _VisitVerifyScreenState extends ConsumerState<VisitVerifyScreen> {
       children: [
         Expanded(child: Image.file(File(photo.path), fit: BoxFit.contain)),
         Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
           child: Row(
             children: [
               Expanded(
-                child: OutlinedButton(onPressed: _retake, child: const Text('다시 찍기')),
+                child: OutlinedButton(
+                  onPressed: _retake,
+                  // 검은 바탕 위라 테마 기본(흰 바탕·검정 글자·8px 모서리)은 흰 덩어리로만 보이고,
+                  // 옆의 파란 알약과 모양도 달랐다 — 바탕을 비우고 흰 글자·흰 테두리, 같은 알약
+                  // 모양으로 맞춘다(시진, 실기기 09-15).
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    backgroundColor: Colors.transparent,
+                    side: const BorderSide(color: Colors.white70),
+                    shape: const StadiumBorder(),
+                  ),
+                  child: const Text('다시 찍기'),
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -313,6 +382,50 @@ class _VisitVerifyScreenState extends ConsumerState<VisitVerifyScreen> {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 카메라 앱의 셔터 — 흰 테두리 원 안에 흰 원. 누르면 안쪽 원이 살짝 줄어든다.
+class _ShutterButton extends StatefulWidget {
+  const _ShutterButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  State<_ShutterButton> createState() => _ShutterButtonState();
+}
+
+class _ShutterButtonState extends State<_ShutterButton> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: '사진 찍기',
+      child: GestureDetector(
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapUp: (_) => setState(() => _pressed = false),
+        onTapCancel: () => setState(() => _pressed = false),
+        onTap: widget.onPressed,
+        child: Container(
+          width: 76,
+          height: 76,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 4),
+          ),
+          child: Center(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 90),
+              width: _pressed ? 52 : 60,
+              height: _pressed ? 52 : 60,
+              decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white),
+            ),
+          ),
         ),
       ),
     );

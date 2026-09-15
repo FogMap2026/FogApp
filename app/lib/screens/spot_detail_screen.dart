@@ -18,10 +18,18 @@ import 'footprint_create_screen.dart';
 /// 가 보지도 않은 곳에 글이 쌓이면 발자취가 「거기 있었다」는 증거가 아니게 된다
 /// (시진, 09-14; #70 의 「독립」 결정을 여기서 좁힌다). 길목 글귀(지도의 발자취 남기기,
 /// 스팟 없음)는 이 화면 밖이라 그대로다.
+/// [SpotDetailScreen] 이 닫히며 돌려주는 값. 지금은 인증 하나뿐이다.
+enum SpotDetailAction { verify }
+
 class SpotDetailScreen extends ConsumerStatefulWidget {
-  const SpotDetailScreen({required this.spot, super.key});
+  const SpotDetailScreen({required this.spot, this.verifyAvailable = false, super.key});
 
   final Spot spot;
+
+  /// 지금 이 스팟을 인증할 수 있는 거리(100m 안)에 있는지. 참이면 잠긴 화면에 카메라
+  /// 버튼이 뜨고, 누르면 [SpotDetailAction.verify] 를 돌려주며 닫힌다 — 인증 화면은
+  /// 내 위치를 아는 지도가 연다(시진, 09-15).
+  final bool verifyAvailable;
 
   @override
   ConsumerState<SpotDetailScreen> createState() => _SpotDetailScreenState();
@@ -82,6 +90,15 @@ class _SpotDetailScreenState extends ConsumerState<SpotDetailScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (spot.unlocked) ..._buildUnlocked(context, spot) else ..._buildLocked(context, spot),
+              if (!spot.unlocked && widget.verifyAvailable) ...[
+                const SizedBox(height: 24),
+                // 우하단 «인증 가능» 카드에서 들어왔거나, 100m 안 스팟 마커를 눌렀을 때만 뜬다.
+                FilledButton.icon(
+                  onPressed: () => Navigator.of(context).pop(SpotDetailAction.verify),
+                  icon: const Icon(Icons.photo_camera_rounded),
+                  label: const Text('지금 방문 인증하기'),
+                ),
+              ],
               const SizedBox(height: 24),
               if (spot.unlocked)
                 FilledButton.icon(

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geocoding/geocoding.dart';
@@ -15,8 +16,8 @@ import '../services/conquest_service.dart';
 import '../services/favorite_spot_store.dart';
 import '../services/fog_location_tracker.dart';
 import '../services/fog_overlay_controller.dart';
-import '../services/fog_regions.dart';
 import '../services/province_boundary_overlay.dart';
+import '../services/fog_regions.dart';
 import '../services/journey_service.dart';
 import '../services/footprint_location_gate.dart';
 import '../services/footprint_marker_controller.dart';
@@ -24,8 +25,8 @@ import '../services/footprint_service.dart';
 import '../services/location_permission_gate.dart';
 import '../services/profile_service.dart';
 import '../services/region_lookup_service.dart';
-import '../services/spot_geofence_controller.dart';
 import '../services/spot_marker_controller.dart';
+import '../services/spot_proximity.dart';
 import '../services/spot_service.dart';
 import '../services/traveler_marker_controller.dart';
 import '../services/traveler_service.dart';
@@ -34,6 +35,7 @@ import '../services/visit_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/footprint_card.dart';
 import '../widgets/map_controls.dart';
+import '../widgets/proximity_prompt.dart';
 import 'conquest_screen.dart';
 import 'footprint_nearby_create_screen.dart';
 import 'match_candidates_screen.dart';
@@ -109,10 +111,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   ProvinceBoundaryOverlay? _provinceBoundary;
   SpotMarkerController? _spotMarkers;
   FootprintMarkerController? _footprintMarkers;
-  SpotGeofenceController? _geofence;
   StreamSubscription<Position>? _geofencePositionSubscription;
-  StreamSubscription<GeofenceEnterEvent>? _geofenceEnterSubscription;
-  StreamSubscription<Spot>? _geofenceExitSubscription;
 
   bool _mapReady = false;
   bool? _locationServiceEnabled;
@@ -211,15 +210,18 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   /// 서버에서 되살린 궤적 점 — 구역이 궤적보다 늦게 만들어지면 여기서 다시 센다.
   List<NLatLng> _journeyRestored = const [];
 
-  /// 이번 앱 실행 세션에서 이미 알림을 띄운 스팟(#46) — 같은 스팟에 재진입해도
-  /// 세션당 1회만 알린다. geofencing의 히스테리시스는 경계 떨림만 막을 뿐,
-  /// 반경을 벗어났다가 다시 들어오는 재진입까지는 막지 않기 때문에 별도로 둔다.
-  final Set<int> _notifiedSpotIds = {};
+  /// 근접 판정 후보 — 스팟 마커가 카메라 idle 마다 불러오는 목록을 그대로 쓴다(따로 조회하지 않는다).
+  List<Spot> _proximityCandidates = const [];
 
-  /// 지금 화면에 떠 있는 근접 알림 배너(#46). 새 스팟에 진입하면 큐잉하지 않고
-  /// 가장 최근 것으로 교체한다 — 오래된 배너를 계속 쌓아두는 것보다 "지금 여기"가
-  /// 사용자에게 더 유용한 정보라고 판단했다.
-  GeofenceEnterEvent? _proximityBanner;
+  /// 지금 우하단에 띄운 근접 아이콘의 대상과 단계. null 이면 아이콘 없음.
+  SpotProximity? _proximity;
+
+  /// «근처» 아이콘을 눌러 알림 카드로 펼쳤는지.
+  bool _proximityExpanded = false;
+
+  /// 이번 실행에서 «인증 가능» 진동을 이미 낸 스팟. 130m 경계를 드나들 때마다 울리면 주머니
+  /// 속에서 계속 떨린다 — 아이콘은 매번 뜨지만 진동은 스팟당 한 번.
+  final Set<int> _buzzedSpotIds = {};
 
   /// 남은 발자취 작성 횟수(#116, #118). null이면 아직 못 받아온 것 —
   /// 그동안은 버튼을 낙관적으로 활성 상태로 둔다(실제 소진 여부는 작성 시 429로도 걸러진다).
@@ -271,14 +273,11 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     WidgetsBinding.instance.removeObserver(this);
     _cameraSubscription?.cancel();
     _geofencePositionSubscription?.cancel();
-    _geofenceEnterSubscription?.cancel();
-    _geofenceExitSubscription?.cancel();
     _travelerShareTimer?.cancel();
     _fogOverlay?.dispose();
     _provinceBoundary?.dispose();
     _spotMarkers?.dispose();
     _footprintMarkers?.dispose();
-    _geofence?.dispose();
     super.dispose();
   }
 
@@ -328,7 +327,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     _startGeofenceTracking();
   }
 
-  /// 실시간 위치 스트림을 구독해 [_geofence]에 반영한다(#45). [FogLocationTracker]와
+  /// 실시간 위치 스트림을 구독해 근접 아이콘([_recomputeProximity])에 반영한다(#45). [FogLocationTracker]와
   /// 같은 [LocationSettings]를 재사용해 서로 다른 배터리 절충안이 섞이지 않게 한다.
   void _startGeofenceTracking() {
     if (_geofencePositionSubscription != null) return;
@@ -385,7 +384,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
 
       // ⚠️ 아래 둘은 «정확도 판정 밖»이다 — 화면 표시라 튀어도 다음 갱신에 되돌아온다.
       //    되돌아오지 않는 것(구멍·서버 저장)만 거른다.
-      _geofence?.updatePosition(lat: position.latitude, lng: position.longitude);
+      _recomputeProximity();
       unawaited(
         _footprintMarkers?.updatePosition(
           lat: position.latitude,
@@ -519,24 +518,64 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     );
   }
 
-  void _onGeofenceEnter(GeofenceEnterEvent event) {
-    final spotId = event.spot.id;
-    if (_visitedSpotIds.contains(spotId)) return; // 이미 인증한 스팟은 알리지 않는다.
-    if (_notifiedSpotIds.contains(spotId)) return; // 세션당 1회.
-    _notifiedSpotIds.add(spotId);
-    if (mounted) setState(() => _proximityBanner = event);
-  }
+  /// 위치·후보·인증 목록 중 하나라도 바뀌면 부른다 — 우하단 근접 아이콘의 대상과 단계를 다시 정한다.
+  ///
+  /// «인증 가능»으로 막 올라선 순간에만 진동한다. 같은 스팟에서 단계가 유지되는 동안은 조용하다.
+  void _recomputeProximity() {
+    final lat = _myLat;
+    final lng = _myLng;
+    final previous = _proximity;
+    final next = (lat == null || lng == null)
+        ? null
+        : resolveSpotProximity(
+            candidates: _proximityCandidates,
+            lat: lat,
+            lng: lng,
+            visitedSpotIds: _visitedSpotIds,
+            previous: previous,
+            accuracyMeters: _myAccuracy,
+          );
 
-  void _onGeofenceExit(Spot spot) {
-    // 배너를 보기 전에 반경을 벗어나면(예: 그냥 지나침) 더 이상 유효하지 않으니 닫는다.
-    if (_proximityBanner?.spot.id == spot.id && mounted) {
-      setState(() => _proximityBanner = null);
+    final becameVerifiable = next != null &&
+        next.level == ProximityLevel.verifiable &&
+        !(previous?.level == ProximityLevel.verifiable && previous?.spot.id == next.spot.id);
+    if (becameVerifiable && _buzzedSpotIds.add(next.spot.id)) unawaited(_buzzVerifiable());
+
+    final spotChanged = previous?.spot.id != next?.spot.id;
+    final levelChanged = previous?.level != next?.level;
+    // 거리만 바뀐 갱신은 펼친 카드(거리 문구가 보이는 때)가 아니면 다시 그릴 필요가 없다.
+    if (!mounted || (!spotChanged && !levelChanged && !_proximityExpanded)) {
+      _proximity = next;
+      return;
     }
+    setState(() {
+      _proximity = next;
+      // 대상이 바뀌었거나 인증 단계로 올라서면 펼친 카드는 접는다 — 다른 스팟 이야기를 하던 카드가
+      // 그대로 남거나, 인증 아이콘과 카드가 섞이지 않게.
+      if (spotChanged || next?.level != ProximityLevel.near) _proximityExpanded = false;
+    });
   }
 
-  void _dismissProximityBanner() {
-    if (mounted) setState(() => _proximityBanner = null);
+  /// 인증할 수 있을 만큼 가까워진 순간의 진동 — 짧게 두 번.
+  ///
+  /// 진동 패키지와 `VIBRATE` 권한을 새로 들이지 않고 [HapticFeedback] 을 쓴다. APK 권한 목록이
+  /// 바뀌면 스토어 상품 설명의 권한 표기와 어긋난다(#189 — 쓰지 않는 마이크 권한을 뺀 것과 같은
+  /// 이유). 대신 기기 설정에서 «터치 진동»을 꺼 두면 울리지 않는다 — 아이콘은 그래도 뜬다.
+  Future<void> _buzzVerifiable() async {
+    await HapticFeedback.vibrate();
+    await Future<void>.delayed(const Duration(milliseconds: 180));
+    await HapticFeedback.vibrate();
   }
+
+  void _expandProximity() {
+    // 좌하단 메뉴를 펼친 채로 카드가 자라면 메뉴 아래쪽 버튼과 겹친다 — 하나만 펼친다.
+    setState(() {
+      _proximityExpanded = true;
+      _actionsExpanded = false;
+    });
+  }
+
+  void _collapseProximity() => setState(() => _proximityExpanded = false);
 
   /// 지금 띄울 안내(#144, #146).
   ///
@@ -776,15 +815,32 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
 
   /// 스팟 마커를 탭하면 상세 화면(#50)을 연다. 해금 전이면 잠긴 상태로,
   /// 해금 후면 명칭·주소·소개로 보여준다 — 발자취 작성(#70) 진입점도 그 화면에 있다.
-  Future<void> _onSpotTapped(Spot spot) async {
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute(builder: (_) => SpotDetailScreen(spot: spot)),
+  Future<void> _onSpotTapped(Spot spot) => _openSpotDetail(spot);
+
+  /// 스팟 상세를 연다. 내가 그 스팟의 인증 거리(100m) 안에 있으면 상세에 카메라 버튼이
+  /// 뜨고, 그걸 누르면 상세가 닫히면서 여기서 인증 화면을 이어 연다(시진, 09-15).
+  /// 거리는 우하단 근접 상태가 아니라 내 좌표로 직접 잰다 — 100m 안에 스팟이 둘이면
+  /// 근접 상태는 하나만 가리키지만, 다른 하나를 눌러도 인증할 수 있어야 한다.
+  Future<void> _openSpotDetail(Spot spot) async {
+    final action = await Navigator.of(context).push<SpotDetailAction>(
+      MaterialPageRoute(
+        builder: (_) => SpotDetailScreen(spot: spot, verifyAvailable: _canVerify(spot)),
+      ),
     );
+    if (action == SpotDetailAction.verify && mounted) {
+      await _openVisitVerify(spot);
+    }
   }
 
-  /// 근접 알림(#46)의 "인증하러 가기"에서 실제 인증 화면(#47)으로 진입한다.
+  bool _canVerify(Spot spot) {
+    final lat = _myLat;
+    final lng = _myLng;
+    if (lat == null || lng == null || spot.unlocked) return false;
+    return Geolocator.distanceBetween(lat, lng, spot.lat, spot.lng) <= SpotProximity.verifyEnterMeters;
+  }
+
+  /// 우하단 «인증 가능» 아이콘에서 실제 인증 화면(#47)으로 곧바로 들어간다.
   Future<void> _openVisitVerify(Spot spot) async {
-    setState(() => _proximityBanner = null);
     final lat = _myLat;
     final lng = _myLng;
     if (lat == null || lng == null) return; // 이론상 거의 없음 — geofencing 자체가 위치 스트림에서 나온다.
@@ -800,6 +856,9 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
         _visitedSpotIds = {..._visitedSpotIds, spot.id};
         _visitedSpotCoords = {..._visitedSpotCoords, spot.id: NLatLng(spot.lat, spot.lng)};
       });
+      // 방금 인증한 스팟의 아이콘을 내린다 — 다음 위치 갱신(15m 이동)까지 기다리면 인증한
+      // 자리에 선 채로 «지금 인증하기»가 계속 떠 있다.
+      _recomputeProximity();
       unawaited(_refreshConquest());
       // 마커도 바로 «밝힌» 색으로 — 마커는 서버가 준 unlocked 로 그리므로 같은 자리를 다시
       // 불러온다(300m 움직여야 다시 부르던 것을 기다리면 인증하고도 한참 잠긴 색이다, 시진 09-15).
@@ -870,14 +929,12 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     unawaited(_restoreJourney());
     // 구역은 전국 좌표를 받아야 해서 늦게 온다 — 그동안의 방문·궤적은 만들어질 때 반영된다.
     unawaited(_buildFogRegions());
-    _geofence = SpotGeofenceController();
-    _geofenceEnterSubscription = _geofence!.onEnter.listen(_onGeofenceEnter);
-    _geofenceExitSubscription = _geofence!.onExit.listen(_onGeofenceExit);
     _spotMarkers = SpotMarkerController(
       controller,
       ref.read(spotServiceProvider),
       onSpotsLoaded: (spots) {
-        _geofence?.updateCandidates(spots);
+        _proximityCandidates = spots;
+        _recomputeProximity();
         // fetchNearby는 가까운 순으로 내려주므로 첫 번째가 현재 보고 있는 지역의 대표 스팟이다.
         if (mounted) {
           setState(() {
@@ -1253,15 +1310,6 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                       padding: const EdgeInsets.only(top: 8),
                       child: _LocationBanner(issue: locationIssue),
                     ),
-                  if (_proximityBanner != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: _ProximityBanner(
-                        event: _proximityBanner!,
-                        onDismiss: _dismissProximityBanner,
-                        onVerify: () => _openVisitVerify(_proximityBanner!.spot),
-                      ),
-                    ),
                   switch (_notice) {
                     MapNotice.serverError => Padding(
                         padding: const EdgeInsets.only(top: 8),
@@ -1391,7 +1439,11 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                         // Scaffold 의 FAB 이 아니라 Stack 안에 직접 놓은 것이라 Hero 태그가
                         // 필요 없다. 두면 화면 전환 때 태그 충돌로 예외가 날 수 있다.
                         heroTag: null,
-                        onPressed: () => setState(() => _actionsExpanded = !_actionsExpanded),
+                        onPressed: () => setState(() {
+                          _actionsExpanded = !_actionsExpanded;
+                          // 우하단 근접 카드와 겹치지 않게 — 하나만 펼친다([_expandProximity]).
+                          if (_actionsExpanded) _proximityExpanded = false;
+                        }),
                         tooltip: _actionsExpanded ? '메뉴 닫기' : '메뉴 열기',
                         child: Icon(_actionsExpanded ? Icons.close : Icons.menu),
                       ),
@@ -1401,6 +1453,25 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
               ),
             ),
           ),
+          // 우하단 근접 아이콘. 왼쪽 여백 68 = 좌하단 메뉴 토글(16 + 40) + 간격 12 — 카드로
+          // 펼쳐져 왼쪽으로 자라도 토글 버튼을 덮지 않는다. 아래 여백은 토글과 같은 줄에 서도록.
+          if (_proximity != null)
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(68, 16, 16, 58),
+                child: Align(
+                  alignment: Alignment.bottomRight,
+                  child: ProximityPrompt(
+                    proximity: _proximity!,
+                    expanded: _proximityExpanded,
+                    onExpand: _expandProximity,
+                    onCollapse: _collapseProximity,
+                    onOpenSpot: () => _openSpotDetail(_proximity!.spot),
+                    showVerifyLabel: !_actionsExpanded,
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -1625,53 +1696,6 @@ class _LocationBanner extends StatelessWidget {
             TextButton(
               onPressed: issue.onAction,
               child: Text(issue.actionLabel),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// 스팟 반경 진입 알림 배너(#46). "여기서 인증할 수 있다"는 것을 알리고 방문 인증
-/// 화면으로 가는 버튼을 제공한다.
-class _ProximityBanner extends StatelessWidget {
-  const _ProximityBanner({
-    required this.event,
-    required this.onDismiss,
-    required this.onVerify,
-  });
-
-  final GeofenceEnterEvent event;
-  final VoidCallback onDismiss;
-  final VoidCallback onVerify;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final distanceLabel = '${event.distanceMeters.toStringAsFixed(0)}m';
-
-    return Material(
-      color: theme.colorScheme.primaryContainer,
-      elevation: 2,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
-        child: Row(
-          children: [
-            Icon(Icons.explore_outlined, size: 20, color: theme.colorScheme.onPrimaryContainer),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                '${event.spot.title} 근처예요 ($distanceLabel) — 지금 인증할 수 있어요',
-                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onPrimaryContainer),
-              ),
-            ),
-            TextButton(onPressed: onVerify, child: const Text('인증하러 가기')),
-            IconButton(
-              onPressed: onDismiss,
-              icon: Icon(Icons.close, size: 18, color: theme.colorScheme.onPrimaryContainer),
-              visualDensity: VisualDensity.compact,
             ),
           ],
         ),

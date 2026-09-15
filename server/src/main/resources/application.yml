@@ -50,7 +50,8 @@ tour:
 
 # 방문 인증 (#48).
 # ⚠️ radius-meters 는 앱의 근접 감지(#45)가 쓰는 값과 반드시 같아야 한다.
-#    어긋나면 "화면엔 인증 가능인데 서버가 거부"하는 버그가 된다. 변경 시 앱 상수도 함께 변경할 것.
+#    어긋나면 "화면엔 인증 가능인데 서버가 거부"하는 버그가 된다. 변경 시 앱 상수도 함께 변경할 것
+#    (app/lib/services/spot_proximity.dart 의 SpotProximity.verifyEnterMeters).
 visit:
   radius-meters: ${VISIT_RADIUS_METERS:100}
   # 인증 사진 저장 위치. Firebase Storage 는 무료(Spark) 요금제에서 버킷 생성이 막혀
