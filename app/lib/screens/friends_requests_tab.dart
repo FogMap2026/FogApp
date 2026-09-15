@@ -5,8 +5,9 @@ import '../models/match.dart';
 import '../services/match_service.dart';
 import '../theme/app_theme.dart';
 
-/// 친구 화면의 「동행 요청」 탭(5-2). 보낸 요청·받은 요청을 함께 보여주고, 받은 요청은
-/// 수락·거절을, 대기 중인 요청은 취소를 할 수 있다.
+/// 친구 화면의 「친구 요청」 탭(5-2). 보낸 요청·받은 요청을 함께 보여주고, 받은 요청은
+/// 수락·거절을, 대기 중인 요청은 취소를 할 수 있다. **수락된 요청은 여기서 빠지고 「친구」 탭으로
+/// 옮겨 간다**([Match.requestsOf]).
 ///
 /// 예전엔 지도 메뉴의 「내 동행 요청」으로 따로 열리던 화면이다 — 친구 화면(`FriendsScreen`)
 /// 안으로 옮기면서 자체 Scaffold 를 뺐다. 탭을 옮겨 올 때마다 새로 불러오므로, 추천 친구
@@ -30,9 +31,7 @@ class _FriendsRequestsTabState extends ConsumerState<FriendsRequestsTab> {
     _matchesFuture = _load();
   }
 
-  Future<List<Match>> _load() {
-    return ref.read(matchServiceProvider).listForUser();
-  }
+  Future<List<Match>> _load() async => Match.requestsOf(await ref.read(matchServiceProvider).listForUser());
 
   void _refresh() {
     setState(() {
@@ -45,7 +44,13 @@ class _FriendsRequestsTabState extends ConsumerState<FriendsRequestsTab> {
     setState(() => _pendingActionIds.add(match.id));
     try {
       await ref.read(matchServiceProvider).updateStatus(matchId: match.id, status: status);
-      if (mounted) _refresh();
+      if (!mounted) return;
+      if (status == 'accepted') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${match.counterpartLabel}님과 친구가 됐어요. 「친구」 탭에서 메시지를 보낼 수 있어요.')),
+        );
+      }
+      _refresh();
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('처리하지 못했어요.')));
@@ -83,7 +88,7 @@ class _FriendsRequestsTabState extends ConsumerState<FriendsRequestsTab> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('매칭 목록을 불러오지 못했어요.'),
+                const Text('친구 요청을 불러오지 못했어요.'),
                 const SizedBox(height: 8),
                 TextButton(onPressed: _refresh, child: const Text('다시 시도')),
               ],
@@ -91,17 +96,17 @@ class _FriendsRequestsTabState extends ConsumerState<FriendsRequestsTab> {
           );
         }
         final matches = snapshot.data!;
-        if (matches.isEmpty) {
+        // 받은 요청은 대기 중인 것만 — 내가 거절한 요청을 계속 보여줄 이유가 없다.
+        final received = matches.where((m) => !m.isSent && m.isPending).toList();
+        final sent = matches.where((m) => m.isSent).toList();
+        if (received.isEmpty && sent.isEmpty) {
           return const Center(
             child: Padding(
               padding: EdgeInsets.all(24),
-              child: Text('아직 동행 요청이 없어요.', textAlign: TextAlign.center),
+              child: Text('아직 친구 요청이 없어요.', textAlign: TextAlign.center),
             ),
           );
         }
-
-        final received = matches.where((m) => !m.isSent).toList();
-        final sent = matches.where((m) => m.isSent).toList();
 
         return ListView(
           padding: const EdgeInsets.all(16),

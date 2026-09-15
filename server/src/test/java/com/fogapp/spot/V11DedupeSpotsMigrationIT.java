@@ -22,9 +22,13 @@ import org.testcontainers.utility.DockerImageName;
  * 초록은 「문법이 맞다」까지다. 여기서는 V10 까지만 올린 채 컨텍스트를 띄우고, 행을 심은 뒤 V11 을
  * 돌려 «무엇이 남고 무엇이 옮겨졌나»를 본다. 마지막 단언(좌표가 다른 스팟과 그 방문은 그대로)이
  * 제일 중요하다 — 「옮겼다」만 보면 DELETE 가 넓게 지워도 초록이다.</p>
+ *
+ * <p>{@code ddl-auto=none} — 컨텍스트는 V10 스키마로 뜨는데 엔티티는 최신이다. V11 뒤에 테이블을
+ * 추가하는 마이그레이션(V12 {@code messages} 등)이 생기면 Hibernate {@code validate} 가
+ * 「missing table」로 컨텍스트를 못 띄운다. 이 테스트는 JPA 가 아니라 SQL 로만 확인하므로 검증을 끈다.</p>
  */
 @Testcontainers
-@SpringBootTest(properties = "spring.flyway.target=10")
+@SpringBootTest(properties = {"spring.flyway.target=10", "spring.jpa.hibernate.ddl-auto=none"})
 class V11DedupeSpotsMigrationIT {
 
     @Container
