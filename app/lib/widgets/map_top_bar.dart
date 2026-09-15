@@ -12,24 +12,34 @@ import 'conquest_pill.dart';
 /// 지역 이름은 뺐다 — 지도 위에 이미 지명이 찍혀 있고, 정복률이 어느 지역 것인지는
 /// 배터리를 눌러 들어간 [전국 정복 현황] 화면이 말한다.
 ///
-/// 알림([ConquestPillMode.near]·[ConquestPillMode.verifiable])이 오면 배터리가 **프로필
-/// 왼쪽으로 길게 자란다.** 프로필은 제자리에 있고 배터리만 늘어난다 — 오른쪽 끝이
-/// 고정돼 있어야 «같은 상자가 자랐다»로 읽힌다.
+/// 배치(시진, 09-15): 위 줄 = [근접 알림 배너 … 프로필], 아래 줄 = 정복률 배터리(프로필 아래).
+/// 처음엔 배터리가 알림으로 «변신»했는데(피그마 안), 정복률과 알림은 서로 다른 말이라 따로
+/// 둔다 — 배터리는 늘 정복률만, 알림은 왼쪽 빈 자리에 따로 뜬다. 알림이 없으면 그 자리는 비어
+/// 지도가 보인다.
 class MapTopBar extends StatelessWidget {
   const MapTopBar({
     required this.pillMode,
     required this.conquestRate,
     required this.pillMessage,
     required this.onPillTap,
+    required this.onAlarmTap,
     required this.profileImageUrl,
     required this.onProfileTap,
     super.key,
   });
 
+  /// 근접 단계. [ConquestPillMode.progress] 면 알림 배너가 없다.
   final ConquestPillMode pillMode;
   final double? conquestRate;
+
+  /// 알림 배너 문구(「○○ 근처 · 약 200m」). 없으면 null.
   final String? pillMessage;
+
+  /// 배터리(정복률) 탭.
   final VoidCallback onPillTap;
+
+  /// 알림 배너 탭 — 그 스팟 상세.
+  final VoidCallback onAlarmTap;
 
   /// 없으면 사람 실루엣을 그린다.
   final String? profileImageUrl;
@@ -42,28 +52,41 @@ class MapTopBar extends StatelessWidget {
     // 프로필이 위, 배터리가 그 아래 — 오른쪽 끝에 세로로 선다(시진, 09-15). 한 줄에 나란히 두면
     // 알림으로 자랄 때 프로필 왼쪽 폭만큼밖에 못 자라 긴 스팟 이름이 잘렸다. 아래 줄에 두면
     // 화면 폭 전체를 쓸 수 있고 프로필 버튼과 서로 밀지 않는다.
+    final message = pillMessage;
+    final alarm = pillMode != ConquestPillMode.progress && message != null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        _ProfileButton(
-          size: _profileSize,
-          imageUrl: profileImageUrl,
-          onTap: onProfileTap,
+        Row(
+          children: [
+            // 알림 배너 — 프로필 왼쪽의 남는 폭 전체를 쓸 수 있다. 없으면 빈 자리.
+            Expanded(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 240),
+                child: alarm
+                    ? Align(
+                        key: ValueKey(message),
+                        alignment: Alignment.centerRight,
+                        child: ProximityBanner(mode: pillMode, message: message, onTap: onAlarmTap),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.xs),
+            _ProfileButton(
+              size: _profileSize,
+              imageUrl: profileImageUrl,
+              onTap: onProfileTap,
+            ),
+          ],
         ),
         const SizedBox(height: AppSpacing.xs),
-        // 배터리는 «폭 전체»를 받아 두고 그 안에서 오른쪽에서 왼쪽으로 자란다 — 자랄 수 있는
-        // 최대치를 상수로 짐작하면 좁은 폰에서 넘치고 넓은 폰에서 모자란다.
-        SizedBox(
-          width: double.infinity,
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: ConquestPill(
-              mode: pillMode,
-              rate: conquestRate,
-              message: pillMessage,
-              onTap: onPillTap,
-            ),
-          ),
+        // 정복률 배터리 — 알림과 무관하게 늘 정복률만 보인다.
+        ConquestPill(
+          mode: ConquestPillMode.progress,
+          rate: conquestRate,
+          message: null,
+          onTap: onPillTap,
         ),
       ],
     );
@@ -111,6 +134,71 @@ class _ProfileButton extends StatelessWidget {
                       color: AppColors.inkSecondary,
                     ),
                   ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 근접 알림 배너 — 「○○ 근처 · 약 200m」/「○○ 인증 가능」. 배터리 알약과 같은 높이·같은 옷
+/// (연파랑 바탕·파란 테두리)이라 한 식구로 읽히되, 정복률과는 별개의 상자다.
+class ProximityBanner extends StatelessWidget {
+  const ProximityBanner({required this.mode, required this.message, required this.onTap, super.key});
+
+  final ConquestPillMode mode;
+  final String message;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final verifiable = mode == ConquestPillMode.verifiable;
+    return Semantics(
+      button: true,
+      label: '$message. 눌러서 스팟 보기',
+      child: Material(
+        color: AppColors.infoContainer,
+        shape: StadiumBorder(side: BorderSide(color: AppColors.primary, width: verifiable ? 1.5 : 1.2)),
+        elevation: 2,
+        shadowColor: const Color(0x1F000000),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          customBorder: const StadiumBorder(),
+          child: SizedBox(
+            height: ConquestPill.height,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    verifiable ? Icons.camera_alt_outlined : Icons.near_me_outlined,
+                    size: 15,
+                    color: AppColors.primary,
+                  ),
+                  const SizedBox(width: 6),
+                  // 상자보다 길면 잘라 「…」로 내지 않고 글자를 줄인다 — 어느 스팟인지는 읽혀야 한다.
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        message,
+                        maxLines: 1,
+                        softWrap: false,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.ink,
+                          height: 1,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),

@@ -1536,11 +1536,12 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                     pillMode: _pillMode,
                     conquestRate: _currentConquest?.rate,
                     pillMessage: _pillMessage,
-                    onPillTap: () => _onAlarmSurfaceTap(
-                      whenIdle: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const ConquestScreen()),
-                      ),
+                    // 배터리는 늘 정복률 — 누르면 전국 탐험 현황.
+                    onPillTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const ConquestScreen()),
                     ),
+                    // 알림 배너·나침반 «!» 는 그 스팟 상세로.
+                    onAlarmTap: () => _onAlarmSurfaceTap(whenIdle: () {}),
                     profileImageUrl: _profile?.profileImageUrl,
                     onProfileTap: _openProfile,
                   ),
