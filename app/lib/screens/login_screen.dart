@@ -199,7 +199,7 @@ class _LoginHero extends StatelessWidget {
                 const _HeroBadge(label: '안개 지도 탐험'),
                 const SizedBox(height: AppSpacing.md),
                 Text(
-                  'FogApp',
+                  'FogMap',
                   style: theme.textTheme.displayMedium?.copyWith(color: AppColors.surface),
                 ),
                 const SizedBox(height: AppSpacing.xs),
