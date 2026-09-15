@@ -161,6 +161,8 @@ class _HumanFootprintPainter extends CustomPainter {
         p(-0.22, 0.34).dy,
       )
       ..close();
+    // 발바닥 안도 채운다(시진, 09-15) — 윤곽선만 두면 핀 위에서 속이 비쳐 보여 흐릿하다.
+    canvas.drawPath(sole, Paint()..color = color);
     canvas.drawPath(
       sole,
       Paint()
