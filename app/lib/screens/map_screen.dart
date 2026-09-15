@@ -1298,7 +1298,9 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                 zoom: 6.7,
               ),
               // FogApp은 국내 탐험이 목적이므로 대한민국 밖으로 축소/이동할 이유가 없어 제한한다.
-              minZoom: 6,
+              // extent 는 «카메라 중심»만 가두므로(SDK 사양) 멀리 빼면 화면 절반이 바다다 — 최소 줌을
+              // 전국이 화면에 꽉 차는 6.5 로 올려 그 이상은 못 빼게 한다(시진, 09-15).
+              minZoom: 6.5,
               extent: _mapExtent,
               // 기울기(3D 뷰)는 끈다 — 두 손가락을 위로 밀면 지도가 눕는데, 안개 구역·마커가
               // 원근으로 찌그러져 «어디까지 밝혔나»가 읽기 어렵고 되돌리는 법도 눈에 안 띈다(시진, 09-15).
