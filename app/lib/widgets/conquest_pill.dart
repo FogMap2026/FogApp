@@ -82,7 +82,14 @@ class ConquestPill extends StatelessWidget {
 
   /// 배터리 꼭지. 알림으로 자랄 때는 폭 0 으로 줄여 없앤다 — 알림 막대에 꼭지가 달려 있으면
   /// 배터리가 늘어난 것처럼 보인다.
+  ///
+  /// 🔴 **자리는 알림 중에도 비워 둔다.** 폭을 0 으로 접으면 몸통의 오른쪽 끝이 그만큼
+  /// 오른쪽으로 밀리는데, 이 알약은 «오른쪽 끝이 고정된 채 왼쪽으로 자라는» 것이 전부라
+  /// 끝이 움직이면 «다른 게 떴다»로 보인다. 사라지는 것은 투명도로만 한다.
   static const double _nubWidth = 4;
+
+  /// 몸통과 꼭지 사이.
+  static const double _nubGap = 1.5;
 
   /// 차오른 부분의 색.
   ///
@@ -107,10 +114,15 @@ class ConquestPill extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final maxWidth = constraints.maxWidth.isFinite ? constraints.maxWidth : bodyWidth;
+        // 🔴 꼭지와 그 간격을 «먼저» 뺀다. 몸통에 maxWidth 를 그대로 주면 Row 전체가
+        //    maxWidth + 5.5 가 되어 넘친다(`conquest_pill_test.dart` 가 잡은 실제 버그).
+        final outerWidth = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : bodyWidth + _nubGap + _nubWidth;
+        final maxBody = (outerWidth - _nubGap - _nubWidth).clamp(0.0, double.infinity);
         final targetWidth = _alarm
-            ? (maxWidth * _expandedFactor).clamp(bodyWidth, maxWidth)
-            : bodyWidth.clamp(0.0, maxWidth);
+            ? (maxBody * _expandedFactor).clamp(bodyWidth.clamp(0.0, maxBody), maxBody)
+            : bodyWidth.clamp(0.0, maxBody);
 
         return Semantics(
           button: true,
@@ -163,15 +175,20 @@ class ConquestPill extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(width: 1.5),
-              AnimatedContainer(
-                duration: _duration,
-                curve: _curve,
-                width: _alarm ? 0 : _nubWidth,
+              const SizedBox(width: _nubGap),
+              SizedBox(
+                width: _nubWidth,
                 height: 12,
-                decoration: BoxDecoration(
-                  color: AppColors.inkFaint,
-                  borderRadius: BorderRadius.circular(2),
+                child: AnimatedOpacity(
+                  duration: _duration,
+                  curve: _curve,
+                  opacity: _alarm ? 0 : 1,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: AppColors.inkFaint,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
                 ),
               ),
             ],
