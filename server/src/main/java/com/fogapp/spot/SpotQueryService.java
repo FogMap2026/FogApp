@@ -44,6 +44,14 @@ public class SpotQueryService {
         return PageResponse.from(result, spot -> SpotResponse.from(spot, unlocked.contains(spot.getId())));
     }
 
+    /**
+     * 전국 스팟의 id·좌표(#223). 해금 여부는 싣지 않는다 — 안개 구역은 «어디에 스팟이 있나»만
+     * 알면 되고, 해금은 {@code GET /api/visits} 가 따로 준다.
+     */
+    public List<SpotCoordResponse> findAllCoords() {
+        return spotRepository.findAllCoords();
+    }
+
     /** 현재 위치 반경(m) 내 스팟(가까운 순). 반경은 최대 {@value #MAX_RADIUS_METERS}m. */
     public List<SpotResponse> findNearby(Long userId, double lat, double lng, double radiusMeters) {
         if (radiusMeters <= 0 || radiusMeters > MAX_RADIUS_METERS) {

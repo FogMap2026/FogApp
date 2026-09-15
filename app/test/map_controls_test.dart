@@ -20,7 +20,7 @@ Widget _host(Widget child) {
 }
 
 MapControls _controls({VoidCallback? onRecenter = _noop}) {
-  return MapControls(onZoomIn: _noop, onZoomOut: _noop, onRecenter: onRecenter);
+  return MapControls(onZoomIn: _noop, onZoomOut: _noop, onRecenter: onRecenter, onSearchHere: _noop);
 }
 
 void _noop() {}
@@ -50,6 +50,7 @@ void main() {
     expect(find.byIcon(Icons.add), findsOneWidget);
     expect(find.byIcon(Icons.remove), findsOneWidget);
     expect(find.byIcon(Icons.my_location), findsOneWidget);
+    expect(find.byIcon(Icons.location_on_outlined), findsOneWidget);
     // 폭을 고정했으므로 버튼이 넘치지 않는지 함께 본다.
     expect(tester.takeException(), isNull);
   });
