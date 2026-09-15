@@ -16,6 +16,7 @@ import '../services/conquest_service.dart';
 import '../services/favorite_spot_store.dart';
 import '../services/fog_location_tracker.dart';
 import '../services/fog_overlay_controller.dart';
+import '../services/outside_korea_mask.dart';
 import '../services/province_boundary_overlay.dart';
 import '../services/fog_regions.dart';
 import '../services/journey_service.dart';
@@ -112,6 +113,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   StreamSubscription<OnCameraChangedParams>? _cameraSubscription;
   FogOverlayController? _fogOverlay;
   ProvinceBoundaryOverlay? _provinceBoundary;
+  OutsideKoreaMask? _outsideMask;
   SpotMarkerController? _spotMarkers;
   FootprintMarkerController? _footprintMarkers;
   StreamSubscription<Position>? _geofencePositionSubscription;
@@ -279,6 +281,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     _travelerShareTimer?.cancel();
     _fogOverlay?.dispose();
     _provinceBoundary?.dispose();
+    _outsideMask?.dispose();
     _spotMarkers?.dispose();
     _footprintMarkers?.dispose();
     super.dispose();
@@ -927,6 +930,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     _fogOverlay = await FogOverlayController.attach(controller);
     // 시/도 경계선 — 탐험 현황의 배지·단계구분도와 같은 경계를 지도에도 보인다.
     unawaited(_attachProvinceBoundary(controller));
+    // 대한민국 밖(북한·일본·중국 땅)은 바다색으로 덮는다 — 국내 탐험 앱이라 이웃 땅은 «갈 수 없는 곳».
+    unawaited(_attachOutsideMask(controller));
     // 걸어온 자리를 서버에서 되살린다(#131). 인증 안개를 GET /api/visits 로 복원하는
     // 것(_loadVisitedSpots)과 같은 자리다 — 오버레이가 붙은 «뒤»라야 구멍을 낼 수 있다.
     unawaited(_restoreJourney());
@@ -1047,6 +1052,19 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
   /// 정복률(#51)을 시/도로 합산한 것. 새로 받을 때만 다시 만든다 —
   /// build 마다 합산하면 매 프레임 목록을 훑는다.
   List<ConquestSido> _conquestBySido = const [];
+
+  Future<void> _attachOutsideMask(NaverMapController controller) async {
+    try {
+      final mask = await OutsideKoreaMask.attach(controller);
+      if (!mounted) {
+        mask.dispose();
+        return;
+      }
+      _outsideMask = mask;
+    } catch (e) {
+      debugPrint('[MapScreen] 국외 덮개 실패: $e');
+    }
+  }
 
   Future<void> _attachProvinceBoundary(NaverMapController controller) async {
     try {
