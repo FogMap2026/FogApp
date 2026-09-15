@@ -101,6 +101,7 @@ void main() {
   });
 
   _smoothTests();
+  _clipTests();
 }
 
 void _smoothTests() {
@@ -123,5 +124,60 @@ void _smoothTests() {
     }
     // 격자 그대로면 대각선 변이 0 이다.
     expect(diagonal, greaterThan((ring.length - 1) ~/ 2));
+  });
+}
+
+void _clipTests() {
+  group('clipByConvex — 구역 셀을 땅에 맞춰 자른다', () {
+    // 땅: 위도 0~1, 경도 0~1 정사각형(오목하게 오른쪽 위 모서리를 파낸 L 자).
+    const land = [
+      NLatLng(0, 0),
+      NLatLng(0, 1),
+      NLatLng(0.5, 1),
+      NLatLng(0.5, 0.5),
+      NLatLng(1, 0.5),
+      NLatLng(1, 0),
+    ];
+
+    test('땅 안에 온전히 든 셀은 그대로다', () {
+      const cell = [NLatLng(0.1, 0.1), NLatLng(0.1, 0.4), NLatLng(0.4, 0.4), NLatLng(0.4, 0.1)];
+      final out = FogGrid.clipByConvex(land, cell);
+      expect(out.length, 4);
+      for (final p in out) {
+        expect(p.latitude, closeTo(0.25, 0.15 + 1e-9));
+        expect(p.longitude, closeTo(0.25, 0.15 + 1e-9));
+      }
+    });
+
+    test('바다로 삐져나온 셀은 해안선에서 잘린다 — 바다 쪽 꼭짓점이 남지 않는다', () {
+      // 위도 0.8~1.2 × 경도 0.2~0.4: 절반이 땅 밖(위도 > 1).
+      const cell = [NLatLng(0.8, 0.2), NLatLng(0.8, 0.4), NLatLng(1.2, 0.4), NLatLng(1.2, 0.2)];
+      final out = FogGrid.clipByConvex(land, cell);
+      expect(out.length, greaterThanOrEqualTo(3));
+      for (final p in out) {
+        expect(p.latitude, lessThanOrEqualTo(1.0 + 1e-9));
+        expect(p.latitude, greaterThanOrEqualTo(0.8 - 1e-9));
+      }
+    });
+
+    test('파인 자리(오목한 곳)에 걸친 셀은 파인 부분이 빠진다', () {
+      // 위도 0.4~0.9 × 경도 0.4~0.9: 오른쪽 위(위도>0.5, 경도>0.5)는 바다.
+      const cell = [NLatLng(0.4, 0.4), NLatLng(0.4, 0.9), NLatLng(0.9, 0.9), NLatLng(0.9, 0.4)];
+      final out = FogGrid.clipByConvex(land, cell);
+      expect(FogGrid.pointInRing(const NLatLng(0.45, 0.45), out), isTrue);
+      expect(FogGrid.pointInRing(const NLatLng(0.8, 0.8), out), isFalse); // 바다
+      expect(FogGrid.pointInRing(const NLatLng(0.45, 0.8), out), isTrue); // 땅(아래 팔)
+    });
+
+    test('완전히 바다인 셀은 비어 있다', () {
+      const cell = [NLatLng(2, 2), NLatLng(2, 3), NLatLng(3, 3), NLatLng(3, 2)];
+      expect(FogGrid.clipByConvex(land, cell), isEmpty);
+    });
+
+    test('시계 방향 셀도 같은 결과다', () {
+      const ccw = [NLatLng(0.1, 0.1), NLatLng(0.1, 0.4), NLatLng(0.4, 0.4), NLatLng(0.4, 0.1)];
+      final cw = ccw.reversed.toList();
+      expect(FogGrid.clipByConvex(land, cw).length, FogGrid.clipByConvex(land, ccw).length);
+    });
   });
 }
