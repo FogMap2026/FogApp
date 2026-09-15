@@ -43,7 +43,6 @@ import '../widgets/footprint_region_taken_dialog.dart';
 import '../widgets/map_action_dock.dart';
 import '../widgets/map_compass_button.dart';
 import '../widgets/map_top_bar.dart';
-import 'conquest_screen.dart';
 import 'footprint_nearby_create_screen.dart';
 import 'friends_screen.dart';
 import 'profile_screen.dart';
@@ -642,7 +641,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
 
   /// 우상단 알약이나 나침반 원을 눌렀을 때 — 단계에 따라 하는 일이 다르다.
   ///
-  /// - 평소: 알약은 [ConquestScreen], 나침반은 내 위치로.
+  /// - 평소: 나침반은 내 위치로(탐험 현황은 프로필 안의 항목이다).
   /// - «근처»: 알림을 접는다. 알약은 정복률로, 나침반 원은 «!»에서 바늘로 함께 되돌아간다
   ///   — 둘이 한 알림의 두 부분이라 따로 돌아가면 반쪽만 꺼진 것처럼 보인다.
   /// - «인증 가능»: 인증 화면([VisitVerifyScreen])으로 간다.
@@ -1536,10 +1535,6 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                     pillMode: _pillMode,
                     conquestRate: _currentConquest?.rate,
                     pillMessage: _pillMessage,
-                    // 배터리는 늘 정복률 — 누르면 전국 탐험 현황.
-                    onPillTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const ConquestScreen()),
-                    ),
                     // 알림 배너·나침반 «!» 는 그 스팟 상세로.
                     onAlarmTap: () => _onAlarmSurfaceTap(whenIdle: () {}),
                     profileImageUrl: _profile?.profileImageUrl,

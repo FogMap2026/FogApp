@@ -9,6 +9,7 @@ import '../services/profile_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/footprint_card.dart';
 import '../widgets/personality_axis_bar.dart';
+import 'conquest_screen.dart';
 import 'social/personality_test_screen.dart';
 
 /// 프로필 화면(#73, 5-3) — 앱의 첫 프로필 화면. "내 성향"과 "내 발자취 모아보기"를 담는다.
@@ -181,6 +182,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               padding: const EdgeInsets.all(16),
               children: [
                 _ProfileHeader(profile: profile, onEditNickname: () => _editNickname(profile)),
+                const SizedBox(height: 16),
+                // 탐험 현황(#51)은 프로필 안에서 들어간다(시진, 09-15) — 지도 위 탐험률 숫자는
+                // 보기만 하는 표시고, 「내가 어디까지 밝혔나」는 내 이야기라 프로필이 맞다.
+                Card(
+                  clipBehavior: Clip.antiAlias,
+                  margin: EdgeInsets.zero,
+                  child: ListTile(
+                    leading: const Icon(Icons.map_outlined),
+                    title: const Text('탐험 현황'),
+                    subtitle: const Text('시/도별 배지와 밝힌 스팟'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const ConquestScreen()),
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 24),
                 _PersonalitySection(profile: profile, onRetakeTest: _openPersonalityTest),
                 const SizedBox(height: 24),

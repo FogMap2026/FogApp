@@ -21,7 +21,6 @@ class MapTopBar extends StatelessWidget {
     required this.pillMode,
     required this.conquestRate,
     required this.pillMessage,
-    required this.onPillTap,
     required this.onAlarmTap,
     required this.profileImageUrl,
     required this.onProfileTap,
@@ -34,9 +33,6 @@ class MapTopBar extends StatelessWidget {
 
   /// 알림 배너 문구(「○○ 근처 · 약 200m」). 없으면 null.
   final String? pillMessage;
-
-  /// 배터리(정복률) 탭.
-  final VoidCallback onPillTap;
 
   /// 알림 배너 탭 — 그 스팟 상세.
   final VoidCallback onAlarmTap;
@@ -81,9 +77,9 @@ class MapTopBar extends StatelessWidget {
           ],
         ),
         const SizedBox(height: AppSpacing.xxs),
-        // 정복률 — 알약 없이 숫자만, 프로필 바로 아래(시진, 09-15). 배터리는 자리를 먹고 알림과
-        // 헷갈렸다. 누르면 전국 탐험 현황.
-        _ConquestRateText(rate: conquestRate, onTap: onPillTap, width: _profileSize),
+        // 탐험률 — 알약 없이 숫자만, 프로필 바로 아래(시진, 09-15). 배터리는 자리를 먹고 알림과
+        // 헷갈렸다. 누르는 것이 아니다 — 탐험 현황은 프로필 안에 있다.
+        _ConquestRateText(rate: conquestRate, width: _profileSize),
       ],
     );
   }
@@ -203,40 +199,41 @@ class ProximityBanner extends StatelessWidget {
   }
 }
 
-/// 정복률 숫자 — 「12%」. 지도 위라 흰 테두리(그림자)로 글자를 띄운다.
+/// 탐험률 숫자 — 「12%」. 누르는 것이 아니라 보는 것이다(탐험 현황은 프로필 안에서 들어간다).
+/// 지도 위라 흰 테두리(획)로 글자를 띄운다 — 그림자만으로는 안개 위에서 흐렸다(시진, 09-15).
 class _ConquestRateText extends StatelessWidget {
-  const _ConquestRateText({required this.rate, required this.onTap, required this.width});
+  const _ConquestRateText({required this.rate, required this.width});
 
   final double? rate;
-  final VoidCallback onTap;
   final double width;
+
+  static const _style = TextStyle(fontSize: 15, fontWeight: FontWeight.w800, height: 1.2);
 
   @override
   Widget build(BuildContext context) {
     final value = rate;
     final label = value == null ? '--%' : '${(value * 100).round()}%';
     return Semantics(
-      button: true,
-      label: '이 지역 탐험률 ${value == null ? '알 수 없음' : label}. 눌러서 전국 탐험 현황 보기',
-      child: GestureDetector(
-        onTap: onTap,
-        behavior: HitTestBehavior.opaque,
-        child: SizedBox(
-          width: width,
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w800,
-              color: AppColors.ink,
-              height: 1.2,
-              shadows: [
-                Shadow(color: Colors.white, blurRadius: 4),
-                Shadow(color: Colors.white, blurRadius: 8),
-              ],
+      label: '이 지역 탐험률 ${value == null ? '알 수 없음' : label}',
+      child: SizedBox(
+        width: width,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // 흰 획 — 글자 뒤에 굵게 한 번 그리고 그 위에 본 글자를 얹는다.
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: _style.copyWith(
+                foreground: Paint()
+                  ..style = PaintingStyle.stroke
+                  ..strokeWidth = 4
+                  ..strokeJoin = StrokeJoin.round
+                  ..color = Colors.white,
+              ),
             ),
-          ),
+            Text(label, textAlign: TextAlign.center, style: _style.copyWith(color: AppColors.ink)),
+          ],
         ),
       ),
     );
