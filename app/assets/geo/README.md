@@ -1,12 +1,20 @@
-# 대한민국 경계 데이터 (안개 오버레이용)
+# 대한민국 경계 데이터
 
-`kr_boundary.json` — 대한민국 육지(본토+도서) 외곽선. 각 원소는 하나의 landmass(섬 포함)를
-나타내는 `[[lat, lng], ...]` 닫힌 폴리곤이며, [FogOverlayController](../../lib/services/fog_overlay_controller.dart)가
-이 좌표들로 해안선 모양의 안개 폴리곤을 그린다.
+`kr_provinces.json` — 통계청 SGIS **2013 시/도 경계 17개**. `{ "provinces": [ { "name", "rings": [[[경도, 위도], …], …] } ] }`
+형태로, 시/도마다 외곽 고리가 여럿(본토 조각 + 섬)이다. 좌표는 GeoJSON 순서 `[경도, 위도]`, 소수점 4자리.
 
-**출처**: [Natural Earth](https://www.naturalearthdata.com) (Admin 0 – Countries, 1:10m) →
-[eFrane/admin0](https://github.com/eFrane/admin0) 저장소의 `asia/KR.geojson`을 좌표 순서만
-`[lat, lng]`로 변환하고 소수점 4자리로 반올림해 용량을 줄였다.
+세 곳이 **같은 파일**을 쓴다 — 그래야 셋이 한 경계로 보인다:
 
-**라이선스**: Natural Earth 데이터 및 eFrane/admin0의 변환 코드 모두 **Public Domain**
-("This data as well as the small piece of code is in the public domain." — eFrane/admin0 README).
+- [FogOverlayController](../../lib/services/fog_overlay_controller.dart) — 안개 폴리곤(고리마다 landmass 하나)
+- [ProvinceBoundaryOverlay](../../lib/services/province_boundary_overlay.dart) — 지도 위 시/도 경계선
+- [KoreaChoroplethMap](../../lib/widgets/korea_choropleth_map.dart) — 탐험 현황의 시/도 단계구분도
+
+2013 기준이라 그 뒤 통합된 시/도(광주·전남)는 폴리곤이 따로다 — 화면 쪽이 이름으로 묶는다.
+
+**출처**: [southkorea-maps](https://github.com/southkorea/southkorea-maps) `kostat/2013/json/skorea_provinces_geo_simple.json`
+(통계청 SGIS). 이름만 남기고 좌표를 4자리로 줄였다.
+
+**라이선스**: KOSTAT — "Free to share or remix" (저장소 README).
+
+> 예전 `kr_boundary.json`(Natural Earth 해안선, Public Domain)은 안개가 시/도 경계선과 어긋나
+> 보이고 매립지(송도)가 빠져 있어 이 파일로 바꿨다(09-14).

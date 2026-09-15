@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'firebase_options.dart';
 import 'screens/auth_gate.dart';
+import 'theme/app_theme.dart';
 
 /// 빌드/실행 시 `--dart-define=NAVER_MAP_CLIENT_ID=발급받은_ID` 로 주입합니다.
 /// 값 발급처는 docs/ENV_GUIDE.md 참고, 절대 커밋하지 마세요.
@@ -30,10 +31,7 @@ class FogApp extends StatelessWidget {
     return MaterialApp(
       title: 'FogApp',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF5B7A99)),
-        useMaterial3: true,
-      ),
+      theme: buildAppTheme(),
       home: const AuthGate(),
     );
   }

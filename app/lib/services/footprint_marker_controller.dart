@@ -23,7 +23,7 @@ import 'footprint_service.dart';
 /// `radiusMeters`와 같은 값) 안에서는 150m로 넓어진다(문서 3-2·3-3) — 호출부가
 /// [updatePosition]의 `insideUnlockedSpot`으로 알려준다.
 ///
-/// 위치가 갱신될 때마다 다시 조회하면 걷는 내내 요청이 쏟아지므로([SpotGeofenceController]와
+/// 위치가 갱신될 때마다 다시 조회하면 걷는 내내 요청이 쏟아지므로(근접 판정 [resolveSpotProximity]와
 /// 달리 이 컨트롤러는 실제 네트워크 호출을 한다), 일정 거리 이상 움직였을 때만(또는 반경
 /// 모드가 바뀌었을 때만) 다시 불러온다. **숨겨진 줌에서는 아예 조회하지 않고**, 다시
 /// 보이게 되는 순간 마지막 위치로 한 번 채운다.

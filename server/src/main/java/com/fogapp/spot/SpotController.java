@@ -36,6 +36,17 @@ public class SpotController {
         return spotQueryService.findByRegion(me.userId(), region, page, size);
     }
 
+    /**
+     * 전국 스팟 id·좌표 한 번에(#223). 예) GET /api/spots/coords → [{"id":1,"lat":37.5,"lng":127.0},…]
+     *
+     * <p>앱의 안개 구역(스팟마다 구역 하나)이 첫 실행 때 받는다. 시/도별 페이지 조회로는 60여 번
+     * 왕복에 75초가 걸렸다(실기기, 09-15). 스팟은 수집 배치 때만 바뀌므로 앱은 받은 것을 기기에 둔다.</p>
+     */
+    @GetMapping("/coords")
+    public List<SpotCoordResponse> coords() {
+        return spotQueryService.findAllCoords();
+    }
+
     /** 현재 위치 반경 조회. 예) GET /api/spots/nearby?lat=37.57&lng=126.98&radius=3000 */
     @GetMapping("/nearby")
     public List<SpotResponse> nearby(

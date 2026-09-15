@@ -481,7 +481,8 @@ dev ← #35 feat/ui-map-screen ← #40 feat/map-spot-load
 
 **팀 결정 사항**
 
-- ✅ **인증 반경 = 100m** — 앱 `SpotGeofenceController.enterRadiusMeters` 와 서버 `visit.radius-meters` 가 같은 값입니다.
+- ✅ **인증 반경 = 100m** — 앱 `SpotProximity.verifyEnterMeters` 와 서버 `visit.radius-meters` 가 같은 값입니다.
+  (09-14 근접 알림 개편으로 앱 쪽은 두 단계가 됐습니다 — 300m 안 «!» 아이콘, 100m 안 진동 + 인증 아이콘. 서버와 묶인 값은 100m 하나입니다.)
   ⚠️ 한쪽만 바꾸면 "화면엔 인증 가능인데 서버가 거부"하는 버그가 됩니다. **반드시 양쪽을 함께** 바꾸세요.
   (서버는 `VISIT_RADIUS_METERS` 환경 변수로도 덮이므로 배포 환경 변경 시 특히 주의)
 - ✅ **정복률 지역 단위 = 시/군/구** — 시/도는 분모가 너무 커서 정복률이 거의 오르지 않습니다.
@@ -489,7 +490,7 @@ dev ← #35 feat/ui-map-screen ← #40 feat/map-spot-load
 - ✅ **3-2 알림 범위 = 포그라운드 인앱 알림만** — 백그라운드 로컬 알림·FCM 푸시는 **Phase 6(6-4)으로 이관**했습니다.
   백그라운드 위치는 iOS `location always` 심사·Android 백그라운드 위치 선언(시연 영상 + 수 주 심사)·상시 포그라운드 서비스 알림·배터리 소모가 한꺼번에 붙는데,
   그 비용이 **Phase 6의 6-1(캐릭터 실시간 위치)·6-4(FCM)와 그대로 중복**됩니다. 위치 소스는 그때 한 번만 만드는 게 맞습니다.
-  `SpotGeofenceController`는 위치 소스와 분리돼 있어 판정 로직은 그대로 재사용되므로, 나중에 백그라운드로 확장하는 길이 막히지 않습니다.
+  근접 판정(`resolveSpotProximity`, 예전 `SpotGeofenceController`)은 위치 소스와 분리된 순수 함수라 그대로 재사용되므로, 나중에 백그라운드로 확장하는 길이 막히지 않습니다.
 
 > ⚠️ **선행 블로커**: 3-1·3-3·3-5·3-6은 Phase 2 지도 코드가 `dev`에 있어야 합니다 → [#35](../../pull/35)·[#40](../../pull/40) 병합 필요.
 > [#48](../../issues/48)의 Storage 부분은 [#2](../../issues/2) Firebase 콘솔 설정이 선행입니다.

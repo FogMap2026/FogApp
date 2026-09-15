@@ -100,7 +100,7 @@ curl -sI https://fogapp.taild500a1.ts.net/privacy-policy.html | head -1
 
 | 문구 | 묶인 값 | 바뀌면 |
 |---|---|---|
-| "스팟 100m 안에" | `visit.radius-meters` · `SpotGeofenceController.enterRadiusMeters` | 양쪽 다 고칠 것 |
+| "스팟 100m 안에" | `visit.radius-meters` · `SpotProximity.verifyEnterMeters` | 양쪽 다 고칠 것 |
 | "시/군/구 단위 정복률" | `GET /api/conquest` 집계 단위 ([#51](../../issues/51)) | — |
 | "전국 관광 스팟" | `TOUR_COLLECT_AREA_CODES` | [#149](../../pull/149) 병합으로 **12,600건 적재 완료** — 그대로 "전국" 유지 |
 | "서버에 남는 좌표는 세 가지입니다 — 방문 인증 · 발자취 · 안개가 걷힌 지점" | 서버에 저장되는 좌표의 범위 | ✅ [#200](../../pull/200) 으로 **방침 §3 과 같은 목록**이 됐습니다. 🔴 **좌표를 «새로» 저장하는 기능이 늘면 여기·방침 §1~§3·동의 화면을 같이 고칩니다** — 심사자가 상품 설명과 방침을 나란히 놓고 봅니다 |

@@ -58,7 +58,7 @@ class _FootprintNearbyCreateScreenState extends ConsumerState<FootprintNearbyCre
       setState(() {
         _submitting = false;
         _errorMessage = e.response?.statusCode == 429
-            ? '남은 발자취가 없어요. 스팟을 정복하면 다시 채워집니다.'
+            ? '남은 발자취가 없어요. 스팟을 탐험하면 다시 채워집니다.'
             : '발자취를 남기지 못했어요. 네트워크를 확인하고 다시 시도해주세요.';
       });
     } catch (_) {

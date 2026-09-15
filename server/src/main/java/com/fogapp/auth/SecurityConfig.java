@@ -43,7 +43,21 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/health").permitAll()
+                        // ⚠️ "/error" 를 빼지 말 것(#221).
+                        //
+                        // 컨트롤러에서 예외(500)·없는 경로(404)·업로드 용량 초과(413)가 나면
+                        // 서블릿 컨테이너가 요청을 "/error" 로 «재디스패치»한다. 그런데
+                        // FirebaseAuthFilter 는 OncePerRequestFilter 라 그 재디스패치에서
+                        // 다시 돌지 않고, SecurityContext 가 비어 있는 채로 여기 도달한다.
+                        // "/error" 가 인증을 요구하면 RestAuthenticationEntryPoint 가
+                        // «인증이 필요합니다(401)»로 답해서, 서버의 모든 오류가 401 로
+                        // 위장된다 — 앱에서는 로그인 문제로밖에 안 보인다.
+                        //
+                        // 여기를 열어도 보호 자원이 새지 않는다. 미인증 요청은 필터 단계에서
+                        // 이미 401 로 막히고(재디스패치 전), "/error" 는 원래 요청의 상태
+                        // 코드를 그대로 돌려줄 뿐이다. 응답 본문은 Spring 기본값이라
+                        // 메시지·스택트레이스를 싣지 않는다(server.error.include-* 미설정).
+                        .requestMatchers("/api/health", "/error").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(eh -> eh.authenticationEntryPoint(authenticationEntryPoint))
                 .addFilterBefore(firebaseAuthFilter, UsernamePasswordAuthenticationFilter.class);

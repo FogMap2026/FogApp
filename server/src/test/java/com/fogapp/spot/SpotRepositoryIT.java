@@ -44,6 +44,23 @@ class SpotRepositoryIT {
     }
 
     @Test
+    void 좌표_목록은_좌표가_있는_스팟만_id_순으로_준다() {
+        Spot a = spotRepository.save(new Spot(
+                "C-1", "12", "좌표 있음", null, null, "1", "1", null, null, null, null, 37.5, 127.0));
+        spotRepository.save(new Spot(
+                "C-2", "12", "좌표 없음", null, null, "1", "1", null, null, null, null, null, null));
+
+        var coords = spotRepository.findAllCoords();
+
+        assertThat(coords).extracting(SpotCoordResponse::id).contains(a.getId());
+        assertThat(coords).allSatisfy(c -> {
+            assertThat(c.lat()).isNotNull();
+            assertThat(c.lng()).isNotNull();
+        });
+        assertThat(coords).isSortedAccordingTo((x, y) -> Long.compare(x.id(), y.id()));
+    }
+
+    @Test
     void 좌표가_없으면_geom은_null이지만_행은_저장된다() {
         Spot saved = spotRepository.save(new Spot(
                 "T-2", "12", "좌표없는 스팟", null, null, "1", "1", null, null, null, null,
