@@ -36,11 +36,14 @@ class OutsideKoreaMask {
 
   static Future<OutsideKoreaMask> attach(NaverMapController mapController) async {
     final rings = await FogOverlayController.loadProvinceRings();
+    // 독도처럼 안개는 안 덮지만 지도에는 보여야 하는 땅도 뚫는다.
+    final unfogged = await FogOverlayController.loadUnfoggedRings();
     final overlay = NPolygonOverlay(
       id: 'outside-korea-mask',
       coords: _cover,
       holes: [
-        for (final ring in outermostRings(rings)) ring.first == ring.last ? ring : [...ring, ring.first],
+        for (final ring in [...outermostRings(rings), ...unfogged])
+          ring.first == ring.last ? ring : [...ring, ring.first],
       ],
       color: seaColor,
     )..setGlobalZIndex(_globalZIndex);
