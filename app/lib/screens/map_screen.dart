@@ -1394,7 +1394,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
         ),
         MapMenuEntry(
           icon: Icons.people_outline,
-          label: '동행',
+          label: '친구',
           onTap: () => _openFromMenu(const FriendsScreen()),
         ),
         MapMenuEntry(
