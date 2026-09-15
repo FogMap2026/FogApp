@@ -14,6 +14,20 @@ class ProfileService {
     return Profile.fromJson(response.data!);
   }
 
+  /// 닉네임을 바꾼다. 서버 `PATCH /api/profile` 은 `nickname`·`profileImageUrl` 을
+  /// 받되 **null 인 필드는 건드리지 않는다**(`User.updateProfile`) — 그래서 닉네임만
+  /// 보내도 프로필 사진이 지워지지 않는다.
+  ///
+  /// 길이 상한 50 은 서버(`ProfileUpdateRequest`)와 같은 값이다. 넘기면 400 이라
+  /// 호출부가 먼저 막는다.
+  Future<Profile> updateNickname(String nickname) async {
+    final response = await _apiClient.dio.patch<Map<String, dynamic>>(
+      '/api/profile',
+      data: {'nickname': nickname},
+    );
+    return Profile.fromJson(response.data!);
+  }
+
   /// 개인정보·위치정보 수집 동의를 기록한다(#152). 서버가 둘 다 `true`만 받는다 —
   /// 이 앱은 위치 기반이라 부분 동의로는 핵심 기능이 성립하지 않는다.
   Future<Profile> consent() async {

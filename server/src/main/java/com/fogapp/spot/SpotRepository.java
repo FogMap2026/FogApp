@@ -18,6 +18,14 @@ public interface SpotRepository extends JpaRepository<Spot, Long> {
     Optional<Spot> findByContentId(String contentId);
 
     /**
+     * 좌표가 있는 스팟 전부의 id·좌표(#223). 엔티티를 안 만들고 세 열만 읽는다 —
+     * 12,600건을 엔티티로 올리면 overview(TEXT)까지 딸려 와 수 MB 다.
+     */
+    @Query("SELECT new com.fogapp.spot.SpotCoordResponse(s.id, s.lat, s.lng) FROM Spot s "
+            + "WHERE s.lat IS NOT NULL AND s.lng IS NOT NULL ORDER BY s.id")
+    List<SpotCoordResponse> findAllCoords();
+
+    /**
      * 소개글을 <b>아직 조회하지 않은</b> 스팟(#100). 상세조회로 채울 대상을 고른다.
      *
      * <p>상세는 스팟 1건당 1회 호출이라 비싸다 — 이미 조회한 것을 제외해 재실행이 남은 것만

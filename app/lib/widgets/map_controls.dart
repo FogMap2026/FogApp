@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// 지도 우측 상단 컨트롤(확대·축소·내 위치). 세로로 쌓인 아이콘 버튼 한 줄이다.
+/// 지도 우측 상단 컨트롤(확대·축소·내 위치·이 지역 스팟). 세로로 쌓인 아이콘 버튼 한 줄이다.
 ///
 /// **폭을 [_width] 로 고정한다.** 안 그러면 화면 전체를 덮는다 —
 /// [Divider] 는 고유 폭이 없어 주어진 최대 폭까지 늘어나고, `Column` 의
@@ -18,6 +18,8 @@ class MapControls extends StatelessWidget {
     required this.onZoomIn,
     required this.onZoomOut,
     required this.onRecenter,
+    required this.onSearchHere,
+    this.searchHereActive = false,
   });
 
   /// 패널 폭. 아이콘(20) + 좌우 여백이 들어가는 최소치다.
@@ -27,7 +29,7 @@ class MapControls extends StatelessWidget {
   /// 무리가 없는 선이면서 지도 시야를 덜 먹는다.
   static const double _width = 40;
 
-  /// 버튼 하나의 높이. 정사각형으로 두어 세 개가 40×120 한 덩어리가 된다.
+  /// 버튼 하나의 높이. 정사각형으로 두어 네 개가 40×160 한 덩어리가 된다.
   static const double _buttonSize = 40;
 
   /// 기본값(24)보다 작게 — 패널이 작아진 만큼 아이콘도 같이 줄여야 답답해 보이지 않는다.
@@ -38,6 +40,14 @@ class MapControls extends StatelessWidget {
 
   /// 아직 내 위치를 모르면 null — 버튼이 비활성화된다.
   final VoidCallback? onRecenter;
+
+  /// 「이 지역 스팟 보기」 토글 — 스팟은 평소 내 위치 주변만 불러오는데, 켜면 화면
+  /// 중심 주변을 불러오고 지도를 움직일 때마다 따라온다. 지도가 아직 준비 전이면 null.
+  final VoidCallback? onSearchHere;
+
+  /// 토글이 켜져 있는지. 켜지면 아이콘을 채우고 강조색으로 그려 «지금 화면 기준»임을
+  /// 알린다 — 안 그러면 내 주변 스팟이 왜 안 뜨는지 모른다.
+  final bool searchHereActive;
 
   @override
   Widget build(BuildContext context) {
@@ -55,6 +65,13 @@ class MapControls extends StatelessWidget {
             _button(icon: Icons.remove, onPressed: onZoomOut, tooltip: '축소'),
             const Divider(height: 1),
             _button(icon: Icons.my_location, onPressed: onRecenter, tooltip: '내 위치로'),
+            const Divider(height: 1),
+            _button(
+              icon: searchHereActive ? Icons.location_on : Icons.location_on_outlined,
+              onPressed: onSearchHere,
+              tooltip: searchHereActive ? '내 위치 기준으로' : '이 지역 스팟 보기',
+              color: searchHereActive ? Theme.of(context).colorScheme.primary : null,
+            ),
           ],
         ),
       ),
@@ -62,15 +79,16 @@ class MapControls extends StatelessWidget {
   }
 
   /// `IconButton` 은 기본 패딩이 8이라 그대로 두면 40×40 을 넘긴다.
-  /// 패딩을 지우고 [_buttonSize] 로 제약을 걸어 세 개가 정확히 맞물리게 한다.
+  /// 패딩을 지우고 [_buttonSize] 로 제약을 걸어 네 개가 정확히 맞물리게 한다.
   Widget _button({
     required IconData icon,
     required VoidCallback? onPressed,
     required String tooltip,
+    Color? color,
   }) {
     return IconButton(
       onPressed: onPressed,
-      icon: Icon(icon),
+      icon: Icon(icon, color: color),
       iconSize: _iconSize,
       tooltip: tooltip,
       padding: EdgeInsets.zero,
