@@ -50,6 +50,30 @@ class Match {
   bool get isSent => direction == 'SENT';
   bool get isPending => status == 'pending';
 
+  /// 수락됨 = 친구. 친구 목록에 뜨고 메시지를 주고받을 수 있다.
+  bool get isAccepted => status == 'accepted';
+
+  /// 친구 목록 — 수락된 매칭을 상대방 한 명당 하나로.
+  ///
+  /// 서버는 A→B 와 B→A 를 서로 다른 매칭으로 받아준다(`UNIQUE (requester_id, addressee_id)`).
+  /// 둘 다 수락되면 같은 친구가 두 줄로 뜨므로, 상대방마다 가장 먼저 맺어진 것 하나만 남긴다 —
+  /// 대화방은 매칭 한 건이라, 늘 같은 방이 열리게.
+  static List<Match> friendsOf(List<Match> matches) {
+    final accepted = matches.where((m) => m.isAccepted).toList()
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    final byCounterpart = <int, Match>{};
+    for (final match in accepted) {
+      byCounterpart.putIfAbsent(match.counterpartId, () => match);
+    }
+    return byCounterpart.values.toList();
+  }
+
+  /// 친구 요청 탭에 남길 것 — 이미 친구가 된 상대와의 매칭은 뺀다(친구 목록으로 옮겨 갔다).
+  static List<Match> requestsOf(List<Match> matches) {
+    final friendIds = friendsOf(matches).map((m) => m.counterpartId).toSet();
+    return matches.where((m) => !m.isAccepted && !friendIds.contains(m.counterpartId)).toList();
+  }
+
   /// 카드에 표시할 상대방 이름. 닉네임이 없으면 대체 문구를 쓴다.
   String get counterpartLabel =>
       (counterpartNickname != null && counterpartNickname!.isNotEmpty) ? counterpartNickname! : '이름 없는 여행자';

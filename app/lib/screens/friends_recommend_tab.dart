@@ -10,7 +10,7 @@ import 'social/personality_test_screen.dart';
 
 enum _LoadState { loading, needsPersonalityTest, ready, error }
 
-/// 친구 화면의 「추천 친구」 탭(5-1). 성향이 비슷한 사용자를 추천받아 동행을 요청한다.
+/// 친구 화면의 「추천 친구」 탭(5-1). 성향이 비슷한 사용자를 추천받아 친구 요청을 보낸다.
 ///
 /// 예전엔 지도 메뉴의 「동행 추천」으로 따로 열리던 화면이다 — 친구 화면(`FriendsScreen`)
 /// 안으로 옮기면서 자체 Scaffold 를 뺐다(앱바·스낵바는 친구 화면 것을 쓴다).
@@ -69,7 +69,7 @@ class _FriendsRecommendTabState extends ConsumerState<FriendsRecommendTab> {
       if (mounted) {
         setState(() => _requestedIds.add(candidate.userId));
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${candidate.nicknameLabel}님에게 동행을 요청했어요.')),
+          SnackBar(content: Text('${candidate.nicknameLabel}님에게 친구 요청을 보냈어요.')),
         );
       }
     } on DioException catch (e) {
@@ -180,7 +180,7 @@ class _CandidateCard extends StatelessWidget {
             ),
             FilledButton.tonal(
               onPressed: requested ? null : onRequest,
-              child: Text(requested ? '요청 보냄' : '동행 요청'),
+              child: Text(requested ? '요청 보냄' : '친구 요청'),
             ),
           ],
         ),

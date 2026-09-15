@@ -132,7 +132,13 @@ class _ConsentScreenState extends ConsumerState<ConsentScreen> {
                   ),
                   const _CollectionItem(
                     title: '여행 성향',
-                    detail: '성향 테스트 결과 — 동행 추천에 사용',
+                    detail: '성향 테스트 결과 — 친구(동행) 추천에 사용',
+                  ),
+                  const _CollectionItem(
+                    title: '메시지',
+                    detail:
+                        '친구 요청이 수락된 친구와 주고받은 메시지 내용과 시각. 그 친구에게만 보이며, '
+                        '친구를 끊거나 탈퇴하면 즉시 삭제됩니다.',
                   ),
                   const _CollectionItem(
                     title: '위치공유 (선택)',
@@ -160,7 +166,7 @@ class _ConsentScreenState extends ConsumerState<ConsentScreen> {
                     controlAffinity: ListTileControlAffinity.leading,
                     contentPadding: EdgeInsets.zero,
                     title: const Text('개인정보 수집·이용에 동의합니다'),
-                    subtitle: const Text('이메일·닉네임·프로필 이미지·이용기록·여행 성향'),
+                    subtitle: const Text('이메일·닉네임·프로필 이미지·이용기록·여행 성향·메시지'),
                   ),
                   CheckboxListTile(
                     value: _locationChecked,
