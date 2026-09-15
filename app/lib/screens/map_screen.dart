@@ -1104,8 +1104,18 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     const b = _viewportBounds;
     double south = b.southLatitude + halfLat, north = b.northLatitude - halfLat;
     double west = b.westLongitude + halfLng, east = b.eastLongitude - halfLng;
-    if (south > north) south = north = (b.southLatitude + b.northLatitude) / 2;
-    if (west > east) west = east = (b.westLongitude + b.eastLongitude) / 2;
+    // 🔴 폭 0 인 범위는 SDK 가 거부한다(«extent are invalid» 로 네이티브 크래시). 화면이 범위보다
+    //    크면 가운데 ±0.01° 로 «거의 고정».
+    if (south > north) {
+      final mid = (b.southLatitude + b.northLatitude) / 2;
+      south = mid - 0.01;
+      north = mid + 0.01;
+    }
+    if (west > east) {
+      final mid = (b.westLongitude + b.eastLongitude) / 2;
+      west = mid - 0.01;
+      east = mid + 0.01;
+    }
     final next = NLatLngBounds(southWest: NLatLng(south, west), northEast: NLatLng(north, east));
     if (next == _cameraExtent) return;
     setState(() => _cameraExtent = next);
