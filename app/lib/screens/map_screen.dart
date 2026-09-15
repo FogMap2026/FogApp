@@ -625,7 +625,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       case ConquestPillMode.near:
         return '${proximity.spot.title} 근처 · 약 ${distance}m';
       case ConquestPillMode.verifiable:
-        return '${proximity.spot.title} 인증 가능 · 눌러서 인증';
+        return '${proximity.spot.title} 인증 가능 · 눌러서 스팟 보기';
     }
   }
 
@@ -651,10 +651,12 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     switch (_pillMode) {
       case ConquestPillMode.progress:
         whenIdle();
+      // 알림을 누르면 «그 스팟 상세»로 간다(시진, 09-15 — #220 과 같은 흐름). 100m 안이면 상세에
+      // 「지금 방문 인증하기」가 떠 있어 거기서 인증한다. 곧바로 인증 화면으로 보내지 않는 것은
+      // 어떤 스팟인지 보고 고르게 하려는 것 — 스팟이 붙어 있는 도심에서 특히.
       case ConquestPillMode.near:
-        setState(() => _nearAlarmDismissedSpotId = proximity?.spot.id);
       case ConquestPillMode.verifiable:
-        if (proximity != null) unawaited(_openVisitVerify(proximity.spot));
+        if (proximity != null) unawaited(_openSpotDetail(proximity.spot));
     }
   }
 

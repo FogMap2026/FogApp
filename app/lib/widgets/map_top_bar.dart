@@ -39,11 +39,22 @@ class MapTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    // 프로필이 위, 배터리가 그 아래 — 오른쪽 끝에 세로로 선다(시진, 09-15). 한 줄에 나란히 두면
+    // 알림으로 자랄 때 프로필 왼쪽 폭만큼밖에 못 자라 긴 스팟 이름이 잘렸다. 아래 줄에 두면
+    // 화면 폭 전체를 쓸 수 있고 프로필 버튼과 서로 밀지 않는다.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        // 배터리는 «남는 폭 전체»를 받아 두고 그 안에서 자란다 — 자랄 수 있는 최대치를
-        // 상수로 짐작하면 좁은 폰에서 넘치고 넓은 폰에서 모자란다.
-        Expanded(
+        _ProfileButton(
+          size: _profileSize,
+          imageUrl: profileImageUrl,
+          onTap: onProfileTap,
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        // 배터리는 «폭 전체»를 받아 두고 그 안에서 오른쪽에서 왼쪽으로 자란다 — 자랄 수 있는
+        // 최대치를 상수로 짐작하면 좁은 폰에서 넘치고 넓은 폰에서 모자란다.
+        SizedBox(
+          width: double.infinity,
           child: Align(
             alignment: Alignment.centerRight,
             child: ConquestPill(
@@ -53,12 +64,6 @@ class MapTopBar extends StatelessWidget {
               onTap: onPillTap,
             ),
           ),
-        ),
-        const SizedBox(width: AppSpacing.xs),
-        _ProfileButton(
-          size: _profileSize,
-          imageUrl: profileImageUrl,
-          onTap: onProfileTap,
         ),
       ],
     );

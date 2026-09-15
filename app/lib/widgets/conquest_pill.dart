@@ -111,9 +111,8 @@ class ConquestPill extends StatelessWidget {
         // 값이다 — 안 빼면 «인증 가능»(꽉 채움)에서 1.5px 넘친다(CI, 09-15).
         final trailing = 1.5 + (_alarm ? 0 : _nubWidth);
         final maxWidth = constraints.maxWidth.isFinite ? constraints.maxWidth - trailing : bodyWidth;
-        final targetWidth = _alarm
-            ? (maxWidth * _expandedFactor).clamp(bodyWidth, maxWidth)
-            : bodyWidth.clamp(0.0, maxWidth);
+        final targetWidth =
+            _alarm ? (maxWidth * _expandedFactor).clamp(bodyWidth, maxWidth) : bodyWidth.clamp(0.0, maxWidth);
 
         return Semantics(
           button: true,
@@ -212,18 +211,22 @@ class ConquestPill extends StatelessWidget {
             color: AppColors.primary,
           ),
           const SizedBox(width: 6),
-          // 자라는 도중에는 상자가 문구보다 좁다. 줄바꿈하면 높이가 튀므로 한 줄로 눌러 담는다.
+          // 한 줄로 두되 상자보다 길면 글자를 줄인다 — 잘라서 「…」로 내면 어느 스팟인지 모른다
+          // (시진, 09-15). 자라는 도중에도 같은 규칙이라 문구가 작게 시작해 커진다.
           Expanded(
-            child: Text(
-              message ?? '',
-              maxLines: 1,
-              overflow: TextOverflow.clip,
-              softWrap: false,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppColors.ink,
-                height: 1,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                message ?? '',
+                maxLines: 1,
+                softWrap: false,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.ink,
+                  height: 1,
+                ),
               ),
             ),
           ),
@@ -239,9 +242,9 @@ class ConquestPill extends StatelessWidget {
         final percent = value == null ? '알 수 없음' : '${(value * 100).round()}퍼센트';
         return '이 지역 정복률 $percent. 눌러서 전국 정복 현황 보기';
       case ConquestPillMode.near:
-        return '${message ?? ''}. 눌러서 알림 닫기';
+        return '${message ?? ''}. 눌러서 스팟 보기';
       case ConquestPillMode.verifiable:
-        return '${message ?? ''}. 눌러서 인증하기';
+        return '${message ?? ''}. 눌러서 스팟 보기';
     }
   }
 }

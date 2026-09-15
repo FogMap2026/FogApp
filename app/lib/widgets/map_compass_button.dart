@@ -92,8 +92,8 @@ class _MapCompassButtonState extends State<MapCompassButton> with SingleTickerPr
       button: true,
       label: switch (widget.mode) {
         MapCompassMode.compass => '내 위치로 이동',
-        MapCompassMode.near => '근처에 스팟이 있어요. 눌러서 알림 닫기',
-        MapCompassMode.verifiable => '인증할 수 있어요. 눌러서 인증하기',
+        MapCompassMode.near => '근처에 스팟이 있어요. 눌러서 스팟 보기',
+        MapCompassMode.verifiable => '인증할 수 있어요. 눌러서 스팟 보기',
       },
       child: AnimatedBuilder(
         animation: _pulse,
