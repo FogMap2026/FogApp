@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
@@ -7,13 +6,14 @@ import 'package:geolocator/geolocator.dart';
 
 import '../models/footprint.dart';
 import 'footprint_service.dart';
+import '../widgets/map_pin.dart';
 import 'spot_marker_controller.dart';
 
-/// 지도 위에 발자취를 스팟과 같은 크기의 **발바닥 핀**으로 그린다(#117).
+/// 지도 위에 발자취를 스팟과 같은 크기의 **발자국 핀**으로 그린다(#117).
 ///
 /// 처음엔 작은 마름모(16dp)였는데 실기기에서 «너무 작아서 있는 줄 모른다»(시진, 09-15). 스팟 핀과
-/// 같은 크기(38×50dp)의 보라 핀에 흰 발바닥을 넣어, 멀리서는 스팟처럼 눈에 띄고 가까이서는
-/// 모양으로 갈린다. 줌을 빼면 스팟과 같은 표([SpotMarkerController.scaleForZoom])로 함께 줄어든다.
+/// 같은 실루엣([MapPin])의 보라 핀에 흰 사람 발자국을 넣어, 멀리서는 스팟처럼 눈에 띄고
+/// 가까이서는 모양으로 갈린다. 줌을 빼면 스팟과 같은 표([SpotMarkerController.scaleForZoom])로 함께 줄어든다.
 ///
 /// 조회 반경은 **내 위치 1km** 고정이다(서버 상한 `FootprintService.MAX_RADIUS_METERS`). 예전엔
 /// 이동 중 50m·해금 스팟 안 150m 였는데, 그러면 바로 옆 골목 글도 안 보여 발자취가 있는지
@@ -38,12 +38,16 @@ class FootprintMarkerController {
   final FootprintService _footprintService;
   final NOverlayImage _icon;
 
-  /// 핀 크기(dp) — 스팟 기본 핀과 같다([SpotMarkerController] 실측 38×50).
-  static const iconSize = Size(38, 50);
+  /// 핀 크기(dp) — 스팟 핀과 같다.
+  static const iconSize = MapPin.size;
 
-  /// 발바닥 핀 아이콘. 여러 마커가 같은 이미지를 공유하도록 한 번만 만들어 재사용한다.
+  /// 발자국 핀 아이콘. 여러 마커가 같은 이미지를 공유하도록 한 번만 만들어 재사용한다.
   static Future<NOverlayImage> createIcon(BuildContext context) {
-    return NOverlayImage.fromWidget(context: context, size: iconSize, widget: const _FootprintPin());
+    return NOverlayImage.fromWidget(
+      context: context,
+      size: iconSize,
+      widget: const MapPin(color: tint, child: Padding(padding: EdgeInsets.all(5), child: HumanFootprint())),
+    );
   }
 
   /// 핀을 탭했을 때 호출된다 — 글귀 팝업 진입점.
@@ -218,61 +222,4 @@ class FootprintMarkerController {
     _markersByFootprintId.clear();
     _footprintsById.clear();
   }
-}
-
-/// 발바닥 핀 — 스팟 기본 핀과 같은 실루엣(둥근 머리 + 아래로 뾰족한 꼬리)에 보라를 칠하고 흰
-/// 발바닥([Icons.pets])을 넣는다. 흰 테두리는 안개 위에서 윤곽을 살린다.
-class _FootprintPin extends StatelessWidget {
-  const _FootprintPin();
-
-  @override
-  Widget build(BuildContext context) {
-    return const CustomPaint(
-      size: FootprintMarkerController.iconSize,
-      painter: _PinPainter(FootprintMarkerController.tint),
-      child: Padding(
-        padding: EdgeInsets.only(top: 6),
-        child: Align(alignment: Alignment.topCenter, child: Icon(Icons.pets, color: Colors.white, size: 18)),
-      ),
-    );
-  }
-}
-
-class _PinPainter extends CustomPainter {
-  const _PinPainter(this.color);
-
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final r = w * 0.42; // 머리 반지름
-    final cx = w / 2;
-    final cy = r + 1.5; // 테두리 여유
-    final tipY = size.height - 1.5;
-    // 머리(원)와 꼬리(접점 두 개 + 끝점 삼각형)를 합집합으로 — 호 각도를 손으로 맞추다 반이
-    // 잘린 모양이 나왔다(실기기, 09-15). 합집합이면 각도 계산이 필요 없다.
-    final d = tipY - cy;
-    final a = acos(r / d); // 중심에서 본 접점의 벌어진 각(아래 방향 기준)
-    final head = Path()..addOval(Rect.fromCircle(center: Offset(cx, cy), radius: r));
-    final tail = Path()
-      ..moveTo(cx, tipY)
-      ..lineTo(cx + r * sin(a), cy + r * cos(a))
-      ..lineTo(cx, cy)
-      ..lineTo(cx - r * sin(a), cy + r * cos(a))
-      ..close();
-    final path = Path.combine(PathOperation.union, head, tail);
-    canvas.drawShadow(path, const Color(0x66000000), 2, false);
-    canvas.drawPath(path, Paint()..color = color);
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = Colors.white
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_PinPainter old) => old.color != color;
 }

@@ -975,9 +975,14 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     unawaited(_restoreJourney());
     // 구역은 전국 좌표를 받아야 해서 늦게 온다 — 그동안의 방문·궤적은 만들어질 때 반영된다.
     unawaited(_buildFogRegions());
+    // 스팟 핀 이미지(잠김·밝힘·찜)는 위젯을 구워 만든다 — 앞선 await 이후라 mounted 를 본다.
+    if (!mounted) return;
+    final spotIcons = await SpotMarkerController.createIcons(context);
+    if (!mounted) return;
     _spotMarkers = SpotMarkerController(
       controller,
       ref.read(spotServiceProvider),
+      icons: spotIcons,
       onSpotsLoaded: (spots) {
         _proximityCandidates = spots;
         _recomputeProximity();

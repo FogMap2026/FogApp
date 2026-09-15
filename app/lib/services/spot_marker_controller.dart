@@ -5,6 +5,7 @@ import 'package:flutter_naver_map/flutter_naver_map.dart';
 
 import '../models/spot.dart';
 import '../theme/app_theme.dart';
+import '../widgets/map_pin.dart';
 import 'spot_service.dart';
 
 /// 안개 아래 숨겨진 탐험 포인트(스팟)를 지도에 마커로 배치한다(#28).
@@ -23,10 +24,11 @@ class SpotMarkerController {
   SpotMarkerController(
     this._mapController,
     this._spotService, {
+    required SpotPinIcons icons,
     this.onSpotsLoaded,
     this.onLoadFailed,
     this.onSpotTapped,
-  });
+  }) : _icons = icons;
 
   final NaverMapController _mapController;
   final SpotService _spotService;
@@ -49,10 +51,9 @@ class SpotMarkerController {
   /// (`SpotController` 의 `radius` 기본 3000)과도 같다.
   static const radiusMeters = 3000.0;
 
-  /// 네이버 기본 마커 아이콘 크기(dp) — 줄일 때의 기준. Galaxy S25(480dpi) 캡처에서
-  /// 114×149px 로 실측한 값이다. 배율 1.0 에서는 이 값을 쓰지 않고 [NMarker.autoSize]
-  /// 로 둔다 — 그래야 줌 15 이상에서 예전과 픽셀 단위로 같다.
-  static const _baseSize = Size(38, 50);
+  /// 핀 크기(dp) — 네이버 기본 마커와 같은 비율(실측 38×50). 직접 그리므로 배율 1.0 에서도
+  /// 이 값을 준다.
+  static const _baseSize = MapPin.size;
 
   /// 줌 → 마커 배율. 줌 15(내 위치 줌) 이상은 원래 크기, 10 이하는 50% — 그보다
   /// 작으면 손가락으로 못 누른다. 사이 값은 선형 보간.
@@ -73,12 +74,31 @@ class SpotMarkerController {
   /// 지금 마커에 적용된 배율. 0.02 단위로 끊어 핀치 줌 중에 매 프레임 갱신하지 않는다.
   double _scale = 1.0;
 
-  /// 해금 전 스팟 마커에 입히는 톤. 이름/캡션 없이 "여기 무언가 있다" 정도만 알려준다.
-  static const _hiddenTint = Color(0xFF3A4454);
+  /// 해금 전 스팟 핀 색 — 민트. 이름/캡션 없이 "여기 무언가 있다" 정도만 알려준다.
+  static const lockedColor = Color(0xFF5CD6B0);
 
-  /// 찜한 스팟 마커의 톤 — 기본 마커와 한눈에 갈리는 주황. 잠김 여부와 무관하게 이 색이다:
+  /// 밝힌 스팟 핀 색 — 초록.
+  static const unlockedColor = AppColors.accentGreen;
+
+  /// 찜한 스팟 핀 색 — 한눈에 갈리는 주황. 잠김 여부와 무관하게 이 색이다:
   /// 「가 볼 곳」이라는 표시가 「밝혔나」보다 먼저 읽혀야 한다.
-  static const _favoriteTint = AppColors.accentOrange;
+  static const favoriteColor = AppColors.accentOrange;
+
+  /// 핀 이미지 셋(잠김·밝힘·찜). 위젯을 이미지로 구워 마커들이 공유한다.
+  static Future<SpotPinIcons> createIcons(BuildContext context) async {
+    Future<NOverlayImage> bake(Color color) => NOverlayImage.fromWidget(
+          context: context,
+          size: MapPin.size,
+          widget: MapPin(color: color, child: const PinDot()),
+        );
+    return SpotPinIcons(
+      locked: await bake(lockedColor),
+      unlocked: await bake(unlockedColor),
+      favorite: await bake(favoriteColor),
+    );
+  }
+
+  final SpotPinIcons _icons;
 
   /// 찜한 스팟(`FavoriteSpots`). 조회 결과와 무관하게 **항상** 지도에 둔다 — 내 위치
   /// 3km 밖이어도, 📍 로 다른 곳을 보고 있어도. 마지막 조회 결과([_loaded])와 합쳐 그린다.
@@ -226,8 +246,7 @@ class SpotMarkerController {
   Size _sizeForScale() => sizeForScale(_scale);
 
   /// 배율 → 마커 크기. 발자취 마커([FootprintMarkerController])도 같은 표를 써서 함께 줄어든다.
-  static Size sizeForScale(double scale) =>
-      scale >= 1.0 ? NMarker.autoSize : Size(_baseSize.width * scale, _baseSize.height * scale);
+  static Size sizeForScale(double scale) => Size(_baseSize.width * scale, _baseSize.height * scale);
 
   /// 좌표가 같은 스팟끼리 벌린 자리. [spreadMeters] 반지름 원 위에 id 순으로 고르게 놓는다 —
   /// 같은 무리면 조회 순서와 무관하게 늘 같은 자리다. 혼자인 스팟은 목록에 없다.
@@ -272,13 +291,12 @@ class SpotMarkerController {
       id: 'spot-${spot.id}',
       position: position,
       size: _sizeForScale(),
-      // 찜이 먼저, 그다음 잠김. unlocked 스팟은 Phase 3에서 실제 정보를 담은 마커로
-      // 대체될 예정이라 지금은 숨김 톤으로 그린다 (서버도 현재 unlocked=false만 내려준다).
-      iconTintColor: favorite
-          ? _favoriteTint
+      // 찜이 먼저, 그다음 잠김 — 「가 볼 곳」이 「밝혔나」보다 먼저 읽혀야 한다.
+      icon: favorite
+          ? _icons.favorite
           : spot.unlocked
-              ? Colors.transparent
-              : _hiddenTint,
+              ? _icons.unlocked
+              : _icons.locked,
     );
     final onTapped = onSpotTapped;
     if (onTapped != null) {
@@ -296,4 +314,13 @@ class SpotMarkerController {
     _markersBySpotId.clear();
     _styleBySpotId.clear();
   }
+}
+
+/// 스팟 핀 이미지 셋 — [SpotMarkerController.createIcons].
+class SpotPinIcons {
+  const SpotPinIcons({required this.locked, required this.unlocked, required this.favorite});
+
+  final NOverlayImage locked;
+  final NOverlayImage unlocked;
+  final NOverlayImage favorite;
 }
