@@ -72,7 +72,7 @@ def main():
     draw = ImageDraw.Draw(img)
     x = round(W * 0.44)
     lines = [
-        ('FogApp', ImageFont.truetype(BOLD, 88), WHITE, 26),
+        ('FogMap', ImageFont.truetype(BOLD, 88), WHITE, 26),
         ('걸어서 안개를 걷어내는', ImageFont.truetype(REGULAR, 36), (206, 216, 230), 10),
         ('탐험형 여행 지도', ImageFont.truetype(REGULAR, 36), (206, 216, 230), 30),
         ('한국관광공사 관광정보 기반', ImageFont.truetype(REGULAR, 25), AMBER, 0),

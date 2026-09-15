@@ -134,6 +134,8 @@ cd tools/store_assets && python make_graphic.py ../../docs/store/graphic-1024x57
 ⚠️ **워드마크가 48px(mdpi)에서는 거의 안 읽힙니다.** 원본이 글자를 크게 품은 그림이라 줄이면 글자가 먼저 뭉개집니다. 런처에서는 색·구름·지도 윤곽으로 알아보게 되고, 이름은 아이콘 아래 앱 이름(`android:label`)이 맡습니다.
 
 > 📌 [make_icon.py](../../tools/store_assets/make_icon.py) 는 **옛 아이콘**(안개 속 걷힌 원 + 앰버 핀)을 그리던 스크립트입니다. 그래픽 이미지(`make_graphic.py`)가 그 색·핀 모양을 import 하므로 지우지 않았습니다 — **그래픽 이미지는 아직 옛 디자인**입니다.
+>
+> 그래픽 이미지의 **제목 글자만** 앱 이름 변경([#232](../../pull/232))에 맞춰 `FogMap` 으로 바꿨습니다(`make_graphic.py` 75행). 배경·핀은 그대로입니다.
 
 ### 그래픽 이미지 (옛 디자인)
 
