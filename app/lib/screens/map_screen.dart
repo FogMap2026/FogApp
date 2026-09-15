@@ -826,6 +826,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('발자취를 남겼어요.')));
       }
       unawaited(_loadFootprintQuota());
+      // 방금 남긴 글이 바로 핀으로 보이게 — 200m 걸을 때까지 기다리지 않는다.
+      unawaited(_footprintMarkers?.refresh());
     }
   }
 
@@ -851,6 +853,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     if (action == SpotDetailAction.verify && mounted) {
       await _openVisitVerify(spot);
     }
+    // 상세에서 발자취를 남겼을 수 있다 — 돌아오면 바로 핀에 반영한다.
+    unawaited(_footprintMarkers?.refresh());
   }
 
   bool _canVerify(Spot spot) {

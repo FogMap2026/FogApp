@@ -29,7 +29,10 @@ class FootprintMarkerController {
     this._footprintService, {
     required NOverlayImage icon,
     this.onTapped,
-  }) : _icon = icon;
+  }) : _icon = icon {
+    // 남이 방금 남긴 글도 제자리에 서서 보이게 — 위치 스트림은 안 움직이면 안 온다.
+    _refreshTimer = Timer.periodic(refreshInterval, (_) => refresh());
+  }
 
   final NaverMapController _mapController;
   final FootprintService _footprintService;
@@ -48,6 +51,12 @@ class FootprintMarkerController {
 
   /// 조회 반경 — 서버 상한과 같다.
   static const radiusMeters = 1000.0;
+
+  /// 제자리에서도 이 주기로 다시 조회한다 — 남이 방금 남긴 발자취가 보이게(시진, 09-15: «실시간으로
+  /// 갱신이 안 된다»). 1km 안 최대 200건이라 1분에 한 번이면 요청도 가볍다.
+  static const refreshInterval = Duration(seconds: 60);
+
+  Timer? _refreshTimer;
 
   /// 위치가 이만큼 이상 움직여야 다시 조회한다. 반경 1km 에 200m 면 화면 밖으로 밀려나는
   /// 글이 생기기 전에 갱신되면서도, 걷는 동안 요청이 15m 마다 나가진 않는다.
@@ -94,11 +103,7 @@ class FootprintMarkerController {
     for (final marker in _markersByFootprintId.values) {
       marker.setIsVisible(visible);
     }
-    if (!visible) return;
-    final lat = _lastKnownLat;
-    final lng = _lastKnownLng;
-    if (lat == null || lng == null) return;
-    unawaited(_fetchAround(lat: lat, lng: lng));
+    if (visible) unawaited(refresh());
   }
 
   /// 새 위치를 반영한다. **숨겨진 동안은 조회하지 않는다** — 받아온 발자취가 곧바로 숨겨져
@@ -110,10 +115,19 @@ class FootprintMarkerController {
     await _fetchAround(lat: lat, lng: lng);
   }
 
-  Future<void> _fetchAround({required double lat, required double lng}) async {
+  /// 마지막 위치에서 지금 당장 다시 조회한다 — 내가 방금 남겼을 때, 주기 갱신, 다시 보이게 될 때.
+  /// 거리 문턱을 무시한다.
+  Future<void> refresh() async {
+    final lat = _lastKnownLat;
+    final lng = _lastKnownLng;
+    if (lat == null || lng == null || !_visible) return;
+    await _fetchAround(lat: lat, lng: lng, force: true);
+  }
+
+  Future<void> _fetchAround({required double lat, required double lng, bool force = false}) async {
     final lastLat = _lastFetchLat;
     final lastLng = _lastFetchLng;
-    if (lastLat != null && lastLng != null) {
+    if (!force && lastLat != null && lastLng != null) {
       if (Geolocator.distanceBetween(lastLat, lastLng, lat, lng) < _minMoveMeters) return;
     }
 
@@ -197,6 +211,7 @@ class FootprintMarkerController {
   }
 
   void dispose() {
+    _refreshTimer?.cancel();
     for (final marker in _markersByFootprintId.values) {
       _mapController.deleteOverlay(marker.info);
     }
