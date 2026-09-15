@@ -95,24 +95,60 @@ class PinDot extends StatelessWidget {
 
 /// 사람 발자국 — 발바닥 윤곽선(안쪽 아치가 들어간 오른발) + 발가락 다섯 개. 핀 안(흰색)과
 /// 컨트롤 버튼(아이콘색) 양쪽에서 같은 그림을 쓴다(시진, 09-15 참고 이미지).
+///
+/// [slashed] 면 Material 의 `*_off` 아이콘처럼 왼쪽 위→오른쪽 아래 대각선을 긋고, 선 둘레의
+/// 발은 지운다 — 「발자취 숨기기」 메뉴 아이콘(스팟 숨기기의 `location_off` 와 한 짝).
 class HumanFootprint extends StatelessWidget {
-  const HumanFootprint({this.color = Colors.white, super.key});
+  const HumanFootprint({this.color = Colors.white, this.slashed = false, super.key});
 
   final Color color;
+  final bool slashed;
 
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(painter: _HumanFootprintPainter(color));
+    return CustomPaint(painter: _HumanFootprintPainter(color, slashed: slashed));
   }
 }
 
 class _HumanFootprintPainter extends CustomPainter {
-  const _HumanFootprintPainter(this.color);
+  const _HumanFootprintPainter(this.color, {this.slashed = false});
 
   final Color color;
+  final bool slashed;
 
   @override
   void paint(Canvas canvas, Size size) {
+    final h = size.height;
+    final cx = size.width / 2;
+    if (!slashed) {
+      _paintFoot(canvas, size);
+      return;
+    }
+    // 대각선 둘레를 «지우려면» 발을 따로 한 층에 그려야 한다 — 바탕색은 버튼마다 달라서
+    // 바탕색으로 덧칠할 수 없다.
+    final a = Offset(cx - h * 0.36, h * 0.06), b = Offset(cx + h * 0.36, h * 0.98);
+    canvas.saveLayer(Offset.zero & size, Paint());
+    _paintFoot(canvas, size);
+    canvas.drawLine(
+      a,
+      b,
+      Paint()
+        ..blendMode = BlendMode.clear
+        ..strokeWidth = h * 0.22
+        ..strokeCap = StrokeCap.round,
+    );
+    canvas.restore();
+    canvas.drawLine(
+      a,
+      b,
+      Paint()
+        ..color = color
+        ..strokeWidth = h * 0.09
+        ..strokeCap = StrokeCap.round,
+    );
+  }
+
+  void _paintFoot(Canvas canvas, Size size) {
     final h = size.height;
     final cx = size.width / 2;
     Offset p(double x, double y) => Offset(cx + x * h, y * h);
@@ -187,5 +223,5 @@ class _HumanFootprintPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_HumanFootprintPainter old) => old.color != color;
+  bool shouldRepaint(_HumanFootprintPainter old) => old.color != color || old.slashed != slashed;
 }
