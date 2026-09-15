@@ -597,7 +597,7 @@ dev ← #35 feat/ui-map-screen ← #40 feat/map-spot-load
 | # | 작업 | 영역 | 상태 | 브랜치 예시 |
 |---|------|------|------|-------------|
 | 6-1 | 캐릭터 기반 내 위치 렌더 + heading | 🟨 MAP / 🟩 UI | ✅ [#161](../../pull/161) | `feat/map-character` |
-| 6-1 | 걸어온 자리 안개(15m) + `journey_points` 서버 저장 | 🟨 MAP / 🟦 API | ✅ [#192](../../pull/192) 병합 | `feat/map-fog-trail` |
+| 6-1 | 걸어온 자리 안개(15m → 50m, [#214](../../pull/214)) + `journey_points` 서버 저장 | 🟨 MAP / 🟦 API | ✅ [#192](../../pull/192) 병합 | `feat/map-fog-trail` |
 | 6-2 | 30분 단위 주변 스팟 데이터 갱신 | 🟦 API | ✅ [#155](../../issues/155) 로 대체 — [#132](../../issues/132) CLOSED | `feat/api-live-refresh` |
 | 6-3 | **주변 여행자 익명 표시 — 30분 텀·스팟 기준** | 🟪 SOC | ✅ [#201](../../pull/201) 병합 | `feat/social-nearby-travelers` |
 | 6-4 | 푸시 알림 통합(FCM) — 근접·조우 이벤트 | 🟧 INF | ⬜ **의도적으로 뒤**(songkh1201) — ② 가입·⑨ 등록·신고필증이 **전부 명의라 대신할 사람이 없습니다**. 그 셋이 끝나기 전에는 열지 않습니다([#134](../../issues/134)) | `feat/infra-fcm` |
