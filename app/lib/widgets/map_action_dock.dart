@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 import 'map_compass_button.dart';
+import 'map_pin.dart';
 
 /// ☰ 를 눌렀을 때 위로 펼쳐지는 항목 하나.
 ///
@@ -189,9 +190,12 @@ class _FootprintButton extends StatelessWidget {
                             valueColor: AlwaysStoppedAnimation(AppColors.surface),
                           ),
                         )
-                      : CustomPaint(
-                          size: Size(size * 0.42, size * 0.52),
-                          painter: const _FootprintGlyph(),
+                      // 지도 위 발자취 핀([HumanFootprint])과 같은 발 모양 — «남기기» 버튼과
+                      // 지도의 발자취 마커가 한 식구로 읽힌다(시진, 09-15).
+                      : SizedBox(
+                          width: size * 0.48,
+                          height: size * 0.48,
+                          child: const HumanFootprint(color: AppColors.surface),
                         ),
                 ),
               ),
@@ -318,39 +322,4 @@ class _MenuChip extends StatelessWidget {
       ),
     );
   }
-}
-
-/// 발자국 하나 — 발바닥 타원 + 발가락 셋. Material 아이콘 세트에 발자국이 없어서 직접 그린다
-/// (지도 위 발자취 마커가 마름모라, 버튼까지 마름모로 두면 «남기기»와 «보기»가 구분이 안 된다).
-class _FootprintGlyph extends CustomPainter {
-  const _FootprintGlyph();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = AppColors.surface;
-
-    // 발바닥 — 위가 넓고 아래가 좁은 타원.
-    canvas.drawOval(
-      Rect.fromLTWH(size.width * 0.12, size.height * 0.28, size.width * 0.76, size.height * 0.72),
-      paint,
-    );
-
-    // 발가락 셋. 가운데가 가장 크고 바깥으로 갈수록 작아진다.
-    final toe = size.width * 0.15;
-    canvas.drawOval(
-      Rect.fromLTWH(size.width * 0.06, size.height * 0.10, toe, toe * 1.2),
-      paint,
-    );
-    canvas.drawOval(
-      Rect.fromLTWH(size.width * 0.40, 0, toe * 1.2, toe * 1.4),
-      paint,
-    );
-    canvas.drawOval(
-      Rect.fromLTWH(size.width * 0.78, size.height * 0.12, toe * 0.9, toe * 1.1),
-      paint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _FootprintGlyph oldDelegate) => false;
 }
