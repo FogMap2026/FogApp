@@ -19,7 +19,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
-            Text('FogApp 개인정보처리방침', style: theme.textTheme.titleLarge),
+            Text('FogMap 개인정보처리방침', style: theme.textTheme.titleLarge),
             const SizedBox(height: 4),
             Text(
               '시행일: 2026년 9월 14일',
@@ -27,7 +27,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             const Text(
-              'FogApp(이하 "서비스")은 이용자의 개인정보를 소중히 다루며, '
+              'FogMap(이하 "서비스")은 이용자의 개인정보를 소중히 다루며, '
               '「개인정보 보호법」 및 「위치정보의 보호 및 이용 등에 관한 법률」을 준수합니다. '
               '본 방침은 서비스가 어떤 정보를 어떤 목적으로 수집·이용하며 어떻게 보호하는지를 설명합니다.',
             ),
@@ -143,7 +143,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
             const _Section(
               title: '11. 개인정보 보호책임자 및 문의처',
               body:
-                  '개인정보 보호책임자: FogApp 팀\n'
+                  '개인정보 보호책임자: FogApp 팀(서비스명 FogMap)\n'
                   '문의 이메일: skunhee1201@naver.com\n\n'
                   '개인정보 침해에 대한 상담이 필요한 경우 아래 기관에 문의하실 수 있습니다.\n\n'
                   '• 개인정보침해신고센터 (privacy.kisa.or.kr / 국번없이 118)\n'

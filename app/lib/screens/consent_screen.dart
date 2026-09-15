@@ -96,7 +96,7 @@ class _ConsentScreenState extends ConsumerState<ConsentScreen> {
               child: ListView(
                 padding: const EdgeInsets.all(20),
                 children: [
-                  Text('FogApp이 모으는 정보', style: theme.textTheme.titleLarge),
+                  Text('FogMap이 모으는 정보', style: theme.textTheme.titleLarge),
                   const SizedBox(height: 8),
                   Text(
                     '안개를 걷으며 여행하는 앱의 특성상, 아래 정보를 모아 서비스를 제공합니다. '

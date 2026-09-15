@@ -18,7 +18,7 @@
          다르게 적거나 누락하면 검증 반려한다(docs/ONESTORE_RELEASE.md 1-2). -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" tools:node="remove"/>
     <application
-        android:label="FogApp"
+        android:label="FogMap"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
