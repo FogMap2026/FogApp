@@ -150,7 +150,7 @@ class _ConsentScreenState extends ConsumerState<ConsentScreen> {
                   const SizedBox(height: 8),
                   Text(
                     '보유 기간: 발자취는 직접 삭제할 수 있고, 삭제하면 즉시 파기됩니다. 계정은 '
-                    '프로필 화면에서 직접 탈퇴할 수 있으며, 탈퇴하는 즉시 계정과 관련 정보가 파기됩니다.',
+                    '설정 화면에서 직접 탈퇴할 수 있으며, 탈퇴하는 즉시 계정과 관련 정보가 파기됩니다.',
                     style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                   ),
                   const SizedBox(height: 4),
