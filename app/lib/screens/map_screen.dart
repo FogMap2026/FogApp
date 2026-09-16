@@ -404,7 +404,9 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       // 09-15) — 처음 뜬 화면과 버튼을 눌러 돌아온 화면이 다르면 «어느 게 기본인지» 헷갈린다.
       if (!_didZoomToFirstFix) {
         _didZoomToFirstFix = true;
-        _fitAroundMe(position.latitude, position.longitude);
+        // 애니메이션 없이 — 같은 순간 SDK 의 follow 모드가 내 위치로 카메라를 옮기며 우리
+        // 애니메이션을 끊어 줌 7 언저리에서 멈췄다(실기기, 09-15).
+        _fitAroundMe(position.latitude, position.longitude, animate: false);
       }
       // 스팟은 «내 위치» 기준으로 불러온다 — 카메라가 아니라. 지도를 밀어도 내 주변
       // 스팟이 그대로 남고, 300m 이상 걸었을 때만 다시 부른다.
@@ -533,17 +535,17 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
 
   /// 내 위치를 가운데 두고 반경 [_recenterRadiusMeters] 가 화면에 들어오게 맞춘다. 줌 값을 박지
   /// 않고 경계로 맞추는 이유: 화면 폭·밀도마다 같은 줌이 다른 거리를 보여준다.
-  void _fitAroundMe(double lat, double lng) {
+  void _fitAroundMe(double lat, double lng, {bool animate = true}) {
     final controller = _controller;
     if (controller == null) return;
     const mPerLat = 111320.0;
     const dLat = _recenterRadiusMeters / mPerLat;
     final dLng = _recenterRadiusMeters / (mPerLat * cos(lat * pi / 180));
-    controller.updateCamera(
-      NCameraUpdate.fitBounds(
-        NLatLngBounds(southWest: NLatLng(lat - dLat, lng - dLng), northEast: NLatLng(lat + dLat, lng + dLng)),
-      ),
+    final update = NCameraUpdate.fitBounds(
+      NLatLngBounds(southWest: NLatLng(lat - dLat, lng - dLng), northEast: NLatLng(lat + dLat, lng + dLng)),
     );
+    if (!animate) update.setAnimation(animation: NCameraAnimation.none, duration: Duration.zero);
+    controller.updateCamera(update);
   }
 
   /// 위치·후보·인증 목록 중 하나라도 바뀌면 부른다 — 우하단 근접 아이콘의 대상과 단계를 다시 정한다.
