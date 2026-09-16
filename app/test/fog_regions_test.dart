@@ -87,6 +87,30 @@ void main() {
       expect(regions.cell(regions.seedOfSpot(1)!).length, greaterThanOrEqualTo(3));
     });
 
+    test('맞닿는 두 구역의 공유 변은 같은 좌표다 — 어긋나면 그 틈이 얇은 안개 선으로 보인다', () {
+      // 남북으로 1.4km 떨어진 두 스팟. 셀마다 «자기 위도»로 경도를 환산하면 공유 변이
+      // 20cm 쯤 어긋났다(사용자 제보, 09-17).
+      final regions = FogRegions.build([_spot(1), _spot(2, north: 1400)]);
+      final rings = regions.cellsOf([regions.seedOfSpot(1)!, regions.seedOfSpot(2)!]);
+      expect(rings.length, 2);
+
+      // 두 셀이 공유하는 변 = 700m 지점을 지나는 가로선. 한쪽 링의 그 변 위 꼭짓점이
+      // 다른 링에도 «같은 좌표로» 있어야 한다.
+      const shared = _lat + 700 / 111320;
+      bool onSharedEdge(NLatLng p) => (p.latitude - shared).abs() < 1e-7;
+      final aEdge = rings[0].where(onSharedEdge).toList();
+      final bEdge = rings[1].where(onSharedEdge).toList();
+      expect(aEdge, isNotEmpty, reason: '경계 위 꼭짓점이 있어야 한다');
+      expect(bEdge.length, aEdge.length);
+
+      for (final p in aEdge) {
+        final nearest = bEdge
+            .map((q) => Geolocator.distanceBetween(p.latitude, p.longitude, q.latitude, q.longitude))
+            .reduce((a, b) => a < b ? a : b);
+        expect(nearest, lessThan(0.01), reason: '공유 변의 같은 꼭짓점이 1cm 넘게 어긋났다');
+      }
+    });
+
     test('좌표가 같은 씨앗 둘을 다 걷어도 구멍은 하나다 — 같은 구멍 둘은 짝홀로 서로 지워진다', () {
       final regions = FogRegions.build([_spot(1), _spot(2), _spot(3, east: 400)]);
       final rings = regions.cellsOf([regions.seedOfSpot(1)!, regions.seedOfSpot(2)!, regions.seedOfSpot(3)!]);
