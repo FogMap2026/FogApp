@@ -72,6 +72,10 @@ public class PushNotifier {
      *
      * <p>커밋 뒤라 여기서 예외가 나도 원래 요청은 이미 성공했다 — {@code PushSender} 구현이 예외를
      * 삼키므로 로그만 남는다.</p>
+     *
+     * <p>⚠️ 여기서 부르는 DB 쓰기는 <b>새 트랜잭션이어야 한다</b>. {@code afterCommit} 시점의 트랜잭션은
+     * 이미 커밋됐지만 살아 있어서, 그냥 참여하면 그 쓰기가 커밋되지 않는다 —
+     * {@code FirebasePushSender.send} 가 {@code REQUIRES_NEW} 인 이유다.</p>
      */
     private void afterCommit(Runnable send) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {

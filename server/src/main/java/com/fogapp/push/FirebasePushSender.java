@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.google.firebase.messaging.FirebaseMessaging;
@@ -37,9 +38,15 @@ public class FirebasePushSender implements PushSender {
      *
      * <p>더 이상 유효하지 않은 토큰({@code UNREGISTERED}: 앱 삭제·재설치)은 그 자리에서 지운다 —
      * 안 지우면 그 기기로 영영 실패하는 발송이 매번 따라다닌다.</p>
+     *
+     * <p>🔴 {@code REQUIRES_NEW} 여야 한다. 이 메서드는 {@code PushNotifier} 의 {@code afterCommit} 에서
+     * 불리는데, 그 시점의 트랜잭션은 <b>이미 커밋됐지만 아직 살아 있다</b> — 기본 {@code REQUIRED} 로
+     * 참여하면 여기서 지운 토큰이 <b>커밋되지 않는다</b>(Spring {@code TransactionSynchronization#afterCommit}
+     * 문서: "changes will not be committed … use PROPAGATION_REQUIRES_NEW"). 새 트랜잭션을 열어야
+     * 죽은 토큰 삭제가 실제로 남는다(#247 리뷰, PGH0621).</p>
      */
     @Override
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void send(Long userId, String title, String body, Map<String, String> data) {
         List<DeviceToken> devices = tokenRepository.findAllByUserId(userId);
         for (DeviceToken device : devices) {
