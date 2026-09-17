@@ -6,7 +6,7 @@ import java.util.Map;
  * 푸시 한 건을 보낸다(#134).
  *
  * <p>인터페이스로 두는 이유는 둘이다 — Firebase 자격증명이 없는 환경(로컬·CI)에서는
- * {@link NoopPushSender} 가 대신 서고, 테스트는 이걸 mocking 해 «무엇을 누구에게 보내려 했나»만
+ * {@code PushFallbackConfig} 의 대역이 대신 서고, 테스트는 이걸 mocking 해 «무엇을 누구에게 보내려 했나»만
  * 본다(실제 FCM 호출 없이).</p>
  */
 public interface PushSender {
