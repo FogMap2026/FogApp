@@ -141,10 +141,10 @@ class _ConsentScreenState extends ConsumerState<ConsentScreen> {
                         '친구를 끊거나 탈퇴하면 즉시 삭제됩니다.',
                   ),
                   const _CollectionItem(
-                    title: '알림 토큰 (선택)',
+                    title: '알림 토큰',
                     detail:
-                        '알림을 켜면 이 기기의 푸시 식별자를 저장합니다. 친구 요청·수락과 새 메시지를 '
-                        '알리는 데만 쓰고, 알림 문구에는 보낸 사람 닉네임까지만 담습니다. 설정에서 끄면 '
+                        '이 기기의 푸시 식별자를 저장합니다. 친구 요청·수락과 새 메시지를 알리는 데만 쓰고, '
+                        '알림 문구에는 보낸 사람 닉네임까지만 담습니다. 처음에는 켜져 있고, 설정에서 끄면 '
                         '즉시 삭제됩니다.',
                   ),
                   const _CollectionItem(
