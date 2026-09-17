@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/auth_service.dart';
 import '../services/profile_service.dart';
+import '../services/push_service.dart';
 import '../services/traveler_service.dart';
 import '../services/traveler_sharing.dart';
 import 'privacy_policy_screen.dart';
@@ -23,6 +24,16 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  Future<void> _setPushEnabled(bool enabled) async {
+    ref.read(pushEnabledProvider.notifier).set(enabled);
+    final push = ref.read(pushServiceProvider);
+    if (enabled) {
+      await push.enable();
+    } else {
+      await push.disable();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -31,6 +42,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            // 알림 받기(#134). 켜져 있으면 이 기기 토큰이 서버에 있고, 끄면 지운다 — 보낼 곳이
+            // 없어진다(별도 플래그를 두지 않는다). 보내는 것은 친구 요청·수락·새 메시지뿐이고,
+            // 스팟 근접은 푸시로 보내지 않는다(백그라운드 위치를 안 받는다, #135 취소).
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              secondary: const Icon(Icons.notifications_outlined),
+              title: const Text('알림 받기'),
+              subtitle: const Text('친구 요청·수락과 새 메시지를 알려줘요'),
+              value: ref.watch(pushEnabledProvider),
+              onChanged: _setPushEnabled,
+            ),
             // 내 위치 공유(#133). 기본값 꺼짐 — 신고 접수본의 opt-in 요건. 게시 자체는 지도
             // 화면이 한다(내 위치를 아는 곳) — travelerSharingProvider 로 잇는다.
             SwitchListTile(
@@ -93,6 +115,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
     if (confirmed != true || !mounted) return;
     await _stopSharingBeforeLeaving();
+    // 이 기기로 다음 사람 알림이 가지 않게 토큰을 지운다. «꺼둠»으로 기억하지는 않는다(#134).
+    await ref.read(pushServiceProvider).disable(forget: false);
     if (!mounted) return;
     Navigator.of(context).popUntil((route) => route.isFirst);
     await ref.read(authServiceProvider).signOut();

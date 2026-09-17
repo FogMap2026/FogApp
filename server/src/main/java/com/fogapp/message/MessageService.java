@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.fogapp.common.ForbiddenException;
 import com.fogapp.match.Match;
 import com.fogapp.match.MatchService;
+import com.fogapp.push.PushNotifier;
 
 /**
  * 친구끼리 메시지(수락된 매칭의 대화).
@@ -32,10 +33,12 @@ public class MessageService {
 
     private final MessageRepository messageRepository;
     private final MatchService matchService;
+    private final PushNotifier pushNotifier;
 
-    public MessageService(MessageRepository messageRepository, MatchService matchService) {
+    public MessageService(MessageRepository messageRepository, MatchService matchService, PushNotifier pushNotifier) {
         this.messageRepository = messageRepository;
         this.matchService = matchService;
+        this.pushNotifier = pushNotifier;
     }
 
     /**
@@ -55,15 +58,19 @@ public class MessageService {
 
     @Transactional
     public MessageResponse send(Long senderId, Long matchId, String content) {
-        requireFriends(senderId, matchId);
+        Match match = requireFriends(senderId, matchId);
         Message saved = messageRepository.save(new Message(matchId, senderId, content.strip()));
+        // 🔴 알림에는 **보낸 사람만** 싣는다 — 내용은 잠금화면에 그대로 뜬다(#134 결정).
+        //    방침 5장의 「그 친구에게만 공개」와도 맞다.
+        pushNotifier.newMessage(match, senderId);
         return MessageResponse.from(saved, senderId);
     }
 
-    private void requireFriends(Long viewerId, Long matchId) {
+    private Match requireFriends(Long viewerId, Long matchId) {
         Match match = matchService.getForViewer(viewerId, matchId);
         if (!Match.STATUS_ACCEPTED.equals(match.getStatus())) {
             throw new ForbiddenException("친구 요청이 수락된 뒤에 메시지를 주고받을 수 있습니다.");
         }
+        return match;
     }
 }

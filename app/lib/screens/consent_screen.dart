@@ -141,6 +141,13 @@ class _ConsentScreenState extends ConsumerState<ConsentScreen> {
                         '친구를 끊거나 탈퇴하면 즉시 삭제됩니다.',
                   ),
                   const _CollectionItem(
+                    title: '알림 토큰',
+                    detail:
+                        '이 기기의 푸시 식별자를 저장합니다. 친구 요청·수락과 새 메시지를 알리는 데만 쓰고, '
+                        '알림 문구에는 보낸 사람 닉네임까지만 담습니다. 처음에는 켜져 있고, 설정에서 끄면 '
+                        '즉시 삭제됩니다.',
+                  ),
+                  const _CollectionItem(
                     title: '위치공유 (선택)',
                     detail:
                         '설정 화면에서 켜면, 가까운 스팟 근처에 있다는 사실과 시각이 다른 '
@@ -166,7 +173,7 @@ class _ConsentScreenState extends ConsumerState<ConsentScreen> {
                     controlAffinity: ListTileControlAffinity.leading,
                     contentPadding: EdgeInsets.zero,
                     title: const Text('개인정보 수집·이용에 동의합니다'),
-                    subtitle: const Text('이메일·닉네임·프로필 이미지·이용기록·여행 성향·메시지'),
+                    subtitle: const Text('이메일·닉네임·프로필 이미지·이용기록·여행 성향·메시지·알림 토큰'),
                   ),
                   CheckboxListTile(
                     value: _locationChecked,

@@ -16,6 +16,7 @@ import com.fogapp.common.ForbiddenException;
 import com.fogapp.common.NotFoundException;
 import com.fogapp.user.PersonalityScoreParser;
 import com.fogapp.user.User;
+import com.fogapp.push.PushNotifier;
 import com.fogapp.user.UserRepository;
 import com.fogapp.user.UserSummary;
 
@@ -26,11 +27,14 @@ public class MatchService {
     private final MatchRepository matchRepository;
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
+    private final PushNotifier pushNotifier;
 
-    public MatchService(MatchRepository matchRepository, UserRepository userRepository, ObjectMapper objectMapper) {
+    public MatchService(MatchRepository matchRepository, UserRepository userRepository, ObjectMapper objectMapper,
+                        PushNotifier pushNotifier) {
         this.matchRepository = matchRepository;
         this.userRepository = userRepository;
         this.objectMapper = objectMapper;
+        this.pushNotifier = pushNotifier;
     }
 
     @Transactional
@@ -40,7 +44,9 @@ public class MatchService {
         }
         Match match = new Match(requesterId, addresseeId);
         computeSimilarity(requesterId, addresseeId).ifPresent(match::updateScore);
-        return matchRepository.save(match);
+        Match saved = matchRepository.save(match);
+        pushNotifier.friendRequested(saved);
+        return saved;
     }
 
     /**
@@ -150,6 +156,10 @@ public class MatchService {
             throw new ForbiddenException("매칭 상태 변경은 요청 대상자만 할 수 있습니다.");
         }
         match.updateStatus(status);
+        // 수락만 알린다 — 거절을 알리는 건 거절당한 쪽에 두 번 상처다.
+        if (Match.STATUS_ACCEPTED.equals(status)) {
+            pushNotifier.friendAccepted(match);
+        }
         return match;
     }
 

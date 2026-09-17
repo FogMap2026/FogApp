@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter_naver_map/flutter_naver_map.dart';
@@ -42,6 +43,7 @@ import '../widgets/footprint_card.dart';
 import '../widgets/footprint_region_taken_dialog.dart';
 import '../widgets/map_action_dock.dart';
 import '../widgets/map_pin.dart';
+import '../services/push_service.dart';
 import '../widgets/map_compass_button.dart';
 import '../widgets/map_top_bar.dart';
 import 'footprint_nearby_create_screen.dart';
@@ -122,6 +124,11 @@ class MapScreen extends ConsumerStatefulWidget {
 class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserver {
   NaverMapController? _controller;
   StreamSubscription<OnCameraChangedParams>? _cameraSubscription;
+
+  /// 푸시 알림 구독(#134) — 앱이 떠 있을 때 오는 것, 눌러서 들어온 것, 토큰 갱신.
+  StreamSubscription<RemoteMessage>? _pushMessages;
+  StreamSubscription<RemoteMessage>? _pushTaps;
+  StreamSubscription<String>? _pushTokenRefresh;
   FogOverlayController? _fogOverlay;
   ProvinceBoundaryOverlay? _provinceBoundary;
   OutsideKoreaMask? _outsideMask;
@@ -291,6 +298,38 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     // 위치 권한 요청은 onMapReady에서 한 번만 수행한다(중복 요청 시 Android가
     // "Can request only one set of permissions at a time"로 두 번째 요청을 무시함).
     _loadProfile();
+    _listenPush();
+  }
+
+  /// 푸시 알림(#134) — 앱이 떠 있을 때와, 알림을 눌러 들어왔을 때.
+  ///
+  /// 앱이 **떠 있을 때**는 시스템 알림이 안 뜨는 게 기본이라 스낵바로 알린다. 알림을 **누르면**
+  /// 친구 화면으로 보낸다 — 셋(친구 요청·수락·새 메시지) 모두 그 화면에서 이어진다. 대화방까지
+  /// 바로 여는 것은 매칭 한 건을 따로 받아 와야 해서 후속으로 미룬다.
+  void _listenPush() {
+    _pushMessages = FirebaseMessaging.onMessage.listen((message) {
+      final body = message.notification?.body;
+      if (body == null || !mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(body),
+          action: SnackBarAction(label: '보기', onPressed: _openFriends),
+        ),
+      );
+    });
+    _pushTaps = FirebaseMessaging.onMessageOpenedApp.listen((_) => _openFriends());
+    // 앱이 아예 꺼져 있다가 알림으로 열린 경우.
+    unawaited(
+      FirebaseMessaging.instance.getInitialMessage().then((message) {
+        if (message != null && mounted) _openFriends();
+      }),
+    );
+    _pushTokenRefresh = ref.read(pushServiceProvider).listenTokenRefresh();
+  }
+
+  void _openFriends() {
+    if (!mounted) return;
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const FriendsScreen()));
   }
 
   /// 내 프로필을 읽어 **잔여 발자취 횟수**(#118)와 **우상단 버튼의 프로필 사진**을 채운다.
@@ -319,6 +358,9 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     //    최대 19점(≈300m)이고, 다음 실행에 그 구간만 비어 보인다.
     WidgetsBinding.instance.removeObserver(this);
     _cameraSubscription?.cancel();
+    _pushMessages?.cancel();
+    _pushTaps?.cancel();
+    _pushTokenRefresh?.cancel();
     _geofencePositionSubscription?.cancel();
     _travelerShareTimer?.cancel();
     _bearing.dispose();

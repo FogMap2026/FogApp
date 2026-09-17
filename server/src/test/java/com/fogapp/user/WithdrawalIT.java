@@ -94,6 +94,11 @@ class WithdrawalIT {
         // journey_points와 같은 원칙(PGH0621, PR #201 리뷰).
         jdbcTemplate.update(
                 "INSERT INTO traveler_positions (user_id, nearest_spot_id) VALUES (?, ?)", userId, spotId);
+        // device_tokens(#134, V13) — 이 PR 이 만드는 표라 여기서 단언한다(같은 원칙).
+        //    남으면 탈퇴한 사람의 기기로 푸시가 계속 간다.
+        jdbcTemplate.update(
+                "INSERT INTO device_tokens (token, user_id, platform) VALUES (?, ?, 'android')",
+                "wd-token-" + userId, userId);
 
         mockMvc.perform(delete("/api/profile").header("Authorization", "Bearer wd-alice"))
                 .andExpect(status().isNoContent());
@@ -103,6 +108,7 @@ class WithdrawalIT {
         assertThat(countOf("footprints", "user_id", userId)).isZero();
         assertThat(countOf("journey_points", "user_id", userId)).isZero();
         assertThat(countOf("traveler_positions", "user_id", userId)).isZero();
+        assertThat(countOf("device_tokens", "user_id", userId)).isZero();
     }
 
     @Test

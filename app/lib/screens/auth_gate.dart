@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/profile.dart';
 import '../services/auth_service.dart';
 import '../services/profile_service.dart';
+import '../services/push_service.dart';
 import 'consent_screen.dart';
 import 'login_screen.dart';
 import 'map_screen.dart';
@@ -31,6 +34,22 @@ class _AuthGateState extends ConsumerState<AuthGate> {
 
   Future<Profile> _loadProfile() {
     return ref.read(profileServiceProvider).me();
+  }
+
+  /// 계정마다 한 번만 — `build` 는 자주 다시 도므로 uid 로 막는다.
+  String? _pushRegisteredForUid;
+
+  void _registerDeviceOnce(String uid) {
+    if (_pushRegisteredForUid == uid) return;
+    _pushRegisteredForUid = uid;
+    unawaited(() async {
+      final push = ref.read(pushServiceProvider);
+      // 이 기기에서 끈 적이 있으면 그대로 꺼둔 채 시작한다 — 설정 스위치도 그 값으로 맞춘다.
+      final enabled = await push.isEnabled();
+      if (!mounted) return;
+      ref.read(pushEnabledProvider.notifier).set(enabled);
+      await push.syncOnStart();
+    }());
   }
 
   void _reloadProfile() {
@@ -70,6 +89,9 @@ class _AuthGateState extends ConsumerState<AuthGate> {
             if (!profile.hasConsented) {
               return ConsentScreen(onConsented: _reloadProfile);
             }
+            // 동의까지 끝난 «진짜 로그인» 시점에 이 기기를 등록한다(#134). 로그인 화면이나 동의
+            // 화면에서 알림 권한을 물으면 앱이 무엇인지 알기도 전에 창부터 뜬다.
+            _registerDeviceOnce(user.uid);
             return const MapScreen();
           },
         );
