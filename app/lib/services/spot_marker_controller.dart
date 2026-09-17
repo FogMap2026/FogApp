@@ -33,9 +33,12 @@ class SpotMarkerController {
   final NaverMapController _mapController;
   final SpotService _spotService;
 
-  /// 스팟 목록을 새로 불러올 때마다 호출된다. geofencing(#45)이 별도 API 호출 없이
+  /// 스팟 목록을 새로 불러올 때마다 호출된다. 근접 판정이 별도 API 호출 없이
   /// 이 목록을 후보로 재사용할 수 있도록 노출하는 용도.
-  final void Function(List<Spot> spots)? onSpotsLoaded;
+  ///
+  /// [center] 는 그 조회의 중심이다 — 📍 모드에서는 화면 중심, 평소엔 내 위치라 받는 쪽이
+  /// «내 위치 기준 목록인가»를 가를 수 있어야 한다(`ProximityCandidates`).
+  final void Function(List<Spot> spots, NLatLng center)? onSpotsLoaded;
 
   /// 스팟 조회가 실패했을 때 호출된다(#146).
   ///
@@ -142,7 +145,7 @@ class SpotMarkerController {
         lng: center.longitude,
         radiusMeters: radius,
       );
-      onSpotsLoaded?.call(spots);
+      onSpotsLoaded?.call(spots, center);
       _loaded = spots;
       await _syncMarkers();
     } catch (e) {
