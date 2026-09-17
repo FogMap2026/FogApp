@@ -132,19 +132,25 @@ class _ConsentScreenState extends ConsumerState<ConsentScreen> {
                   ),
                   const _CollectionItem(
                     title: '여행 성향',
-                    detail: '성향 테스트 결과 — 동행 추천에 사용',
+                    detail: '성향 테스트 결과 — 친구(동행) 추천에 사용',
+                  ),
+                  const _CollectionItem(
+                    title: '메시지',
+                    detail:
+                        '친구 요청이 수락된 친구와 주고받은 메시지 내용과 시각. 그 친구에게만 보이며, '
+                        '친구를 끊거나 탈퇴하면 즉시 삭제됩니다.',
                   ),
                   const _CollectionItem(
                     title: '위치공유 (선택)',
                     detail:
-                        '지도 화면에서 켜면, 가까운 스팟 근처에 있다는 사실과 시각이 다른 '
+                        '설정 화면에서 켜면, 가까운 스팟 근처에 있다는 사실과 시각이 다른 '
                         '이용자에게 익명으로 공개됩니다. 좌표·닉네임은 포함되지 않고 30분 '
                         '지난 뒤에만 노출됩니다. 기본값은 꺼짐이며 언제든 끌 수 있습니다.',
                   ),
                   const SizedBox(height: 8),
                   Text(
                     '보유 기간: 발자취는 직접 삭제할 수 있고, 삭제하면 즉시 파기됩니다. 계정은 '
-                    '프로필 화면에서 직접 탈퇴할 수 있으며, 탈퇴하는 즉시 계정과 관련 정보가 파기됩니다.',
+                    '설정 화면에서 직접 탈퇴할 수 있으며, 탈퇴하는 즉시 계정과 관련 정보가 파기됩니다.',
                     style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                   ),
                   const SizedBox(height: 4),
@@ -160,7 +166,7 @@ class _ConsentScreenState extends ConsumerState<ConsentScreen> {
                     controlAffinity: ListTileControlAffinity.leading,
                     contentPadding: EdgeInsets.zero,
                     title: const Text('개인정보 수집·이용에 동의합니다'),
-                    subtitle: const Text('이메일·닉네임·프로필 이미지·이용기록·여행 성향'),
+                    subtitle: const Text('이메일·닉네임·프로필 이미지·이용기록·여행 성향·메시지'),
                   ),
                   CheckboxListTile(
                     value: _locationChecked,
