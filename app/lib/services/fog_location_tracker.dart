@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' show Size;
 
 import 'package:flutter_compass/flutter_compass.dart';
@@ -5,6 +6,7 @@ import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:geolocator/geolocator.dart';
 
 import 'location_permission_gate.dart';
+import 'smooth_location.dart';
 
 /// 배터리를 고려한 실시간 위치 추적기(#29).
 ///
@@ -13,8 +15,12 @@ import 'location_permission_gate.dart';
 /// 이미 의존성으로 들어와 있는 `geolocator`로 직접 구현해 다음을 명시적으로 제어한다.
 ///
 /// - 정확도: [LocationAccuracy.high] (배터리 소모가 큰 `best`/`bestForNavigation` 대신)
-/// - 갱신 조건: 15m 이상 이동했을 때만 갱신([_locationSettings]의 `distanceFilter`) —
-///   제자리에 멈춰 있을 때 불필요한 GPS 갱신을 막는다.
+/// - 갱신 조건: **두 가지를 나눈다.**
+///   - 안개·걸어온 자리·근접 판정([locationSettings]) — 15m 이상 움직였을 때만. 제자리에서
+///     불필요한 갱신·서버 저장을 막는다.
+///   - 화면의 내 위치 표시([markerLocationSettings]) — 거리 제한 없이 받는 대로. 15m 마다
+///     받으면 캐릭터가 **15m 씩 순간이동**한다(사용자 제보, 09-17). 받은 점 사이는
+///     [SmoothLocation] 이 채워 미끄러지듯 움직이게 한다.
 /// - 방향(heading)은 GPS가 아니라 나침반 센서(`flutter_compass`)를 사용한다 — GPS
 ///   이동 방향은 실제로 움직여야만 갱신되어, 제자리에서 기기를 돌렸을 때 화살표가
 ///   반응하지 않는 문제가 있다.
@@ -29,6 +35,19 @@ class FogLocationTracker extends NMyLocationTracker {
     accuracy: LocationAccuracy.high,
     distanceFilter: 15,
   );
+
+  /// 화면의 내 위치 표시 전용 — **거리 제한 없이** 받는 대로(≈1초에 한 번).
+  ///
+  /// 🔴 이 값을 [locationSettings] 와 합치지 말 것. 합치면 안개 궤적·`journey_points` 서버
+  /// 저장·근접 재계산이 1초마다 돌아 서버 행과 배터리가 함께 늘어난다. 여기서 촘촘히 받는 점은
+  /// **화면에만** 쓴다.
+  static const markerLocationSettings = LocationSettings(
+    accuracy: LocationAccuracy.high,
+  );
+
+  /// 받은 점 사이를 채우는 간격 — 60fps 까지 갈 이유는 없다. 15fps 면 사람 눈에 이어져 보이고
+  /// 오버레이 갱신도 초당 15번이면 충분하다.
+  static const markerTickInterval = Duration(milliseconds: 66);
 
   @override
   Future<NLatLng?> startLocationService() async {
@@ -47,10 +66,48 @@ class FogLocationTracker extends NMyLocationTracker {
     return NLatLng(position.latitude, position.longitude);
   }
 
+  /// 내 위치 오버레이에 흘려보내는 좌표.
+  ///
+  /// GPS 점을 그대로 주면 받은 순간에만 «툭» 옮겨진다. 점은 [markerLocationSettings] 로 촘촘히
+  /// 받고, 그 사이는 [SmoothLocation] 이 [markerTickInterval] 마다 채운 좌표로 메운다 —
+  /// 목표에 닿으면 타이머를 멈춰(`settledAt`) 서 있는 동안은 아무것도 돌지 않는다.
   @override
-  Stream<NLatLng> get locationStream => Geolocator.getPositionStream(
-        locationSettings: locationSettings,
-      ).map((p) => NLatLng(p.latitude, p.longitude));
+  Stream<NLatLng> get locationStream {
+    final smooth = SmoothLocation();
+    StreamSubscription<Position>? fixes;
+    Timer? ticker;
+    late StreamController<NLatLng> controller;
+
+    void emit() {
+      final now = DateTime.now();
+      final position = smooth.positionAt(now);
+      if (position != null && !controller.isClosed) controller.add(position);
+      if (smooth.settledAt(now)) {
+        ticker?.cancel();
+        ticker = null;
+      }
+    }
+
+    controller = StreamController<NLatLng>(
+      onListen: () {
+        fixes = Geolocator.getPositionStream(locationSettings: markerLocationSettings).listen(
+          (p) {
+            smooth.onFix(NLatLng(p.latitude, p.longitude), at: DateTime.now());
+            ticker ??= Timer.periodic(markerTickInterval, (_) => emit());
+            emit();
+          },
+          onError: controller.addError,
+        );
+      },
+      onCancel: () async {
+        ticker?.cancel();
+        ticker = null;
+        await fixes?.cancel();
+        fixes = null;
+      },
+    );
+    return controller.stream;
+  }
 
   /// 나침반(자기장 센서) 기반 heading. GPS 이동 방향(`Position.heading`)은 실제로
   /// 이동해야만 값이 바뀌어 "제자리에서 폰만 돌렸을 때" 화살표가 반응하지 않는
