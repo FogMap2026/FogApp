@@ -22,7 +22,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
             Text('FogMap 개인정보처리방침', style: theme.textTheme.titleLarge),
             const SizedBox(height: 4),
             Text(
-              '시행일: 2026년 9월 16일',
+              '시행일: 2026년 9월 17일',
               style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
             const SizedBox(height: 16),
@@ -160,7 +160,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
             const _Section(
               title: '12. 방침의 변경',
               body: '본 방침을 변경할 경우 시행일 및 변경 내용을 앱 또는 공개 페이지에 공지합니다.\n\n'
-                  '• 2026년 9월 16일 — 친구 메시지 기능 추가에 따라 수집 항목(메시지)·이용 목적·보유 기간·공개 범위를 추가\n'
+                  '• 2026년 9월 17일 — 친구 메시지 기능 추가에 따라 수집 항목(메시지)·이용 목적·보유 기간·공개 범위를 추가\n'
                   '• 2026년 9월 14일 — 최초 시행',
             ),
             const SizedBox(height: 24),

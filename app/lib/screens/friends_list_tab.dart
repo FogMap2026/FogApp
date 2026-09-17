@@ -44,7 +44,15 @@ class _FriendsListTabState extends ConsumerState<FriendsListTab> {
     );
     if (confirmed != true || !mounted) return;
     try {
-      await ref.read(matchServiceProvider).cancel(friend.id);
+      // 🔴 그 상대와의 매칭을 «전부» 지운다. 서버는 같은 방향 중복만 막아서(#52 `request`)
+      // 둘이 서로 요청해 각자 수락하면 수락된 매칭이 둘이 된다. 보이는 한 건만 지우면 목록을
+      // 새로 고쳤을 때 같은 친구가 빈 대화방으로 다시 떠서 «끊기가 안 된다»로 보인다(#235 리뷰,
+      // PGH0621). 대화는 매칭에 달려 있으니 지워진 매칭의 메시지도 함께 파기된다.
+      final matches = await ref.read(matchServiceProvider).listForUser();
+      final service = ref.read(matchServiceProvider);
+      for (final match in matches.where((m) => m.counterpartId == friend.counterpartId)) {
+        await service.cancel(match.id);
+      }
       if (mounted) _refresh();
     } catch (_) {
       if (mounted) {

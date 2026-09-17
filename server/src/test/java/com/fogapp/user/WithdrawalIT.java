@@ -143,6 +143,30 @@ class WithdrawalIT {
     }
 
     @Test
+    void 탈퇴하면_주고받은_메시지도_양쪽에서_사라진다() throws Exception {
+        // messages 는 match_id·sender_id 둘 다 users 를 타고 CASCADE 된다(V12). 「내가 보낸 것만
+        // 지워지고 상대가 보낸 것은 남는」 일이 없어야 한다 — 대화방(매칭)이 통째로 사라지기 때문이다.
+        // ⚠️ 이 단언은 «실제 탈퇴 경로»(DELETE /api/profile)를 지나야 의미가 있다(#193 규칙,
+        //    #235 리뷰). 원시 SQL 로 users 를 지우는 테스트는 CASCADE 만 증명한다.
+        Long frank = signUp("wd-frank", "uid-wd-frank");
+        Long grace = signUp("wd-grace", "uid-wd-grace");
+        Long matchId = jdbcTemplate.queryForObject(
+                "INSERT INTO matches (requester_id, addressee_id, status) VALUES (?, ?, 'accepted') RETURNING id",
+                Long.class, frank, grace);
+        jdbcTemplate.update("INSERT INTO messages (match_id, sender_id, content) VALUES (?, ?, '내가 보냄')",
+                matchId, frank);
+        jdbcTemplate.update("INSERT INTO messages (match_id, sender_id, content) VALUES (?, ?, '상대가 보냄')",
+                matchId, grace);
+
+        mockMvc.perform(delete("/api/profile").header("Authorization", "Bearer wd-frank"))
+                .andExpect(status().isNoContent());
+
+        Integer left = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM messages WHERE match_id = ?", Integer.class, matchId);
+        assertThat(left).isZero();
+    }
+
+    @Test
     void 인증_없이는_탈퇴할_수_없다() throws Exception {
         mockMvc.perform(delete("/api/profile").contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isUnauthorized());
