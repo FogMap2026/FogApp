@@ -37,7 +37,7 @@ import '../services/traveler_service.dart';
 import '../services/traveler_sharing.dart';
 import '../services/visit_service.dart';
 import '../theme/app_theme.dart';
-import '../widgets/conquest_pill.dart';
+import '../widgets/conquest_pill_mode.dart';
 import '../widgets/footprint_card.dart';
 import '../widgets/footprint_region_taken_dialog.dart';
 import '../widgets/map_action_dock.dart';

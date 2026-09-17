@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
-import 'conquest_pill.dart';
+import 'conquest_pill_mode.dart';
 
 /// 지도 우상단 한 줄 — 정복률 배터리 + 프로필(피그마 메인화면, oorony 09-15).
 ///
