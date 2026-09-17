@@ -319,9 +319,11 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     });
     _pushTaps = FirebaseMessaging.onMessageOpenedApp.listen((_) => _openFriends());
     // 앱이 아예 꺼져 있다가 알림으로 열린 경우.
-    unawaited(FirebaseMessaging.instance.getInitialMessage().then((message) {
-      if (message != null && mounted) _openFriends();
-    }));
+    unawaited(
+      FirebaseMessaging.instance.getInitialMessage().then((message) {
+        if (message != null && mounted) _openFriends();
+      }),
+    );
     _pushTokenRefresh = ref.read(pushServiceProvider).listenTokenRefresh();
   }
 
