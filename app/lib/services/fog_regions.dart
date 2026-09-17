@@ -138,8 +138,14 @@ class FogRegions {
 
   /// [seed] 의 구역(보로노이 셀) 둘레. 씨앗 중심 ±[cellCapMeters] 상자에서 시작해 이웃마다
   /// 수직이등분선 반평면으로 잘라 낸다(Sutherland–Hodgman). 볼록 다각형이고 씨앗을 품는다.
-  List<NLatLng> cell(FogRegionSeed seed) {
-    final mLng = _mPerLng(seed.lat);
+  ///
+  /// 🔴 [refLat] — **맞닿는 두 구역을 같은 자[尺]로 재기 위한 기준 위도**다. 경도 1도의 거리는
+  /// 위도에 따라 달라서, 셀마다 «자기 씨앗의 위도»로 환산하면 이웃과 공유하는 변이 서로 다른
+  /// 좌표로 계산된다 — 1.5km 떨어진 두 씨앗이면 **20cm 쯤** 어긋나고, 그 틈이 지도에서
+  /// **걷힌 구역 사이를 가르는 얇은 안개 선**으로 보인다(사용자 제보, 09-17). 같이 걷는 구역들은
+  /// 한 번에 [cellsOf] 로 계산하며, 거기서 공통 기준 위도를 넘긴다.
+  List<NLatLng> cell(FogRegionSeed seed, {double? refLat}) {
+    final mLng = _mPerLng(refLat ?? seed.lat);
     var poly = <Point<double>>[
       const Point(-cellCapMeters, -cellCapMeters),
       const Point(cellCapMeters, -cellCapMeters),
@@ -164,10 +170,22 @@ class FogRegions {
   /// 같은 구멍 둘은 서로 지워져 **도로 안개가 된다**(실기기, 09-15).
   List<List<NLatLng>> cellsOf(Iterable<FogRegionSeed> seeds) {
     final seen = <String>{};
-    final rings = <List<NLatLng>>[];
+    final unique = <FogRegionSeed>[];
     for (final seed in seeds) {
       if (!seen.add('${seed.lat},${seed.lng}')) continue;
-      final ring = cell(seed);
+      unique.add(seed);
+    }
+    if (unique.isEmpty) return const [];
+
+    // 🔴 한 기준 위도로 다 같이 잰다 — 맞닿는 두 구역의 공유 변이 같은 좌표로 나와야
+    // 그 사이에 «얇은 안개 선»이 남지 않는다([cell] 의 refLat 참고). 걷힌 구역들은 대개
+    // 한 동네라 평균 위도와의 차이가 작고, 경도 환산 비율이 조금 달라져도 구역 경계가
+    // 몇 cm 움직일 뿐이다(구역은 보여주기 위한 경계이고 정복률과 무관하다).
+    final refLat = unique.map((s) => s.lat).reduce((a, b) => a + b) / unique.length;
+
+    final rings = <List<NLatLng>>[];
+    for (final seed in unique) {
+      final ring = cell(seed, refLat: refLat);
       if (ring.length >= 3) rings.add(ring);
     }
     return rings;
