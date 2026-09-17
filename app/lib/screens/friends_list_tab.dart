@@ -55,9 +55,11 @@ class _FriendsListTabState extends ConsumerState<FriendsListTab> {
       }
       if (mounted) _refresh();
     } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('친구를 끊지 못했어요.')));
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('친구를 끊지 못했어요.')));
+      // 여러 건을 지우다 중간에 실패하면 «반쯤 끊긴» 상태다 — 목록을 새로 불러와 실제 상태를
+      // 보여준다. 안 그러면 이미 지워진 친구가 화면에 남는다(#235 리뷰, PGH0621).
+      _refresh();
     }
   }
 
