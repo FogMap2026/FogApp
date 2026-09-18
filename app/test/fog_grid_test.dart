@@ -6,6 +6,7 @@ import 'dart:math';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fogapp/services/fog_overlay_controller.dart';
+import 'package:geolocator/geolocator.dart';
 
 const _metersPerDegreeLat = 111320.0;
 
@@ -178,6 +179,60 @@ void _clipTests() {
       const ccw = [NLatLng(0.1, 0.1), NLatLng(0.1, 0.4), NLatLng(0.4, 0.4), NLatLng(0.4, 0.1)];
       final cw = ccw.reversed.toList();
       expect(FogGrid.clipByConvex(land, cw).length, FogGrid.clipByConvex(land, ccw).length);
+    });
+  });
+
+  // 걷힌 구역(보로노이 셀)과 궤적 격자가 만나는 자리 — 경계에 «걸친» 칸을 못 찾으면
+  // 그 칸이 구역 구멍과 겹쳐 짝홀로 도로 안개가 되고, 걷힌 자리를 가르는 얇은 선이 남는다
+  // (사용자 제보, 09-18). 지도 없이 볼 수 있는 건 「걸친 칸은 꼭짓점 중 하나가 구역 안」이다.
+  group('cellCorners — 구역에 걸친 칸 찾기', () {
+    test('네 꼭짓점이 중심을 둘러싸고 한 변이 격자 눈금(3m)이다', () {
+      final center = FogGrid.cellCenter(FogGrid.cellsInCircle(const NLatLng(37.45, 126.70), 1).first);
+      final corners = FogGrid.cellCorners(FogGrid.cellsInCircle(center, 1).first);
+      expect(corners, hasLength(4));
+      // 남서 → 남동 한 변의 길이가 셀 크기다.
+      expect(
+        Geolocator.distanceBetween(
+          corners[0].latitude,
+          corners[0].longitude,
+          corners[1].latitude,
+          corners[1].longitude,
+        ),
+        closeTo(FogGrid.cellMeters, 0.2),
+      );
+      expect(FogGrid.pointInRing(center, corners), isTrue);
+    });
+
+    test('중심이 구역 밖이어도 걸친 칸은 꼭짓점 하나가 구역 안이다 — 중심만 보면 놓친다', () {
+      const p = NLatLng(37.45, 126.70);
+      final cell = FogGrid.cellsInCircle(p, 1).first;
+      final center = FogGrid.cellCenter(cell);
+      final corners = FogGrid.cellCorners(cell);
+
+      // 이 칸의 «중심보다 1m 남쪽»을 경계로 삼는 구역(그 남쪽이 구역 안).
+      final edge = center.latitude - 1 / _metersPerDegreeLat;
+      final region = [
+        NLatLng(edge - 0.01, center.longitude - 0.01),
+        NLatLng(edge - 0.01, center.longitude + 0.01),
+        NLatLng(edge, center.longitude + 0.01),
+        NLatLng(edge, center.longitude - 0.01),
+      ];
+
+      expect(FogGrid.pointInRing(center, region), isFalse, reason: '중심은 구역 밖이다');
+      expect(corners.any((c) => FogGrid.pointInRing(c, region)), isTrue, reason: '아래 두 꼭짓점은 구역 안이다');
+    });
+
+    test('구역에서 멀리 떨어진 칸은 꼭짓점도 다 밖이다 — 멀쩡한 궤적을 지우지 않는다', () {
+      const p = NLatLng(37.45, 126.70);
+      final cell = FogGrid.cellsInCircle(p, 1).first;
+      final region = [
+        const NLatLng(37.40, 126.65),
+        const NLatLng(37.40, 126.66),
+        const NLatLng(37.41, 126.66),
+        const NLatLng(37.41, 126.65),
+      ];
+      expect(FogGrid.pointInRing(FogGrid.cellCenter(cell), region), isFalse);
+      expect(FogGrid.cellCorners(cell).any((c) => FogGrid.pointInRing(c, region)), isFalse);
     });
   });
 }
