@@ -263,6 +263,23 @@ class _Landmass {
   final List<List<NLatLng>> _regionRings = [];
   final List<_Bbox> _regionBboxes = [];
 
+  /// 이 칸이 걷힌 구역에 «닿는가» — 중심이 안이거나, 네 꼭짓점 중 하나라도 안이면 닿은 것이다.
+  ///
+  /// 🔴 중심만 보면 경계에 걸친 칸이 남아 **구역 구멍과 겹친다.** 폴리곤 구멍은 짝홀이라
+  /// 겹친 자리는 도로 안개가 되고, 그게 걷힌 구역 사이를 가르는 **얇은 선**으로 보였다
+  /// (사용자 제보, 09-18 — 칸이 3m 라 최대 1.5m ≈ 줌 18에서 7px).
+  ///
+  /// 지워서 생기는 빈틈은 경계 **바깥쪽 3m 이내**인데, 그 바깥이 걷힌 구역이면 그 구멍이 덮고,
+  /// 안 걷힌 구역이면 원래 안개라 티가 나지 않는다 — 선이 보이던 자리와 반대다.
+  bool _touchesRegion(int cell) {
+    if (_regionRings.isEmpty) return false;
+    if (_insideRegion(FogGrid.cellCenter(cell))) return true;
+    for (final corner in FogGrid.cellCorners(cell)) {
+      if (_insideRegion(corner)) return true;
+    }
+    return false;
+  }
+
   bool _insideRegion(NLatLng p) {
     for (var i = 0; i < _regionRings.length; i++) {
       if (_regionBboxes[i].contains(p) && FogGrid.pointInRing(p, _regionRings[i])) return true;
@@ -277,9 +294,9 @@ class _Landmass {
     _regionBboxes
       ..clear()
       ..addAll(rings.map(_Bbox.of));
-    // 구역 안에 든 궤적 셀은 지운다 — 남겨 두면 그 외곽선이 구역 구멍과 겹쳐 도로 안개가 된다.
+    // 구역에 «닿는» 궤적 셀은 지운다 — 남겨 두면 그 외곽선이 구역 구멍과 겹쳐 도로 안개가 된다.
     if (rings.isNotEmpty) {
-      _cellCount.removeWhere((key, _) => _insideRegion(FogGrid.cellCenter(key)));
+      _cellCount.removeWhere((key, _) => _touchesRegion(key));
     }
   }
 
@@ -300,7 +317,7 @@ class _Landmass {
   void _addHole(String key, NLatLng center, {required double radiusMeters}) {
     _trailKeys.add(key);
     for (final cell in FogGrid.cellsInCircle(center, radiusMeters)) {
-      if (_regionRings.isNotEmpty && _insideRegion(FogGrid.cellCenter(cell))) continue;
+      if (_touchesRegion(cell)) continue;
       _cellCount.update(cell, (n) => n + 1, ifAbsent: () => 1);
     }
   }
@@ -393,6 +410,16 @@ class FogGrid {
 
   /// 셀 [key] 의 중심 좌표.
   static NLatLng cellCenter(int key) => NLatLng((_row(key) + 0.5) * _latStep, (_col(key) + 0.5) * _lngStep);
+
+  /// 셀 [key] 의 네 꼭짓점. 「이 칸이 구역에 걸쳤나」를 볼 때 쓴다 — 중심만 보면 경계에
+  /// **반쯤 걸친 칸**을 놓친다([_Landmass._touchesRegion]).
+  static List<NLatLng> cellCorners(int key) {
+    final south = _row(key) * _latStep;
+    final west = _col(key) * _lngStep;
+    final north = south + _latStep;
+    final east = west + _lngStep;
+    return [NLatLng(south, west), NLatLng(south, east), NLatLng(north, east), NLatLng(north, west)];
+  }
 
   /// [subject](임의 다각형, 예: landmass 해안선)를 [convex](볼록 다각형, 예: 구역 셀)로 자른
   /// 교집합. 서덜랜드–호지먼 — 클립 쪽만 볼록이면 되므로 해안선처럼 오목한 쪽을 subject 로 둔다.
